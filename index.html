@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SelfDIYLab HR Portal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+  :root{
+    --primary:#5B5FEF;
+    --primary-dark:#4245C4;
+    --primary-light:#EEF0FF;
+    --green:#1FAE72;
+    --green-light:#E7F8F0;
+    --amber:#F2994A;
+    --amber-light:#FDF1E7;
+    --text:#191A23;
+    --sub:#6B6E85;
+    --bg:#F5F6FA;
+    --card:#FFFFFF;
+    --border:#ECEDF3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--bg);color:var(--text);}
+  a{text-decoration:none;color:inherit;}
+
+  /* Top nav */
+  .topnav{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 40px;background:var(--card);border-bottom:1px solid var(--border);
+    position:sticky;top:0;z-index:100;
+  }
+  .topnav .left{display:flex;align-items:center;gap:36px;}
+  .logo{display:flex;align-items:center;gap:8px;font-weight:900;font-size:20px;color:var(--primary-dark);}
+  .logo span.dot{width:10px;height:10px;background:var(--primary);border-radius:3px;display:inline-block;}
+  .navlinks{display:flex;gap:28px;font-size:14px;font-weight:500;color:var(--sub);}
+  .navlinks a.active{color:var(--text);font-weight:700;position:relative;}
+  .navlinks a.active::after{content:"";position:absolute;left:0;right:0;bottom:-19px;height:2px;background:var(--primary);}
+  .topnav .right{display:flex;align-items:center;gap:18px;}
+  .icon-btn{width:36px;height:36px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;}
+  .badge{position:absolute;top:-2px;right:-2px;background:#EB5757;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;}
+  .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#8B8FF7);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+
+  .wrap{max-width:1200px;margin:0 auto;padding:32px 40px 80px;}
+
+  /* Greeting */
+  .greeting{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px;flex-wrap:wrap;gap:12px;}
+  .greeting h1{font-size:26px;font-weight:900;}
+  .greeting p{color:var(--sub);font-size:14px;margin-top:6px;}
+  .date-chip{background:var(--card);border:1px solid var(--border);padding:8px 16px;border-radius:30px;font-size:13px;color:var(--sub);font-weight:500;}
+
+  /* Todo checklist banner (flex-style "필요한 일을 딱 알려주는 체크리스트") */
+  .todo-banner{
+    background:linear-gradient(120deg,var(--primary) 0%, #7477F2 100%);
+    border-radius:20px;padding:24px 28px;color:#fff;margin-bottom:28px;
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;
+  }
+  .todo-banner h2{font-size:17px;font-weight:700;margin-bottom:4px;}
+  .todo-banner p{font-size:13px;opacity:0.85;}
+  .todo-items{display:flex;gap:10px;flex-wrap:wrap;}
+  .todo-pill{background:rgba(255,255,255,0.16);padding:8px 14px;border-radius:12px;font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:6px;}
+  .todo-pill b{font-weight:800;}
+
+  /* Grid */
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:28px;}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px 22px;}
+  .kpi .label{font-size:12.5px;color:var(--sub);font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+  .kpi .value{font-size:26px;font-weight:900;}
+  .kpi .sub{font-size:12px;color:var(--green);font-weight:700;margin-top:6px;}
+  .kpi .sub.warn{color:var(--amber);}
+  .tag{font-size:10.5px;padding:3px 8px;border-radius:20px;font-weight:700;}
+  .tag.blue{background:var(--primary-light);color:var(--primary-dark);}
+  .tag.green{background:var(--green-light);color:var(--green);}
+  .tag.amber{background:var(--amber-light);color:var(--amber);}
+
+  .section{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:26px 28px;margin-bottom:22px;}
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+  .section-head h3{font-size:17px;font-weight:800;}
+  .section-head .desc{font-size:12.5px;color:var(--sub);margin-top:4px;font-weight:500;}
+  .link-btn{font-size:13px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:4px;}
+
+  .two-col{display:grid;grid-template-columns:1.15fr 0.85fr;gap:22px;}
+
+  /* Recruiting funnel */
+  .funnel{display:flex;gap:10px;}
+  .funnel-step{flex:1;background:var(--bg);border-radius:14px;padding:16px 14px;text-align:center;}
+  .funnel-step .n{font-size:22px;font-weight:900;color:var(--primary-dark);}
+  .funnel-step .l{font-size:12px;color:var(--sub);font-weight:600;margin-top:4px;}
+
+  .job-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);}
+  .job-row:last-child{border-bottom:none;}
+  .job-info b{font-size:14px;font-weight:700;}
+  .job-info .meta{font-size:12px;color:var(--sub);margin-top:3px;}
+  .job-actions{display:flex;gap:8px;}
+  .btn{padding:8px 14px;border-radius:10px;font-size:12.5px;font-weight:700;border:1px solid var(--border);background:#fff;}
+  .btn.primary{background:var(--primary);color:#fff;border:none;}
+
+  /* OKR tree */
+  .okr-item{margin-bottom:16px;}
+  .okr-item .top{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;}
+  .okr-item .top span.pct{color:var(--primary-dark);}
+  .bar{height:8px;background:var(--bg);border-radius:6px;overflow:hidden;}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#8B8FF7);border-radius:6px;}
+  .okr-sub{margin-left:18px;margin-top:8px;}
+  .okr-sub .top{font-size:12px;color:var(--sub);font-weight:600;}
+
+  /* schedule list */
+  .sched-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);align-items:flex-start;}
+  .sched-item:last-child{border-bottom:none;}
+  .sched-date{background:var(--primary-light);color:var(--primary-dark);border-radius:10px;padding:8px 10px;text-align:center;font-size:11px;font-weight:800;min-width:46px;}
+  .sched-date .d{font-size:16px;}
+  .sched-info b{font-size:13.5px;font-weight:700;}
+  .sched-info .meta{font-size:12px;color:var(--sub);margin-top:2px;}
+
+  .quicklinks{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .qcard{background:var(--bg);border-radius:16px;padding:18px;font-weight:700;font-size:13.5px;display:flex;flex-direction:column;gap:8px;}
+  .qcard .emoji{font-size:22px;}
+  .qcard .desc{font-size:11.5px;color:var(--sub);font-weight:500;}
+
+  @media(max-width:900px){
+    .grid{grid-template-columns:repeat(2,1fr);}
+    .two-col{grid-template-columns:1fr;}
+    .quicklinks{grid-template-columns:1fr;}
+    .topnav{padding:14px 18px;}
+    .wrap{padding:24px 18px 60px;}
+    .navlinks{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="left">
+    <div class="logo"><span class="dot"></span>SelfDIYLab HR</div>
+    <div class="navlinks">
+      <a class="active" href="#">홈</a>
+      <a href="job-detail.html">채용</a>
+      <a href="#">성과관리</a>
+      <a href="#">구성원</a>
+      <a href="#">급여</a>
+    </div>
+  </div>
+  <div class="right">
+    <div class="icon-btn">🔔<span class="badge">3</span></div>
+    <div class="avatar">이도</div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="greeting">
+    <div>
+      <h1>안녕하세요, 이도현 님 👋</h1>
+      <p>오늘도 좋은 하루 보내세요. 놓치기 쉬운 업무를 미리 챙겨드릴게요.</p>
+    </div>
+    <div class="date-chip">2026년 7월 28일 화요일</div>
+  </div>
+
+  <div class="todo-banner">
+    <div>
+      <h2>오늘 꼭 챙겨야 할 일</h2>
+      <p>단계별로 지금 처리해야 할 업무를 모아봤어요.</p>
+    </div>
+    <div class="todo-items">
+      <div class="todo-pill">📋 서류심사 미완료 <b>4건</b></div>
+      <div class="todo-pill">🗓 면접 일정 확정 필요 <b>2건</b></div>
+      <div class="todo-pill">📝 2분기 평가 마감 임박 <b>D-3</b></div>
+      <div class="todo-pill">💬 원온원 미진행 <b>3명</b></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="kpi">
+      <div class="label">진행중인 채용공고 <span class="tag blue">채용</span></div>
+      <div class="value">6건</div>
+      <div class="sub">신규 지원자 +18 (이번주)</div>
+    </div>
+    <div class="kpi">
+      <div class="label">전체 지원자 <span class="tag blue">채용</span></div>
+      <div class="value">142명</div>
+      <div class="sub warn">서류심사 대기 37명</div>
+    </div>
+    <div class="kpi">
+      <div class="label">전사 목표 평균 진척률 <span class="tag green">성과관리</span></div>
+      <div class="value">78%</div>
+      <div class="sub">전분기 대비 +6%p</div>
+    </div>
+    <div class="kpi">
+      <div class="label">2분기 평가 진행률 <span class="tag green">성과관리</span></div>
+      <div class="value">64%</div>
+      <div class="sub warn">마감까지 D-3</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>채용 현황</h3>
+            <div class="desc">전형 단계별 지원자 현황을 한눈에 확인하세요</div>
+          </div>
+          <a class="link-btn" href="apply-landing.html">지원서 랜딩페이지 보기 →</a>
+        </div>
+        <div class="funnel">
+          <div class="funnel-step"><div class="n">142</div><div class="l">지원 접수</div></div>
+          <div class="funnel-step"><div class="n">61</div><div class="l">서류심사</div></div>
+          <div class="funnel-step"><div class="n">24</div><div class="l">실무면접</div></div>
+          <div class="funnel-step"><div class="n">9</div><div class="l">임원면접</div></div>
+          <div class="funnel-step"><div class="n">3</div><div class="l">처우협의</div></div>
+        </div>
+        <div style="margin-top:18px;">
+          <div class="job-row">
+            <div class="job-info"><b>프론트엔드 개발자 (3년 이상)</b><div class="meta">개발팀 · 지원자 38명 · 마감 8/15</div></div>
+            <div class="job-actions"><a class="btn" href="job-detail.html">공고 보기</a><span class="btn primary">전형 관리</span></div>
+          </div>
+          <div class="job-row">
+            <div class="job-info"><b>HR 매니저 (성과관리 담당)</b><div class="meta">피플팀 · 지원자 27명 · 마감 8/10</div></div>
+            <div class="job-actions"><a class="btn" href="job-detail.html">공고 보기</a><span class="btn primary">전형 관리</span></div>
+          </div>
+          <div class="job-row">
+            <div class="job-info"><b>퍼포먼스 마케터</b><div class="meta">마케팅팀 · 지원자 41명 · 마감 8/20</div></div>
+            <div class="job-actions"><a class="btn" href="job-detail.html">공고 보기</a><span class="btn primary">전형 관리</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h3>이번 분기 OKR</h3>
+            <div class="desc">전사 목표와 팀 목표의 정렬 상태를 확인하세요</div>
+          </div>
+          <span class="link-btn">전체 목표 보기 →</span>
+        </div>
+        <div class="okr-item">
+          <div class="top"><span>🏢 O. 신뢰받는 채용 브랜드로 성장한다</span><span class="pct">82%</span></div>
+          <div class="bar"><i style="width:82%"></i></div>
+          <div class="okr-sub">
+            <div class="top">KR1. 지원자 만족도 4.5점 이상 달성</div>
+            <div class="bar"><i style="width:90%"></i></div>
+          </div>
+          <div class="okr-sub" style="margin-top:10px;">
+            <div class="top">KR2. 채용 리드타임 30일 이내로 단축</div>
+            <div class="bar" style="background:var(--amber-light);"><i style="width:58%;background:var(--amber);"></i></div>
+          </div>
+        </div>
+        <div class="okr-item">
+          <div class="top"><span>🎯 O. 성과관리 체계를 데이터 기반으로 고도화한다</span><span class="pct">71%</span></div>
+          <div class="bar"><i style="width:71%"></i></div>
+          <div class="okr-sub">
+            <div class="top">KR1. 전 구성원 목표 등록률 100%</div>
+            <div class="bar"><i style="width:95%"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section">
+        <div class="section-head">
+          <div><h3>다가오는 일정</h3></div>
+        </div>
+        <div class="sched-item">
+          <div class="sched-date">7월<div class="d">29</div></div>
+          <div class="sched-info"><b>프론트엔드 개발자 1차 면접</b><div class="meta">지원자 3명 · 오후 2시 · 회의실 A</div></div>
+        </div>
+        <div class="sched-item">
+          <div class="sched-date">7월<div class="d">30</div></div>
+          <div class="sched-info"><b>2분기 평가 캘리브레이션 미팅</b><div class="meta">팀장 전체 · 오전 10시</div></div>
+        </div>
+        <div class="sched-item">
+          <div class="sched-date">8월<div class="d">01</div></div>
+          <div class="sched-info"><b>월간 원온원 - 마케팅팀</b><div class="meta">3명 예정</div></div>
+        </div>
+        <div class="sched-item">
+          <div class="sched-date">8월<div class="d">05</div></div>
+          <div class="sched-info"><b>HR 매니저 임원면접</b><div class="meta">최종후보 2명</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><div><h3>바로가기</h3></div></div>
+        <div class="quicklinks">
+          <a class="qcard" href="job-detail.html"><span class="emoji">📄</span>채용 공고 상세<span class="desc">지원자에게 보여지는 공고 페이지</span></a>
+          <a class="qcard" href="apply-landing.html"><span class="emoji">📥</span>지원서 접수<span class="desc">지원서가 모이는 랜딩페이지</span></a>
+          <a class="qcard" href="#"><span class="emoji">📊</span>평가 현황<span class="desc">2분기 평가 진척도 관리</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
