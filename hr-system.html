@@ -912,17 +912,18 @@ function openOkrModal(){
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOkr()">목표 생성</button></div>
   `);
 }
-function saveOkr(){
+async function saveOkr(){
   const title = document.getElementById('f-otitle').value.trim();
   if(!title) return alert('목표 제목을 입력해주세요');
-  DB.okrs.push({id:uid(), quarter:document.getElementById('f-oquarter').value||'2026-Q3', level:document.getElementById('f-olevel').value, title,
+  await apiPost('/okrs', {quarter:document.getElementById('f-oquarter').value||'2026-Q3', level:document.getElementById('f-olevel').value, title,
     owner:document.getElementById('f-oowner').value||'-', parent:document.getElementById('f-oparent').value||null,
     progress:Number(document.getElementById('f-oprogress').value)||0, unit:document.getElementById('f-ounit').value||'%',
-    target:Number(document.getElementById('f-otarget').value)||100, visible:document.getElementById('f-ovisible').value});
-  saveData(); closeModal(); renderOkr();
+    target:Number(document.getElementById('f-otarget').value)||100});
+  await refreshDB(); closeModal(); renderOkr();
 }
-function updateOkrProgress(id, val){
-  const o = DB.okrs.find(x=>x.id===id); o.progress = Number(val); saveData(); renderOkr();
+async function updateOkrProgress(id, val){
+  await apiPatch('/okrs/'+id, {progress:Number(val)});
+  await refreshDB(); renderOkr();
 }
 
 /* ---------- EVAL / 9-GRID (역량: 공동/리드/직무 + 성과 + 커스텀) ---------- */
@@ -931,7 +932,7 @@ function openEvalModal(){
     <h3>평가 만들기</h3>
     <div class="modal-sub">역량 3요소 + 성과 + 커스텀 구조로 평가해요</div>
     <div class="form-row">
-      <div class="field"><label>구성원</label><input id="f-ename" placeholder="이름"></div>
+      <div class="field"><label>구성원</label><select id="f-ename">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
       <div class="field"><label>분기</label><input id="f-equarter" placeholder="2026-Q2"></div>
     </div>
     <div class="form-row3">
@@ -948,14 +949,14 @@ function openEvalModal(){
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveEval()">등록</button></div>
   `, true);
 }
-function saveEval(){
-  const employee = document.getElementById('f-ename').value.trim();
-  if(!employee) return alert('구성원 이름을 입력해주세요');
-  DB.evals.push({id:uid(), quarter:document.getElementById('f-equarter').value||'2026-Q2', employee,
+async function saveEval(){
+  const employeeId = document.getElementById('f-ename').value;
+  if(!employeeId) return alert('구성원을 선택해주세요');
+  await apiPost('/evals', {quarter:document.getElementById('f-equarter').value||'2026-Q2', employeeId,
     common:Number(document.getElementById('f-common').value), lead:Number(document.getElementById('f-lead').value), job:Number(document.getElementById('f-job').value),
     performance:Number(document.getElementById('f-eperf').value), custom:Number(document.getElementById('f-ecustom').value),
     strength:document.getElementById('f-estrength').value||'-', improve:document.getElementById('f-eimprove').value||'-'});
-  saveData(); closeModal(); renderEval();
+  await refreshDB(); closeModal(); renderEval();
 }
 function competency(e){ return (e.common+e.lead+e.job)/3; }
 function bucket(score){ return score<=2?0:(score===3?1:2); }
@@ -986,13 +987,13 @@ function renderEval(){
       const label = r===2? (c===0?'잠재 인재':c===1?'우수 성과자':'핵심 인재') : r===1? (c===0?'성장 필요':c===1?'안정적 기여자':'고성장 인재') : (c===0?'저성과자':c===1?'역할 재검토':'미스매치');
       const div = document.createElement('div');
       div.className='cell9';
-      div.innerHTML = `<div class="clabel">${label}</div><div class="chips">${people.map(p=>`<span class="chip">${p.employee}</span>`).join('') || ''}</div>`;
+      div.innerHTML = `<div class="clabel">${label}</div><div class="chips">${people.map(p=>`<span class="chip">${p.employeeName}</span>`).join('') || ''}</div>`;
       grid.appendChild(div);
     }
   });
 
   document.getElementById('eval-table').innerHTML = evalsQ.map(e=>`
-    <tr><td>${e.employee}</td><td>${e.quarter}</td><td>${e.common}</td><td>${e.lead}</td><td>${e.job}</td><td>${e.performance}</td><td>${e.custom}</td>
+    <tr><td>${e.employeeName}</td><td>${e.quarter}</td><td>${e.common}</td><td>${e.lead}</td><td>${e.job}</td><td>${e.performance}</td><td>${e.custom}</td>
     <td><span class="badge blue">${gradeFor(e.performance,competency(e))}</span></td>
     <td><button class="btn ghost sm" onclick="deleteEval('${e.id}')">삭제</button></td></tr>
   `).join('') || `<tr><td colspan="9" class="empty">등록된 평가가 없어요</td></tr>`;
@@ -1001,13 +1002,13 @@ function renderEval(){
     const grade = gradeFor(e.performance,competency(e));
     const tone = e.performance>=4? '이번 분기 목표 달성 흐름이 좋아요.' : e.performance<=2? '목표 달성 측면에서 보완이 필요해요.' : '안정적으로 목표를 수행하고 있어요.';
     return `<div class="ai-card">
-      <div class="head"><b>${e.employee} · ${grade}등급</b><span class="aitag">AI 자동 요약</span></div>
+      <div class="head"><b>${e.employeeName} · ${grade}등급</b><span class="aitag">AI 자동 요약</span></div>
       <p>${tone} 강점으로는 "${e.strength}"이(가) 확인돼요. 다음 분기에는 "${e.improve}"에 집중하면 더 좋은 결과를 만들 수 있을 것으로 보여요.</p>
       <div class="subscores"><span>공동역량 ${e.common}</span><span>리드역량 ${e.lead}</span><span>직무역량 ${e.job}</span><span>성과 ${e.performance}</span><span>커스텀 ${e.custom}</span></div>
     </div>`;
   }).join('') || `<div class="empty">평가 데이터가 쌓이면 AI 요약이 자동으로 생성돼요</div>`;
 }
-function deleteEval(id){ DB.evals = DB.evals.filter(e=>e.id!==id); saveData(); renderEval(); }
+async function deleteEval(id){ await apiDelete('/evals/'+id); await refreshDB(); renderEval(); }
 
 /* ---------- CALIBRATION (등급 배분) ---------- */
 function renderCalibration(){
@@ -1043,7 +1044,7 @@ function renderCalibration(){
     const final = cal.overrides[e.id]?.grade || computed;
     const reason = cal.overrides[e.id]?.reason || '';
     return `<tr>
-      <td>${e.employee}</td>
+      <td>${e.employeeName}</td>
       <td><span class="badge grey">${computed}</span></td>
       <td>
         <select onchange="setOverride('${quarter}','${e.id}', this.value, document.getElementById('reason-${e.id}').value)">
@@ -1055,13 +1056,15 @@ function renderCalibration(){
     </tr>`;
   }).join('') || `<tr><td colspan="5" class="empty">해당 분기 평가 데이터가 없어요</td></tr>`;
 }
-function setOverride(quarter, evalId, grade, reason){
-  const cal = DB.calibration[quarter];
+async function setOverride(quarter, evalId, grade, reason){
+  const cal = DB.calibration[quarter] || {overrides:{}};
   const prev = cal.overrides[evalId] || {};
   const e = DB.evals.find(x=>x.id===evalId);
   const computed = gradeFor(e.performance, competency(e));
-  cal.overrides[evalId] = { grade: grade!==undefined?grade:(prev.grade||computed), reason: reason!==undefined?reason:(prev.reason||'') };
-  saveData(); renderCalibration();
+  const finalGrade = grade!==undefined ? grade : (prev.grade || computed);
+  const finalReason = reason!==undefined ? reason : (prev.reason || '');
+  await apiPut('/calibration/'+quarter+'/overrides', {evalId, grade:finalGrade, reason:finalReason});
+  await refreshDB(); renderCalibration();
 }
 
 /* ---------- ONE ON ONE ---------- */
