@@ -151,6 +151,10 @@
 </div>
 
 <script>
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 async function loadJobs(){
   const res = await fetch('/api/public-jobs');
   const jobs = await res.json();
@@ -158,15 +162,15 @@ async function loadJobs(){
   list.innerHTML = jobs.map(j => `
     <a class="job-card" href="job-detail.html">
       <div class="l">
-        <b>${j.title}</b>
-        <div class="meta"><span>${j.team||'-'}</span></div>
+        <b>${escapeHtml(j.title)}</b>
+        <div class="meta"><span>${escapeHtml(j.team||'-')}</span></div>
       </div>
       <div class="r"><span class="apply-mini">공고 보기</span></div>
     </a>
   `).join('') || '<div class="empty">진행중인 채용공고가 없어요</div>';
 
   const select = document.getElementById('f-job');
-  select.innerHTML = jobs.map(j => `<option value="${j.id}">${j.title}</option>`).join('');
+  select.innerHTML = jobs.map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
 }
 
 async function submitApplication(){
