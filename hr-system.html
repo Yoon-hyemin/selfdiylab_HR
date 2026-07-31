@@ -841,12 +841,12 @@ function renderExtraInfo(){
     <div class="checkline"><label><input type="checkbox" ${jobDraft.extraInfo[k]?'checked':''} onchange="jobDraft.extraInfo['${k}']=this.checked"> ${EXTRA_LABELS[k]}</label></div>
   `).join('');
 }
-function saveJob(){
+async function saveJob(){
   captureJobStep();
   if(!jobDraft.title){ alert('공고명을 입력해주세요'); jobStep=1; renderJobModal(); return; }
-  DB.jobs.push({id:uid(), title:jobDraft.title, team:jobDraft.team||'-', deadline:jobDraft.deadline||'-', status:'진행중',
+  await apiPost('/jobs', {title:jobDraft.title, team:jobDraft.team||'-', deadline:jobDraft.deadline||null,
     stages:jobDraft.stages, submissionDocs:jobDraft.submissionDocs, preQuestions:jobDraft.preQuestions, extraInfo:jobDraft.extraInfo});
-  saveData(); closeModal(); renderJobs();
+  await refreshDB(); closeModal(); renderJobs();
 }
 
 /* ---------- CANDIDATES ---------- */
@@ -865,28 +865,24 @@ function openCandidateModal(){
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCandidate('${jobId}')">등록</button></div>
   `);
 }
-function saveCandidate(jobId){
+async function saveCandidate(jobId){
   const name = document.getElementById('f-cname').value.trim();
   if(!name) return alert('이름을 입력해주세요');
-  const job = DB.jobs.find(j=>j.id===jobId);
-  DB.candidates.push({id:uid(), jobId, name, phone:document.getElementById('f-cphone').value||'-', stage:job.stages[0], history:[{date:today(), stage:job.stages[0], note:'지원서 접수'}]});
-  saveData(); closeModal(); renderCandidates(); renderDashboard();
+  await apiPost('/jobs/'+jobId+'/candidates', {name, phone:document.getElementById('f-cphone').value||'-'});
+  await refreshDB(); closeModal(); renderCandidates(); renderDashboard();
 }
-function changeStage(candId, newStage){
-  const c = DB.candidates.find(x=>x.id===candId);
-  c.stage = newStage;
-  c.history.push({date:today(), stage:newStage, note: newStage + ' 단계로 변경'});
-  saveData(); renderCandidates(); renderDashboard();
+async function changeStage(candId, newStage){
+  await apiPatch('/candidates/'+candId, {stage:newStage});
+  await refreshDB(); renderCandidates(); renderDashboard();
 }
 function viewCandidateHistory(candId){
   const c = DB.candidates.find(x=>x.id===candId);
   const items = c.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-date">${h.date}</div><div class="tl-body"><b>${h.stage}</b> — ${h.note}</div></div>`).join('');
   showModal(`<h3>${c.name} 님 전형 히스토리</h3><div class="timeline">${items||'<div class="empty">기록 없음</div>'}</div><div class="modal-actions"><button class="btn primary" onclick="closeModal()">닫기</button></div>`);
 }
-function deleteJob(id){
-  DB.jobs = DB.jobs.filter(j=>j.id!==id);
-  DB.candidates = DB.candidates.filter(c=>c.jobId!==id);
-  saveData(); renderJobs();
+async function deleteJob(id){
+  await apiDelete('/jobs/'+id);
+  await refreshDB(); renderJobs();
 }
 
 /* ---------- OKR ---------- */
