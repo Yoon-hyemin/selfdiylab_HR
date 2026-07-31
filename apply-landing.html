@@ -108,71 +108,37 @@
     <span class="filter-chip">디자인</span>
   </div>
 
-  <div class="job-list">
-    <a class="job-card" href="job-detail.html">
-      <div class="l">
-        <b>프론트엔드 개발자 (3년 이상)</b>
-        <div class="meta"><span>개발팀</span><span>정규직</span><span>서울 · 하이브리드</span><span class="dday">마감 D-18</span></div>
-      </div>
-      <div class="r"><span class="badge">지원자 38명</span><span class="apply-mini">공고 보기</span></div>
-    </a>
-    <a class="job-card" href="job-detail.html">
-      <div class="l">
-        <b>HR 매니저 (성과관리 담당)</b>
-        <div class="meta"><span>피플팀</span><span>정규직</span><span>서울 · 상시출근</span><span class="dday">마감 D-13</span></div>
-      </div>
-      <div class="r"><span class="badge">지원자 27명</span><span class="apply-mini">공고 보기</span></div>
-    </a>
-    <a class="job-card" href="job-detail.html">
-      <div class="l">
-        <b>퍼포먼스 마케터</b>
-        <div class="meta"><span>마케팅팀</span><span>정규직</span><span>서울 · 하이브리드</span><span class="dday">마감 D-23</span></div>
-      </div>
-      <div class="r"><span class="badge">지원자 41명</span><span class="apply-mini">공고 보기</span></div>
-    </a>
-    <a class="job-card" href="job-detail.html">
-      <div class="l">
-        <b>프로덕트 디자이너</b>
-        <div class="meta"><span>디자인팀</span><span>정규직</span><span>서울 · 하이브리드</span><span class="dday">마감 D-30</span></div>
-      </div>
-      <div class="r"><span class="badge">지원자 19명</span><span class="apply-mini">공고 보기</span></div>
-    </a>
-  </div>
+  <div class="job-list" id="job-list"></div>
 
   <div class="form-card" id="apply-form">
     <h2>지원서 제출하기</h2>
     <p>아래 정보를 입력해주시면 지원하신 포지션 담당자에게 바로 전달돼요. 모든 지원 내용은 한 곳에서 관리돼 진행 상황을 빠르게 안내드릴 수 있어요.</p>
 
     <div class="form-grid">
-      <div class="field"><label>이름 <span class="req">*</span></label><input type="text" placeholder="홍길동"></div>
-      <div class="field"><label>연락처 <span class="req">*</span></label><input type="tel" placeholder="010-0000-0000"></div>
-      <div class="field"><label>이메일 <span class="req">*</span></label><input type="email" placeholder="example@email.com"></div>
+      <div class="field"><label>이름 <span class="req">*</span></label><input id="f-name" type="text" placeholder="홍길동"></div>
+      <div class="field"><label>연락처 <span class="req">*</span></label><input id="f-phone" type="tel" placeholder="010-0000-0000"></div>
+      <div class="field"><label>이메일 <span class="req">*</span></label><input id="f-email" type="email" placeholder="example@email.com"></div>
       <div class="field">
         <label>지원 포지션 <span class="req">*</span></label>
-        <select>
-          <option>프론트엔드 개발자 (3년 이상)</option>
-          <option>HR 매니저 (성과관리 담당)</option>
-          <option>퍼포먼스 마케터</option>
-          <option>프로덕트 디자이너</option>
-        </select>
+        <select id="f-job"></select>
       </div>
     </div>
 
     <div class="form-grid full" style="margin-top:16px;">
       <div class="field">
         <label>이력서 / 포트폴리오 첨부 <span class="req">*</span></label>
-        <div class="upload-box">📎 파일을 드래그하거나 <b>클릭해서 업로드</b> (PDF, 최대 20MB)</div>
+        <div class="upload-box">📎 파일 첨부는 다음 단계에서 지원될 예정이에요</div>
       </div>
       <div class="field">
         <label>자기소개 <span class="req">*</span></label>
-        <textarea placeholder="본인을 간단히 소개해주세요 (지원 동기, 강점 등)"></textarea>
+        <textarea id="f-intro" placeholder="본인을 간단히 소개해주세요 (지원 동기, 강점 등)"></textarea>
       </div>
     </div>
 
     <div class="agree">
-      <input type="checkbox"> 개인정보 수집 및 이용에 동의합니다 (채용 전형 진행 목적, 보유기간 전형 종료 후 1년)
+      <input id="f-agree" type="checkbox"> 개인정보 수집 및 이용에 동의합니다 (채용 전형 진행 목적, 보유기간 전형 종료 후 1년)
     </div>
-    <div class="submit-btn">지원서 제출하기 →</div>
+    <button type="button" class="submit-btn" id="f-submit" onclick="submitApplication()">지원서 제출하기 →</button>
   </div>
 
   <div class="faq">
@@ -184,5 +150,53 @@
 
 </div>
 
+<script>
+async function loadJobs(){
+  const res = await fetch('/api/public-jobs');
+  const jobs = await res.json();
+  const list = document.getElementById('job-list');
+  list.innerHTML = jobs.map(j => `
+    <a class="job-card" href="job-detail.html">
+      <div class="l">
+        <b>${j.title}</b>
+        <div class="meta"><span>${j.team||'-'}</span></div>
+      </div>
+      <div class="r"><span class="apply-mini">공고 보기</span></div>
+    </a>
+  `).join('') || '<div class="empty">진행중인 채용공고가 없어요</div>';
+
+  const select = document.getElementById('f-job');
+  select.innerHTML = jobs.map(j => `<option value="${j.id}">${j.title}</option>`).join('');
+}
+
+async function submitApplication(){
+  const jobId = document.getElementById('f-job').value;
+  const name = document.getElementById('f-name').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const selfIntro = document.getElementById('f-intro').value.trim();
+  const agree = document.getElementById('f-agree').checked;
+
+  if(!jobId){ alert('지원할 포지션을 선택해주세요'); return; }
+  if(!name || !phone || !email){ alert('이름, 연락처, 이메일을 입력해주세요'); return; }
+  if(!agree){ alert('개인정보 수집 및 이용에 동의해주세요'); return; }
+
+  const res = await fetch(`/api/jobs/${jobId}/candidates`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, phone, email, selfIntro})
+  });
+  if(!res.ok){ alert('제출 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.'); return; }
+
+  alert('지원서가 제출됐어요. 담당자 검토 후 연락드릴게요!');
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-phone').value = '';
+  document.getElementById('f-email').value = '';
+  document.getElementById('f-intro').value = '';
+  document.getElementById('f-agree').checked = false;
+}
+
+loadJobs();
+</script>
 </body>
 </html>
