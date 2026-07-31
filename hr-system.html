@@ -193,7 +193,7 @@
 </head>
 <body>
 
-<div class="trialbar">flex 실제 화면 구조를 참고해 만든 SelfDIYLab 자체 HR 시스템 (브라우저 로컬 저장 · 데이터는 내보내기로 백업하세요)</div>
+<div class="trialbar">SelfDIYLab 자체 HR 시스템</div>
 
 <div class="app">
   <div class="sidebar">
@@ -228,7 +228,7 @@
     <div class="view" id="view-members">
       <div id="members-list">
         <div class="page-head">
-          <div><h1>구성원</h1><p>flex 구성원 프로필 구조를 참고했어요 — 지금은 "정보" 탭만 실제로 동작해요</p></div>
+          <div><h1>구성원</h1><p>지금은 "정보" 탭만 실제로 동작해요</p></div>
           <button class="btn primary" onclick="openMemberAddModal()">+ 구성원 추가하기</button>
         </div>
         <div class="member-grid" id="members-grid"></div>
@@ -279,7 +279,7 @@
     <!-- RECRUIT -->
     <div class="view" id="view-recruit">
       <div class="page-head">
-        <div><h1>채용</h1><p>후보자 · 공고 · 사이트 — flex 실제 구조를 참고했어요</p></div>
+        <div><h1>채용</h1><p>후보자 · 공고 · 사이트를 한 곳에서 관리해요</p></div>
         <button class="btn primary" onclick="openJobModal()">+ 공고 만들기</button>
       </div>
       <div class="tabs">
@@ -310,7 +310,7 @@
 
       <div id="recruit-site" style="display:none;">
         <div class="section">
-          <div class="section-head"><div><h3>채용사이트</h3><div class="desc">flex처럼 회사명 기반으로 자동 생성되는 채용 사이트 미리보기예요</div></div></div>
+          <div class="section-head"><div><h3>채용사이트</h3><div class="desc">회사명 기반으로 자동 생성되는 채용 사이트 미리보기예요</div></div></div>
           <div style="background:linear-gradient(120deg,#EAF6FF,#F7F5FF);border-radius:18px;padding:36px;text-align:center;">
             <div style="font-size:12.5px;color:var(--sub);font-weight:700;margin-bottom:10px;">🏢 주식회사 셀디랩 채용</div>
             <h2 style="font-size:22px;font-weight:900;margin-bottom:8px;">우리팀과 멋진 여정을 함께 하고 싶다면?</h2>
@@ -333,7 +333,7 @@
     <!-- EVAL -->
     <div class="view" id="view-eval">
       <div class="page-head">
-        <div><h1>평가</h1><p>역량(공동·리드·직무) + 성과 + 커스텀 — flex 평가 구조를 참고했어요</p></div>
+        <div><h1>평가</h1><p>역량(공동·리드·직무) + 성과 + 커스텀 구조로 평가해요</p></div>
         <button class="btn primary" onclick="openEvalModal()">+ 평가 만들기</button>
       </div>
 
@@ -361,7 +361,7 @@
     <!-- CALIBRATION -->
     <div class="view" id="view-calibration">
       <div class="page-head">
-        <div><h1>등급 배분 (캘리브레이션)</h1><p>flex 평가 마법사의 마지막 단계 "등급 배분"에 해당해요 — 목표 배분율에 맞춰 등급을 조정하고 사유를 기록하세요</p></div>
+        <div><h1>등급 배분 (캘리브레이션)</h1><p>평가 마법사의 마지막 단계 "등급 배분"에 해당해요 — 목표 배분율에 맞춰 등급을 조정하고 사유를 기록하세요</p></div>
         <select id="cal-quarter-filter" onchange="renderCalibration()" class="btn sm"></select>
       </div>
       <div class="section">
@@ -740,7 +740,7 @@ function renderJobModal(){
     `;
   } else if(jobStep===2){
     body = `
-      <div class="modal-sub">맨 앞 "접수"와 맨 끝 "처우협의"는 고정이고, 그 사이 단계는 자유롭게 추가/삭제할 수 있어요 (flex 실제 구조 동일)</div>
+      <div class="modal-sub">맨 앞 "접수"와 맨 끝 "처우협의"는 고정이고, 그 사이 단계는 자유롭게 추가/삭제할 수 있어요</div>
       <div class="stage-pipeline" id="stage-pipeline"></div>
       <div class="field"><label>단계 추가</label>
         <div style="display:flex;gap:8px;">
@@ -769,7 +769,7 @@ function renderJobModal(){
   }
   showModal(`
     <h3>공고 만들기</h3>
-    <div class="modal-sub">flex 채용 공고 생성 흐름과 동일한 3단계 구조예요</div>
+    <div class="modal-sub">채용 공고를 3단계로 나눠서 만들어요</div>
     <div class="step-tabs">
       <button class="btn step ${jobStep===1?'active':''}" onclick="goJobStep(1)">1. 공고 본문</button>
       <button class="btn step ${jobStep===2?'active':''}" onclick="goJobStep(2)">2. 전형단계</button>
@@ -889,7 +889,7 @@ async function deleteJob(id){
 function openOkrModal(){
   showModal(`
     <h3>새 목표 추가</h3>
-    <div class="modal-sub">flex처럼 회사 → 조직 → 개인 3단계로 목표를 연결할 수 있어요</div>
+    <div class="modal-sub">회사 → 조직 → 개인 3단계로 목표를 연결할 수 있어요</div>
     <div class="form-row">
       <div class="field"><label>레벨</label><select id="f-olevel"><option>회사</option><option>조직</option><option selected>개인</option></select></div>
       <div class="field"><label>사이클</label><input id="f-oquarter" placeholder="2026-Q3"></div>
@@ -929,7 +929,7 @@ function updateOkrProgress(id, val){
 function openEvalModal(){
   showModal(`
     <h3>평가 만들기</h3>
-    <div class="modal-sub">flex 평가 구조(역량 3요소 + 성과 + 커스텀)를 그대로 반영했어요</div>
+    <div class="modal-sub">역량 3요소 + 성과 + 커스텀 구조로 평가해요</div>
     <div class="form-row">
       <div class="field"><label>구성원</label><input id="f-ename" placeholder="이름"></div>
       <div class="field"><label>분기</label><input id="f-equarter" placeholder="2026-Q2"></div>
@@ -1117,7 +1117,7 @@ function renderJobs(){
   document.getElementById('jobs-table').innerHTML = DB.jobs.map(j=>{
     const count = DB.candidates.filter(c=>c.jobId===j.id).length;
     return `<tr class="clickable" onclick="openCandidatesFor('${j.id}')">
-      <td><b>${j.title}</b></td><td>${j.team}</td><td style="font-size:11.5px;color:var(--sub);">${j.stages.join(' → ')}</td><td>${j.deadline}</td><td>${count}명</td>
+      <td><b>${j.title}</b></td><td>${j.team}</td><td style="font-size:11.5px;color:var(--sub);">${j.stages.join(' → ')}</td><td>${j.deadline||'-'}</td><td>${count}명</td>
       <td><span class="badge green">${j.status}</span></td>
       <td><button class="btn ghost sm" onclick="event.stopPropagation(); deleteJob('${j.id}')">삭제</button></td>
     </tr>`;
