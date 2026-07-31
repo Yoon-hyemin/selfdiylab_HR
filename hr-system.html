@@ -393,14 +393,14 @@
 
     <!-- DATA -->
     <div class="view" id="view-data">
-      <div class="page-head"><div><h1>데이터 관리</h1><p>이 앱의 모든 데이터는 이 브라우저(localStorage)에 저장돼요. 다른 기기와 공유하려면 내보내기/가져오기를 사용하세요.</p></div></div>
+      <div class="page-head"><div><h1>데이터 관리</h1><p>이 앱의 모든 데이터는 Neon 데이터베이스에 저장되고 팀원 모두에게 공유돼요.</p></div></div>
       <div class="section">
         <div class="section-head"><h3>백업</h3></div>
         <button class="btn primary" onclick="exportData()">⬇ 전체 데이터 내보내기 (JSON)</button>
         <label class="btn" style="margin-left:8px;display:inline-block;">⬆ 가져오기<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
       </div>
       <div class="section">
-        <div class="section-head"><h3>초기화</h3><div class="desc">주의: 모든 데이터가 삭제되고 예시 데이터로 다시 채워져요</div></div>
+        <div class="section-head"><h3>초기화</h3><div class="desc">실제 데이터베이스로 전환된 이후에는 지원되지 않아요</div></div>
         <button class="btn danger" onclick="resetData()">전체 데이터 초기화</button>
       </div>
     </div>
@@ -1073,28 +1073,29 @@ function openOneOnOneModal(){
   showModal(`
     <h3>원온원 보내기</h3>
     <div class="form-row">
-      <div class="field"><label>구성원</label><input id="f-mname" placeholder="이름"></div>
+      <div class="field"><label>구성원</label><select id="f-mname">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
       <div class="field"><label>날짜</label><input id="f-mdate" type="date" value="${today()}"></div>
     </div>
     <div class="field"><label>내용</label><textarea id="f-mnote" placeholder="면담 내용을 기록하세요"></textarea></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOneOnOne()">저장</button></div>
   `);
 }
-function saveOneOnOne(){
-  const employee = document.getElementById('f-mname').value.trim();
-  if(!employee) return alert('구성원 이름을 입력해주세요');
-  DB.oneonones.push({id:uid(), employee, date:document.getElementById('f-mdate').value||today(), note:document.getElementById('f-mnote').value||'-'});
-  saveData(); closeModal(); currentEmployee = employee; renderOneOnOne();
+async function saveOneOnOne(){
+  const employeeId = document.getElementById('f-mname').value;
+  if(!employeeId) return alert('구성원을 선택해주세요');
+  await apiPost('/oneonones', {employeeId, date:document.getElementById('f-mdate').value||today(), note:document.getElementById('f-mnote').value||'-'});
+  await refreshDB(); closeModal(); currentEmployee = employeeId; renderOneOnOne();
 }
 function renderOneOnOne(){
-  const people = [...new Set(DB.oneonones.map(m=>m.employee))];
-  if(!currentEmployee && people.length) currentEmployee = people[0];
-  document.getElementById('oneonone-people').innerHTML = people.map(p=>`<button class="btn sm ${p===currentEmployee?'primary':''}" onclick="selectEmployee('${p}')">${p}</button>`).join('') || '<span class="empty">기록된 구성원이 없어요</span>';
+  const peopleIds = [...new Set(DB.oneonones.map(m=>m.employee))];
+  if(!currentEmployee && peopleIds.length) currentEmployee = peopleIds[0];
+  const nameOf = id => (DB.oneonones.find(m=>m.employee===id)||{}).employeeName || '';
+  document.getElementById('oneonone-people').innerHTML = peopleIds.map(id=>`<button class="btn sm ${id===currentEmployee?'primary':''}" onclick="selectEmployee('${id}')">${nameOf(id)}</button>`).join('') || '<span class="empty">기록된 구성원이 없어요</span>';
   const list = DB.oneonones.filter(m=>m.employee===currentEmployee).sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById('oneonone-title').textContent = currentEmployee ? currentEmployee+' 님 히스토리' : '히스토리';
+  document.getElementById('oneonone-title').textContent = currentEmployee ? nameOf(currentEmployee)+' 님 히스토리' : '히스토리';
   document.getElementById('oneonone-timeline').innerHTML = list.map(m=>`<div class="tl-item"><div class="tl-date">${m.date}</div><div class="tl-body">${m.note}</div></div>`).join('') || '<div class="empty">기록이 없어요</div>';
 }
-function selectEmployee(name){ currentEmployee = name; renderOneOnOne(); }
+function selectEmployee(id){ currentEmployee = id; renderOneOnOne(); }
 
 /* ---------- DASHBOARD ---------- */
 function renderDashboard(){
@@ -1110,7 +1111,7 @@ function renderDashboard(){
   `;
   const events = [];
   DB.candidates.forEach(c=>c.history.forEach(h=>events.push({date:h.date, text:`[채용] ${c.name} 님 — ${h.stage} (${h.note})`})));
-  DB.oneonones.forEach(m=>events.push({date:m.date, text:`[원온원] ${m.employee} 님과 면담 기록`}));
+  DB.oneonones.forEach(m=>events.push({date:m.date, text:`[원온원] ${m.employeeName} 님과 면담 기록`}));
   events.sort((a,b)=>b.date.localeCompare(a.date));
   document.getElementById('dash-timeline').innerHTML = events.slice(0,8).map(e=>`<div class="tl-item"><div class="tl-date">${e.date}</div><div class="tl-body">${e.text}</div></div>`).join('') || '<div class="empty">아직 기록이 없어요</div>';
 }
@@ -1176,22 +1177,8 @@ function exportData(){
   a.href = url; a.download = 'selfdiylab-hr-data-'+today()+'.json'; a.click();
   URL.revokeObjectURL(url);
 }
-function importData(evt){
-  const file = evt.target.files[0]; if(!file) return;
-  const reader = new FileReader();
-  reader.onload = e=>{
-    try{ DB = JSON.parse(e.target.result); saveData(); renderAll(); alert('가져오기 완료'); }
-    catch(err){ alert('파일을 읽을 수 없어요'); }
-  };
-  reader.readAsText(file);
-}
-function resetData(){
-  if(!confirm('정말 모든 데이터를 초기화할까요?')) return;
-  localStorage.removeItem(KEY);
-  DB = seedData();
-  currentEmployee=null;
-  renderAll();
-}
+function importData(evt){ alert('실제 데이터베이스로 전환된 이후에는 가져오기가 지원되지 않아요. 각 화면에서 개별적으로 추가해주세요.'); evt.target.value=''; }
+function resetData(){ alert('실제 데이터베이스로 전환된 이후에는 전체 초기화가 지원되지 않아요. 필요하면 Neon 콘솔에서 직접 데이터를 관리해주세요.'); }
 
 /* ---------- INIT ---------- */
 function renderAll(){
