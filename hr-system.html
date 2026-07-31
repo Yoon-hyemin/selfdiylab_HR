@@ -412,134 +412,27 @@
 <div class="overlay" id="overlay"><div class="modal" id="modal-content"></div></div>
 
 <script>
-/* ---------- Storage helpers ---------- */
-const KEY = 'sdl_hr_data_v3';
-function loadData(){
-  const raw = localStorage.getItem(KEY);
-  if(raw) return JSON.parse(raw);
-  return seedData();
-}
-function saveData(){ localStorage.setItem(KEY, JSON.stringify(DB)); }
-function uid(){ return Math.random().toString(36).slice(2,9); }
+/* ---------- API client ---------- */
+const API = '/api';
+async function apiGet(path){ const r = await fetch(API+path); if(!r.ok) throw new Error('GET '+path+' failed'); return r.json(); }
+async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('POST '+path+' failed'); return r.json(); }
+async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PATCH '+path+' failed'); return r.json(); }
+async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PUT '+path+' failed'); return r.json(); }
+async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE'}); if(!r.ok) throw new Error('DELETE '+path+' failed'); return r.json(); }
+
 function today(){ return new Date().toISOString().slice(0,10); }
+// The API returns date columns (hireDate, groupHireDate, birthday) as full ISO
+// datetime strings (e.g. "2026-07-30T15:00:00.000Z"); <input type="date"> only
+// accepts "YYYY-MM-DD" and silently blanks out otherwise, so trim to that.
+function dateOnly(v){ return v ? String(v).slice(0,10) : ''; }
 
-function seedData(){
-  const d = {
-    members:[
-      { id:'u1', name:'김서연', nickname:'', team:'마케팅팀', position:'매니저',
-        email:'seoyeon.kim@selfdiylab.com', personalEmail:'', employeeNo:'2024001',
-        hireDate:'2024-03-04', groupHireDate:'2024-03-04', hireType:'정규직',
-        rrn:'', birthday:'1994-05-12', phone:'010-1234-5678', address:'서울시 성동구',
-        laborContract:'무기계약직 근로계약서 (2024.03.04 체결)', wageContract:'연봉제 임금계약 (2026년 갱신)', salaryPayInfo:'매월 25일 지급 · 계좌이체',
-        workType:{name:'기본 근무유형', fixed:true, hours:'주 40시간'},
-        overtimePolicy:'기본 초과근무 보상정책 · 포괄 아님 · 사후 정산',
-        leavePolicy:{basis:'입사일 기준 부여', halfDay:'반차 단위 사용', promotion:'연차 촉진 사용'},
-        restDays:['1월 1일','설날','3·1절','어린이날','현충일','광복절','추석','성탄절'],
-        leaveHistory:[], awards:[{title:'2025 상반기 우수사원', date:'2025-07-01'}], discipline:[],
-        career:[{company:'전 직장 A', role:'마케터', period:'2021~2024'}], education:[{school:'OO대학교', major:'경영학', period:'2016~2020'}],
-        specialNotes:'', family:[{name:'김OO', relation:'배우자'}],
-        deduction:{basic:2, healthDependents:1},
-        hrInfo:'', intro:'브랜드 마케팅과 캠페인 기획을 담당하고 있어요.',
-        workedHours:'32시간', leaveLeft:'8.5일' },
-      { id:'u2', name:'박준혁', nickname:'준', team:'개발팀', position:'선임',
-        email:'junhyuk.park@selfdiylab.com', personalEmail:'', employeeNo:'2023014',
-        hireDate:'2023-09-18', groupHireDate:'2023-09-18', hireType:'정규직',
-        rrn:'', birthday:'1992-11-02', phone:'010-2222-3333', address:'경기도 성남시',
-        laborContract:'무기계약직 근로계약서 (2023.09.18 체결)', wageContract:'연봉제 임금계약', salaryPayInfo:'매월 25일 지급 · 계좌이체',
-        workType:{name:'선택적 근로시간제', fixed:false, hours:'주 40시간'},
-        overtimePolicy:'포괄 계약 공제 주기 매달 1일-말일',
-        leavePolicy:{basis:'회계일 기준 부여', halfDay:'반차 단위 사용', promotion:'연차 촉진 미사용'},
-        restDays:['1월 1일','설날','3·1절','어린이날','현충일','광복절','추석','성탄절'],
-        leaveHistory:[], awards:[], discipline:[],
-        career:[], education:[{school:'OO대학교', major:'컴퓨터공학', period:'2015~2019'}],
-        specialNotes:'', family:[],
-        deduction:{basic:1, healthDependents:0},
-        hrInfo:'', intro:'백엔드 시스템과 사내 HR 시스템 개발을 맡고 있어요.',
-        workedHours:'40시간', leaveLeft:'11일' },
-      { id:'u3', name:'이하은', nickname:'', team:'피플팀', position:'매니저',
-        email:'haeun.lee@selfdiylab.com', personalEmail:'', employeeNo:'2022007',
-        hireDate:'2022-01-10', groupHireDate:'2022-01-10', hireType:'정규직',
-        rrn:'', birthday:'1990-02-20', phone:'010-4444-5555', address:'서울시 마포구',
-        laborContract:'무기계약직 근로계약서 (2022.01.10 체결)', wageContract:'연봉제 임금계약', salaryPayInfo:'매월 25일 지급 · 계좌이체',
-        workType:{name:'기본 근무유형', fixed:true, hours:'주 40시간'},
-        overtimePolicy:'기본 초과근무 보상정책',
-        leavePolicy:{basis:'입사일 기준 부여', halfDay:'반차 단위 사용', promotion:'연차 촉진 사용'},
-        restDays:['1월 1일','설날','3·1절','어린이날','현충일','광복절','추석','성탄절'],
-        leaveHistory:[{reason:'육아휴직', period:'2023.05~2023.11'}], awards:[], discipline:[],
-        career:[{company:'전 직장 B', role:'HR 담당자', period:'2018~2022'}], education:[{school:'OO대학교', major:'심리학', period:'2012~2016'}],
-        specialNotes:'', family:[{name:'이OO', relation:'자녀'}],
-        deduction:{basic:2, healthDependents:1},
-        hrInfo:'', intro:'채용과 성과관리 프로세스를 총괄하고 있어요.',
-        workedHours:'40시간', leaveLeft:'6일' },
-      { id:'u4', name:'최지우', nickname:'', team:'CS팀', position:'담당자',
-        email:'jiwoo.choi@selfdiylab.com', personalEmail:'', employeeNo:'2025003',
-        hireDate:'2025-02-03', groupHireDate:'2025-02-03', hireType:'계약직',
-        rrn:'', birthday:'1997-08-15', phone:'010-6666-7777', address:'',
-        laborContract:'', wageContract:'', salaryPayInfo:'',
-        workType:{name:'기본 근무유형', fixed:true, hours:'주 40시간'},
-        overtimePolicy:'',
-        leavePolicy:{basis:'입사일 기준 부여', halfDay:'반차 단위 사용', promotion:'연차 촉진 미사용'},
-        restDays:['1월 1일','설날','3·1절','어린이날','현충일','광복절','추석','성탄절'],
-        leaveHistory:[], awards:[], discipline:[], career:[], education:[],
-        specialNotes:'', family:[],
-        deduction:{basic:1, healthDependents:0},
-        hrInfo:'', intro:'',
-        workedHours:'24시간', leaveLeft:'3일' },
-      { id:'u5', name:'이도현', nickname:'', team:'경영지원팀', position:'대표',
-        email:'dohyun.lee@selfdiylab.com', personalEmail:'', employeeNo:'2020001',
-        hireDate:'2020-01-02', groupHireDate:'2020-01-02', hireType:'정규직',
-        rrn:'', birthday:'1988-04-09', phone:'010-9999-0000', address:'서울시 강남구',
-        laborContract:'대표 근로계약서', wageContract:'연봉제 임금계약', salaryPayInfo:'매월 25일 지급 · 계좌이체',
-        workType:{name:'기본 근무유형', fixed:true, hours:'주 40시간'},
-        overtimePolicy:'',
-        leavePolicy:{basis:'입사일 기준 부여', halfDay:'반차 단위 사용', promotion:'연차 촉진 미사용'},
-        restDays:['1월 1일','설날','3·1절','어린이날','현충일','광복절','추석','성탄절'],
-        leaveHistory:[], awards:[], discipline:[], career:[], education:[],
-        specialNotes:'', family:[],
-        deduction:{basic:1, healthDependents:0},
-        hrInfo:'', intro:'SelfDIYLab을 이끌고 있어요.',
-        workedHours:'40시간', leaveLeft:'15일' }
-    ],
-    jobs:[
-      {id:'j1', title:'프론트엔드 개발자 (3년 이상)', team:'개발팀', deadline:'2026-08-15', status:'진행중',
-        stages:['접수','서류심사','실무면접','임원면접','처우협의'],
-        submissionDocs:[{name:'이력서', required:true},{name:'포트폴리오', required:false}],
-        preQuestions:[{q:'우리 회사에 지원한 이유를 알려주세요', required:true}],
-        extraInfo:{education:true, career:true, military:false, veteran:false, disability:false}},
-      {id:'j2', title:'HR 매니저 (성과관리 담당)', team:'피플팀', deadline:'2026-08-10', status:'진행중',
-        stages:['접수','서류심사','실무면접','처우협의'],
-        submissionDocs:[{name:'이력서', required:true}],
-        preQuestions:[],
-        extraInfo:{education:true, career:true, military:false, veteran:false, disability:false}}
-    ],
-    candidates:[
-      {id:'c1', jobId:'j1', name:'김서연', phone:'010-1234-5678', stage:'서류심사', history:[{date:'2026-07-20',stage:'접수',note:'지원서 접수'},{date:'2026-07-24',stage:'서류심사',note:'서류심사 진행중'}]},
-      {id:'c2', jobId:'j1', name:'박준혁', phone:'010-2222-3333', stage:'실무면접', history:[{date:'2026-07-18',stage:'접수',note:'지원서 접수'},{date:'2026-07-22',stage:'서류심사',note:'서류 통과'},{date:'2026-07-27',stage:'실무면접',note:'1차 면접 일정 확정'}]},
-      {id:'c3', jobId:'j2', name:'이하은', phone:'010-4444-5555', stage:'접수', history:[{date:'2026-07-25',stage:'접수',note:'지원서 접수'}]}
-    ],
-    okrs:[
-      {id:'o1', quarter:'2026-Q3', level:'회사', title:'신뢰받는 채용 브랜드로 성장한다', owner:'경영진', parent:null, progress:82, unit:'%', target:100},
-      {id:'o2', quarter:'2026-Q3', level:'조직', title:'채용 리드타임 30일 이내로 단축', owner:'피플팀', parent:'o1', progress:58, unit:'%', target:100},
-      {id:'o3', quarter:'2026-Q3', level:'개인', title:'전 구성원 목표 등록률 100% 달성', owner:'이도현', parent:'o2', progress:95, unit:'%', target:100}
-    ],
-    evals:[
-      {id:'e1', quarter:'2026-Q2', employee:'김서연', common:5, lead:4, job:5, performance:5, custom:4, strength:'목표 초과 달성, 협업 리더십이 뛰어남', improve:'문서화 습관을 조금 더 보완하면 좋겠음'},
-      {id:'e2', quarter:'2026-Q2', employee:'박준혁', common:3, lead:2, job:3, performance:3, custom:3, strength:'꾸준하고 안정적인 업무 처리', improve:'새로운 시도에 조금 더 적극적이면 좋겠음'},
-      {id:'e3', quarter:'2026-Q2', employee:'이하은', common:4, lead:3, job:5, performance:2, custom:4, strength:'문제 해결 역량이 뛰어남', improve:'목표 대비 실행 속도를 높일 필요가 있음'},
-      {id:'e4', quarter:'2026-Q2', employee:'최지우', common:2, lead:2, job:2, performance:2, custom:2, strength:'맡은 업무는 성실히 수행함', improve:'역할 재정의 및 집중 코칭이 필요함'}
-    ],
-    calibration:{ '2026-Q2': { targets:{S:10,A:20,B:40,C:20,D:10}, overrides:{} } },
-    oneonones:[
-      {id:'m1', employee:'김서연', date:'2026-07-05', note:'2분기 목표 중간 점검, 신규 캠페인 리드 역할 논의'},
-      {id:'m2', employee:'박준혁', date:'2026-07-12', note:'업무 우선순위 조정, 사이드 프로젝트 관심사 공유'},
-      {id:'m3', employee:'김서연', date:'2026-07-19', note:'승진 트랙 관련 피드백 전달'}
-    ]
-  };
-  localStorage.setItem(KEY, JSON.stringify(d));
-  return d;
+let DB = { members:[], jobs:[], candidates:[], okrs:[], evals:[], calibration:{}, oneonones:[] };
+async function refreshDB(){ DB = await apiGet('/all'); }
+async function initApp(){
+  await refreshDB();
+  renderAll();
 }
-
-let DB = loadData();
+initApp();
 
 /* ---------- Nav ---------- */
 document.querySelectorAll('.nav-item').forEach(btn=>{
@@ -594,21 +487,14 @@ function openMemberAddModal(){
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMember()">추가</button></div>
   `);
 }
-function saveMember(){
+async function saveMember(){
   const name = document.getElementById('f-mname2').value.trim();
   if(!name) return alert('이름을 입력해주세요');
-  DB.members.push({
-    id:uid(), name, nickname:'', team:document.getElementById('f-mteam').value||'', position:document.getElementById('f-mposition').value||'',
-    email:document.getElementById('f-memail').value||'', personalEmail:'', employeeNo:'',
-    hireDate:today(), groupHireDate:today(), hireType:'정규직', rrn:'', birthday:'',
-    phone:document.getElementById('f-mphone').value||'', address:'',
-    laborContract:'', wageContract:'', salaryPayInfo:'',
-    workType:{name:'', fixed:true, hours:''}, overtimePolicy:'',
-    leavePolicy:{basis:'', halfDay:'', promotion:''}, restDays:[],
-    leaveHistory:[], awards:[], discipline:[], career:[], education:[], specialNotes:'', family:[],
-    deduction:{basic:0, healthDependents:0}, hrInfo:'', intro:'', workedHours:'0시간', leaveLeft:'0일'
+  await apiPost('/members', {
+    name, team:document.getElementById('f-mteam').value||'', position:document.getElementById('f-mposition').value||'',
+    email:document.getElementById('f-memail').value||'', phone:document.getElementById('f-mphone').value||''
   });
-  saveData(); closeModal(); renderMembers();
+  await refreshDB(); closeModal(); renderMembers();
 }
 
 function openMemberProfile(id){
@@ -705,19 +591,20 @@ function renderMemberProfile(){
   document.getElementById('mp-jump-chips').innerHTML = sections.map(s=>`<a class="jump-chip" onclick="document.getElementById('${s.anchor}').scrollIntoView({behavior:'smooth',block:'start'})">${s.title.replace(/<[^>]+>/g,'')}</a>`).join('');
 }
 
-function saveMemberField(field, value){
-  const m = getCurrentMember(); m[field] = value; saveData(); renderMemberProfile();
+async function saveMemberField(field, value){
+  await apiPatch('/members/'+currentMemberId, {[field]: value});
+  await refreshDB(); closeModal(); renderMemberProfile();
 }
 
 function openEditHrInfo(){
   const m = getCurrentMember();
   showModal(`<h3>인사 정보</h3><div class="field"><textarea id="f-val" placeholder="인사 관련 메모를 입력하세요">${m.hrInfo||''}</textarea></div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('hrInfo', document.getElementById('f-val').value); closeModal();">저장</button></div>`);
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('hrInfo', document.getElementById('f-val').value)">저장</button></div>`);
 }
 function openEditText(field, label){
   const m = getCurrentMember();
   showModal(`<h3>${label}</h3><div class="field"><textarea id="f-val" placeholder="${label}를 입력하세요">${m[field]||''}</textarea></div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('${field}', document.getElementById('f-val').value); closeModal();">저장</button></div>`);
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('${field}', document.getElementById('f-val').value)">저장</button></div>`);
 }
 function openEditBasicInfo(){
   const m = getCurrentMember();
@@ -733,33 +620,35 @@ function openEditBasicInfo(){
       <div class="field"><label>사번</label><input id="f-b-empno" value="${m.employeeNo||''}"></div>
     </div>
     <div class="form-row3">
-      <div class="field"><label>입사일</label><input id="f-b-hire" type="date" value="${m.hireDate||''}"></div>
-      <div class="field"><label>그룹 입사일</label><input id="f-b-ghire" type="date" value="${m.groupHireDate||''}"></div>
+      <div class="field"><label>입사일</label><input id="f-b-hire" type="date" value="${dateOnly(m.hireDate)}"></div>
+      <div class="field"><label>그룹 입사일</label><input id="f-b-ghire" type="date" value="${dateOnly(m.groupHireDate)}"></div>
       <div class="field"><label>입사 유형</label><input id="f-b-htype" value="${m.hireType||''}"></div>
     </div>
     <div class="modal-sub">보안을 위해 주민등록번호는 이 데모 앱에서는 입력받지 않아요.</div>
     <div class="form-row">
-      <div class="field"><label>생일</label><input id="f-b-bday" type="date" value="${m.birthday||''}"></div>
+      <div class="field"><label>생일</label><input id="f-b-bday" type="date" value="${dateOnly(m.birthday)}"></div>
       <div class="field"><label>휴대전화번호</label><input id="f-b-phone" value="${m.phone||''}"></div>
     </div>
     <div class="field"><label>주소</label><input id="f-b-addr" value="${m.address||''}"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveBasicInfo()">저장</button></div>
   `);
 }
-function saveBasicInfo(){
-  const m = getCurrentMember();
-  m.name = document.getElementById('f-b-name').value || m.name;
-  m.nickname = document.getElementById('f-b-nick').value;
-  m.email = document.getElementById('f-b-email').value;
-  m.personalEmail = document.getElementById('f-b-pemail').value;
-  m.employeeNo = document.getElementById('f-b-empno').value;
-  m.hireDate = document.getElementById('f-b-hire').value;
-  m.groupHireDate = document.getElementById('f-b-ghire').value;
-  m.hireType = document.getElementById('f-b-htype').value;
-  m.birthday = document.getElementById('f-b-bday').value;
-  m.phone = document.getElementById('f-b-phone').value;
-  m.address = document.getElementById('f-b-addr').value;
-  saveData(); closeModal(); renderMemberProfile();
+async function saveBasicInfo(){
+  const patch = {
+    name: document.getElementById('f-b-name').value,
+    nickname: document.getElementById('f-b-nick').value,
+    email: document.getElementById('f-b-email').value,
+    personalEmail: document.getElementById('f-b-pemail').value,
+    employeeNo: document.getElementById('f-b-empno').value,
+    hireDate: document.getElementById('f-b-hire').value,
+    groupHireDate: document.getElementById('f-b-ghire').value,
+    hireType: document.getElementById('f-b-htype').value,
+    birthday: document.getElementById('f-b-bday').value,
+    phone: document.getElementById('f-b-phone').value,
+    address: document.getElementById('f-b-addr').value
+  };
+  await apiPatch('/members/'+currentMemberId, patch);
+  await refreshDB(); closeModal(); renderMemberProfile();
 }
 function openEditWorkType(){
   const m = getCurrentMember();
@@ -770,10 +659,12 @@ function openEditWorkType(){
       <div class="field"><label>고정/선택</label><select id="f-w-fixed"><option value="true" ${m.workType.fixed?'selected':''}>고정</option><option value="false" ${!m.workType.fixed?'selected':''}>선택</option></select></div>
       <div class="field"><label>근무 시간</label><input id="f-w-hours" value="${m.workType.hours||''}" placeholder="예: 주 40시간"></div>
     </div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="
-      const m=getCurrentMember(); m.workType={name:document.getElementById('f-w-name').value, fixed:document.getElementById('f-w-fixed').value==='true', hours:document.getElementById('f-w-hours').value};
-      saveData(); closeModal(); renderMemberProfile();">저장</button></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveWorkType({name:document.getElementById('f-w-name').value, fixed:document.getElementById('f-w-fixed').value==='true', hours:document.getElementById('f-w-hours').value})">저장</button></div>
   `);
+}
+async function saveWorkType(workType){
+  await apiPatch('/members/'+currentMemberId, {workType});
+  await refreshDB(); closeModal(); renderMemberProfile();
 }
 function openEditLeavePolicy(){
   const m = getCurrentMember();
@@ -784,34 +675,39 @@ function openEditLeavePolicy(){
       <div class="field"><label>반차 단위</label><select id="f-l-half"><option ${m.leavePolicy.halfDay==='반차 단위 사용'?'selected':''}>반차 단위 사용</option><option ${m.leavePolicy.halfDay==='반차 단위 미사용'?'selected':''}>반차 단위 미사용</option></select></div>
       <div class="field"><label>연차 촉진</label><select id="f-l-promo"><option ${m.leavePolicy.promotion==='연차 촉진 사용'?'selected':''}>연차 촉진 사용</option><option ${m.leavePolicy.promotion==='연차 촉진 미사용'?'selected':''}>연차 촉진 미사용</option></select></div>
     </div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="
-      const m=getCurrentMember(); m.leavePolicy={basis:document.getElementById('f-l-basis').value, halfDay:document.getElementById('f-l-half').value, promotion:document.getElementById('f-l-promo').value};
-      saveData(); closeModal(); renderMemberProfile();">저장</button></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveLeavePolicy({basis:document.getElementById('f-l-basis').value, halfDay:document.getElementById('f-l-half').value, promotion:document.getElementById('f-l-promo').value})">저장</button></div>
   `);
+}
+async function saveLeavePolicy(leavePolicy){
+  await apiPatch('/members/'+currentMemberId, {leavePolicy});
+  await refreshDB(); closeModal(); renderMemberProfile();
 }
 function openEditRestDays(){
   const m = getCurrentMember();
   showModal(`
     <h3>쉬는 날 정보</h3>
-    <div class="modal-sub">쉼표(,)로 구분해서 입력하세요</div>
+    <div class="modal-sub">쉼표(,)로 구분해서 입력하세요. 이 목록은 전체 구성원이 함께 사용해요.</div>
     <div class="field"><textarea id="f-val" style="min-height:100px;">${(m.restDays||[]).join(', ')}</textarea></div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="
-      const m=getCurrentMember(); m.restDays=document.getElementById('f-val').value.split(',').map(s=>s.trim()).filter(Boolean);
-      saveData(); closeModal(); renderMemberProfile();">저장</button></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveHolidays(document.getElementById('f-val').value)">저장</button></div>
   `);
+}
+async function saveHolidays(namesText){
+  const names = namesText.split(',').map(s=>s.trim()).filter(Boolean);
+  await apiPut('/holidays', {names});
+  await refreshDB(); closeModal(); renderMemberProfile();
 }
 
 function openListEntryModal(title, fieldDefs, onSave){
   const inputs = fieldDefs.map((f,i)=>`<div class="field"><label>${f}</label><input id="li-${i}"></div>`).join('');
   showModal(`<h3>${title}</h3>${inputs}
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="(${onSave.toString()})(); closeModal(); renderMemberProfile();">추가</button></div>`);
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="(async()=>{ await (${onSave.toString()})(); closeModal(); renderMemberProfile(); })()">추가</button></div>`);
 }
-function openAddLeaveHistory(){ openListEntryModal('휴직 이력 추가', ['사유','기간'], function(){ const m=getCurrentMember(); m.leaveHistory.push({reason:document.getElementById('li-0').value, period:document.getElementById('li-1').value}); saveData(); }); }
-function openAddAward(){ openListEntryModal('수상 추가', ['수상명','일자'], function(){ const m=getCurrentMember(); m.awards.push({title:document.getElementById('li-0').value, date:document.getElementById('li-1').value}); saveData(); }); }
-function openAddDiscipline(){ openListEntryModal('징계 추가', ['사유','일자'], function(){ const m=getCurrentMember(); m.discipline.push({reason:document.getElementById('li-0').value, date:document.getElementById('li-1').value}); saveData(); }); }
-function openAddCareer(){ openListEntryModal('경력 정보 추가', ['회사명','직책','기간'], function(){ const m=getCurrentMember(); m.career.push({company:document.getElementById('li-0').value, role:document.getElementById('li-1').value, period:document.getElementById('li-2').value}); saveData(); }); }
-function openAddEducation(){ openListEntryModal('학력 정보 추가', ['학교명','전공','기간'], function(){ const m=getCurrentMember(); m.education.push({school:document.getElementById('li-0').value, major:document.getElementById('li-1').value, period:document.getElementById('li-2').value}); saveData(); }); }
-function openAddFamily(){ openListEntryModal('가족 정보 추가', ['이름','관계'], function(){ const m=getCurrentMember(); m.family.push({name:document.getElementById('li-0').value, relation:document.getElementById('li-1').value}); m.deduction.basic = m.family.length+1; saveData(); }); }
+function openAddLeaveHistory(){ openListEntryModal('휴직 이력 추가', ['사유','기간'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'leaveHistory', item:{reason:document.getElementById('li-0').value, period:document.getElementById('li-1').value}}); await refreshDB(); }); }
+function openAddAward(){ openListEntryModal('수상 추가', ['수상명','일자'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'awards', item:{title:document.getElementById('li-0').value, date:document.getElementById('li-1').value}}); await refreshDB(); }); }
+function openAddDiscipline(){ openListEntryModal('징계 추가', ['사유','일자'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'discipline', item:{reason:document.getElementById('li-0').value, date:document.getElementById('li-1').value}}); await refreshDB(); }); }
+function openAddCareer(){ openListEntryModal('경력 정보 추가', ['회사명','직책','기간'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'career', item:{company:document.getElementById('li-0').value, role:document.getElementById('li-1').value, period:document.getElementById('li-2').value}}); await refreshDB(); }); }
+function openAddEducation(){ openListEntryModal('학력 정보 추가', ['학교명','전공','기간'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'education', item:{school:document.getElementById('li-0').value, major:document.getElementById('li-1').value, period:document.getElementById('li-2').value}}); await refreshDB(); }); }
+function openAddFamily(){ openListEntryModal('가족 정보 추가', ['이름','관계'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'family', item:{name:document.getElementById('li-0').value, relation:document.getElementById('li-1').value}}); await refreshDB(); }); }
 
 /* ---------- Modal helpers ---------- */
 function showModal(html, wide){

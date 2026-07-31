@@ -10,6 +10,11 @@ const FIELD_MAP = {
   specialNotes: 'special_notes', workedHours: 'worked_hours', leaveLeft: 'leave_left'
 };
 
+// hire_date / group_hire_date / birthday are `date` columns; an empty string
+// (e.g. a cleared <input type="date">) is not a valid date and Postgres
+// rejects it, so normalize '' to NULL for these fields only.
+const DATE_FIELDS = new Set(['hireDate', 'groupHireDate', 'birthday']);
+
 export default async function handler(req, res) {
   const { id } = req.query;
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
@@ -20,7 +25,11 @@ export default async function handler(req, res) {
   let i = 1;
 
   for (const [key, column] of Object.entries(FIELD_MAP)) {
-    if (key in body) { sets.push(`${column} = $${i++}`); values.push(body[key]); }
+    if (key in body) {
+      let value = body[key];
+      if (DATE_FIELDS.has(key) && value === '') value = null;
+      sets.push(`${column} = $${i++}`); values.push(value);
+    }
   }
   if (body.workType) {
     sets.push(`work_type_name = $${i++}`); values.push(body.workType.name || '');
