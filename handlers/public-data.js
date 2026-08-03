@@ -26,9 +26,10 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const [members, okrs, evals, calibrationCycles, calibrationOverrides, oneonones] = await Promise.all([
+    const [members, okrs, okrTasks, evals, calibrationCycles, calibrationOverrides, oneonones] = await Promise.all([
       sql`SELECT id, name FROM members ORDER BY name`,
       sql`SELECT * FROM okrs`,
+      sql`SELECT * FROM okr_tasks`,
       sql`SELECT * FROM evals`,
       sql`SELECT * FROM calibration_cycles`,
       sql`SELECT * FROM calibration_overrides`,
@@ -38,9 +39,11 @@ export default async function handler(req, res) {
     const memberNameById = Object.fromEntries(members.map(m => [m.id, m.name]));
 
     const okrs_out = okrs.map(o => ({
-      id: o.id, quarter: o.quarter, level: o.level, title: o.title, owner: o.owner,
-      parent: o.parent_id, progress: o.progress, unit: o.unit, target: o.target
+      id: o.id, quarter: o.quarter, month: o.month, level: o.level, title: o.title, owner: o.owner,
+      parent: o.parent_id, member: o.member_id, progress: o.progress, unit: o.unit, target: o.target
     }));
+
+    const okrTasks_out = okrTasks.map(t => ({ id: t.id, okrId: t.okr_id, title: t.title, done: t.done }));
 
     const evals_out = evals.map(e => ({
       id: e.id, quarter: e.quarter, employee: e.employee_id, employeeName: memberNameById[e.employee_id] || '(삭제된 구성원)',
@@ -70,6 +73,7 @@ export default async function handler(req, res) {
       // id + name ONLY -- see the file header before adding any field here.
       members: members.map(m => ({ id: m.id, name: m.name })),
       okrs: okrs_out,
+      okrTasks: okrTasks_out,
       evals: evals_out,
       calibration: calibration_out,
       oneonones: oneonones_out

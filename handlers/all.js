@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
   try {
     const [members, leaveHistory, awards, discipline, career, education, family,
-      holidays, jobs, candidates, candidateHistory, okrs, evals, calibrationCycles,
+      holidays, jobs, candidates, candidateHistory, okrs, okrTasks, evals, calibrationCycles,
       calibrationOverrides, oneonones] = await Promise.all([
       sql`SELECT * FROM members ORDER BY name`,
       sql`SELECT * FROM member_leave_history`,
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
       sql`SELECT * FROM candidates ORDER BY created_at`,
       sql`SELECT * FROM candidate_history ORDER BY date`,
       sql`SELECT * FROM okrs`,
+      sql`SELECT * FROM okr_tasks`,
       sql`SELECT * FROM evals`,
       sql`SELECT * FROM calibration_cycles`,
       sql`SELECT * FROM calibration_overrides`,
@@ -77,9 +78,11 @@ export default async function handler(req, res) {
     }));
 
     const okrs_out = okrs.map(o => ({
-      id: o.id, quarter: o.quarter, level: o.level, title: o.title, owner: o.owner,
-      parent: o.parent_id, progress: o.progress, unit: o.unit, target: o.target
+      id: o.id, quarter: o.quarter, month: o.month, level: o.level, title: o.title, owner: o.owner,
+      parent: o.parent_id, member: o.member_id, progress: o.progress, unit: o.unit, target: o.target
     }));
+
+    const okrTasks_out = okrTasks.map(t => ({ id: t.id, okrId: t.okr_id, title: t.title, done: t.done }));
 
     const evals_out = evals.map(e => ({
       id: e.id, quarter: e.quarter, employee: e.employee_id, employeeName: memberNameById[e.employee_id] || '(삭제된 구성원)',
@@ -110,6 +113,7 @@ export default async function handler(req, res) {
       jobs: jobs_out,
       candidates: candidates_out,
       okrs: okrs_out,
+      okrTasks: okrTasks_out,
       evals: evals_out,
       calibration: calibration_out,
       oneonones: oneonones_out
