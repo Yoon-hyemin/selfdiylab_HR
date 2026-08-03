@@ -74,7 +74,12 @@ function matchRoute(segments) {
 }
 
 export default async function handler(req, res) {
-  const segments = Array.isArray(req.query.path) ? req.query.path : (req.query.path ? [req.query.path] : []);
+  // Derive segments directly from the URL path rather than req.query's
+  // catch-all key (observed to be inconsistently named across Vercel
+  // runtime versions -- sometimes "path", sometimes "...path"). Parsing
+  // the URL ourselves is robust regardless of that naming.
+  const pathname = (req.url || '').split('?')[0];
+  const segments = pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
   const match = matchRoute(segments);
   if (!match) return res.status(404).json({ error: 'Not found' });
   Object.assign(req.query, match.params);
