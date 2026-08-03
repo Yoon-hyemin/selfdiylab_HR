@@ -425,6 +425,9 @@ function today(){ return new Date().toISOString().slice(0,10); }
 // datetime strings (e.g. "2026-07-30T15:00:00.000Z"); <input type="date"> only
 // accepts "YYYY-MM-DD" and silently blanks out otherwise, so trim to that.
 function dateOnly(v){ return v ? String(v).slice(0,10) : ''; }
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 let DB = { members:[], jobs:[], candidates:[], okrs:[], evals:[], calibration:{}, oneonones:[] };
 async function refreshDB(){ DB = await apiGet('/all'); }
@@ -464,10 +467,10 @@ function renderMembers(){
   grid.innerHTML = DB.members.map(m=>`
     <div class="member-card" onclick="openMemberProfile('${m.id}')">
       <div class="mc-top">
-        <div class="avatar-circle">${initials(m.name)}</div>
-        <div><div class="mc-name">${m.name}</div><div class="mc-sub">${m.team||'조직 없음'} · ${m.position||'-'}</div></div>
+        <div class="avatar-circle">${escapeHtml(initials(m.name))}</div>
+        <div><div class="mc-name">${escapeHtml(m.name)}</div><div class="mc-sub">${escapeHtml(m.team||'조직 없음')} · ${escapeHtml(m.position||'-')}</div></div>
       </div>
-      <div class="mc-meta"><span>✉️ ${m.email}</span><span>📞 ${m.phone||'-'}</span></div>
+      <div class="mc-meta"><span>✉️ ${escapeHtml(m.email)}</span><span>📞 ${escapeHtml(m.phone||'-')}</span></div>
     </div>
   `).join('') || '<div class="empty">등록된 구성원이 없어요</div>';
 }
@@ -511,8 +514,8 @@ function closeMemberProfile(){
 }
 function getCurrentMember(){ return DB.members.find(m=>m.id===currentMemberId); }
 
-function val(v){ return v && String(v).trim() ? `<b>${v}</b>` : `<span class="placeholder">입력하기</span>`; }
-function listChips(arr, mapFn){ return arr && arr.length ? arr.map(mapFn).map(t=>`<span class="list-chip">${t}</span>`).join('') : `<span class="placeholder">입력하기</span>`; }
+function val(v){ return v && String(v).trim() ? `<b>${escapeHtml(v)}</b>` : `<span class="placeholder">입력하기</span>`; }
+function listChips(arr, mapFn){ return arr && arr.length ? arr.map(mapFn).map(t=>`<span class="list-chip">${escapeHtml(t)}</span>`).join('') : `<span class="placeholder">입력하기</span>`; }
 
 function renderMemberProfile(){
   const m = getCurrentMember(); if(!m) return;
@@ -555,12 +558,12 @@ function renderMemberProfile(){
       body:`<div class="info-row"><div class="iv">${val(m.salaryPayInfo)}</div></div>`},
 
     {key:'work', anchor:'sec-work', title:'근무 정보', action:['변경','openEditWorkType'],
-      body:`<div class="info-row"><div class="iv">${val(m.workType.name)} ${m.workType.name? `<span class="badge green">${m.workType.fixed?'고정':'선택'}</span> ${m.workType.hours||''}`:''}</div></div>`},
+      body:`<div class="info-row"><div class="iv">${val(m.workType.name)} ${m.workType.name? `<span class="badge green">${m.workType.fixed?'고정':'선택'}</span> ${escapeHtml(m.workType.hours||'')}`:''}</div></div>`},
     {key:'overtime', anchor:'sec-overtime', title:'초과 근무 보상 정보 <span class="lock-icon">🔒</span>', action:['변경','openEditText','overtimePolicy','초과 근무 보상 정보'],
       body:`<div class="info-row"><div class="iv">${val(m.overtimePolicy)}</div></div>`},
 
     {key:'leavepolicy', anchor:'sec-leavepolicy', title:'휴가 정보', action:['변경','openEditLeavePolicy'],
-      body:`<div class="info-row"><div class="iv">${m.leavePolicy.basis? `<b>${m.leavePolicy.basis}</b> <span class="badge grey">${m.leavePolicy.halfDay}</span> <span class="badge grey">${m.leavePolicy.promotion}</span>`:'<span class="placeholder">입력하기</span>'}</div></div>`},
+      body:`<div class="info-row"><div class="iv">${m.leavePolicy.basis? `<b>${escapeHtml(m.leavePolicy.basis)}</b> <span class="badge grey">${m.leavePolicy.halfDay}</span> <span class="badge grey">${m.leavePolicy.promotion}</span>`:'<span class="placeholder">입력하기</span>'}</div></div>`},
     {key:'restdays', anchor:'sec-restdays', title:'쉬는 날 정보', action:['변경','openEditRestDays'],
       body:`<div class="info-row"><div class="iv">${listChips(m.restDays, r=>r)}</div></div>`},
 
@@ -598,12 +601,12 @@ async function saveMemberField(field, value){
 
 function openEditHrInfo(){
   const m = getCurrentMember();
-  showModal(`<h3>인사 정보</h3><div class="field"><textarea id="f-val" placeholder="인사 관련 메모를 입력하세요">${m.hrInfo||''}</textarea></div>
+  showModal(`<h3>인사 정보</h3><div class="field"><textarea id="f-val" placeholder="인사 관련 메모를 입력하세요">${escapeHtml(m.hrInfo||'')}</textarea></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('hrInfo', document.getElementById('f-val').value)">저장</button></div>`);
 }
 function openEditText(field, label){
   const m = getCurrentMember();
-  showModal(`<h3>${label}</h3><div class="field"><textarea id="f-val" placeholder="${label}를 입력하세요">${m[field]||''}</textarea></div>
+  showModal(`<h3>${label}</h3><div class="field"><textarea id="f-val" placeholder="${label}를 입력하세요">${escapeHtml(m[field]||'')}</textarea></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('${field}', document.getElementById('f-val').value)">저장</button></div>`);
 }
 function openEditBasicInfo(){
@@ -611,25 +614,25 @@ function openEditBasicInfo(){
   showModal(`
     <h3>기본 정보 변경</h3>
     <div class="form-row">
-      <div class="field"><label>본명</label><input id="f-b-name" value="${m.name}"></div>
-      <div class="field"><label>닉네임</label><input id="f-b-nick" value="${m.nickname||''}"></div>
+      <div class="field"><label>본명</label><input id="f-b-name" value="${escapeHtml(m.name)}"></div>
+      <div class="field"><label>닉네임</label><input id="f-b-nick" value="${escapeHtml(m.nickname||'')}"></div>
     </div>
     <div class="form-row3">
-      <div class="field"><label>이메일</label><input id="f-b-email" value="${m.email||''}"></div>
-      <div class="field"><label>개인 이메일</label><input id="f-b-pemail" value="${m.personalEmail||''}"></div>
-      <div class="field"><label>사번</label><input id="f-b-empno" value="${m.employeeNo||''}"></div>
+      <div class="field"><label>이메일</label><input id="f-b-email" value="${escapeHtml(m.email||'')}"></div>
+      <div class="field"><label>개인 이메일</label><input id="f-b-pemail" value="${escapeHtml(m.personalEmail||'')}"></div>
+      <div class="field"><label>사번</label><input id="f-b-empno" value="${escapeHtml(m.employeeNo||'')}"></div>
     </div>
     <div class="form-row3">
       <div class="field"><label>입사일</label><input id="f-b-hire" type="date" value="${dateOnly(m.hireDate)}"></div>
       <div class="field"><label>그룹 입사일</label><input id="f-b-ghire" type="date" value="${dateOnly(m.groupHireDate)}"></div>
-      <div class="field"><label>입사 유형</label><input id="f-b-htype" value="${m.hireType||''}"></div>
+      <div class="field"><label>입사 유형</label><input id="f-b-htype" value="${escapeHtml(m.hireType||'')}"></div>
     </div>
     <div class="modal-sub">보안을 위해 주민등록번호는 이 데모 앱에서는 입력받지 않아요.</div>
     <div class="form-row">
       <div class="field"><label>생일</label><input id="f-b-bday" type="date" value="${dateOnly(m.birthday)}"></div>
-      <div class="field"><label>휴대전화번호</label><input id="f-b-phone" value="${m.phone||''}"></div>
+      <div class="field"><label>휴대전화번호</label><input id="f-b-phone" value="${escapeHtml(m.phone||'')}"></div>
     </div>
-    <div class="field"><label>주소</label><input id="f-b-addr" value="${m.address||''}"></div>
+    <div class="field"><label>주소</label><input id="f-b-addr" value="${escapeHtml(m.address||'')}"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveBasicInfo()">저장</button></div>
   `);
 }
@@ -654,10 +657,10 @@ function openEditWorkType(){
   const m = getCurrentMember();
   showModal(`
     <h3>근무 정보 변경</h3>
-    <div class="field"><label>근무 유형명</label><input id="f-w-name" value="${m.workType.name||''}" placeholder="예: 기본 근무유형"></div>
+    <div class="field"><label>근무 유형명</label><input id="f-w-name" value="${escapeHtml(m.workType.name||'')}" placeholder="예: 기본 근무유형"></div>
     <div class="form-row">
       <div class="field"><label>고정/선택</label><select id="f-w-fixed"><option value="true" ${m.workType.fixed?'selected':''}>고정</option><option value="false" ${!m.workType.fixed?'selected':''}>선택</option></select></div>
-      <div class="field"><label>근무 시간</label><input id="f-w-hours" value="${m.workType.hours||''}" placeholder="예: 주 40시간"></div>
+      <div class="field"><label>근무 시간</label><input id="f-w-hours" value="${escapeHtml(m.workType.hours||'')}" placeholder="예: 주 40시간"></div>
     </div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveWorkType({name:document.getElementById('f-w-name').value, fixed:document.getElementById('f-w-fixed').value==='true', hours:document.getElementById('f-w-hours').value})">저장</button></div>
   `);
@@ -670,7 +673,7 @@ function openEditLeavePolicy(){
   const m = getCurrentMember();
   showModal(`
     <h3>휴가 정보 변경</h3>
-    <div class="field"><label>연차 정책명 / 부여 기준</label><input id="f-l-basis" value="${m.leavePolicy.basis||''}" placeholder="예: 입사일 기준 부여"></div>
+    <div class="field"><label>연차 정책명 / 부여 기준</label><input id="f-l-basis" value="${escapeHtml(m.leavePolicy.basis||'')}" placeholder="예: 입사일 기준 부여"></div>
     <div class="form-row">
       <div class="field"><label>반차 단위</label><select id="f-l-half"><option ${m.leavePolicy.halfDay==='반차 단위 사용'?'selected':''}>반차 단위 사용</option><option ${m.leavePolicy.halfDay==='반차 단위 미사용'?'selected':''}>반차 단위 미사용</option></select></div>
       <div class="field"><label>연차 촉진</label><select id="f-l-promo"><option ${m.leavePolicy.promotion==='연차 촉진 사용'?'selected':''}>연차 촉진 사용</option><option ${m.leavePolicy.promotion==='연차 촉진 미사용'?'selected':''}>연차 촉진 미사용</option></select></div>
@@ -687,7 +690,7 @@ function openEditRestDays(){
   showModal(`
     <h3>쉬는 날 정보</h3>
     <div class="modal-sub">쉼표(,)로 구분해서 입력하세요. 이 목록은 전체 구성원이 함께 사용해요.</div>
-    <div class="field"><textarea id="f-val" style="min-height:100px;">${(m.restDays||[]).join(', ')}</textarea></div>
+    <div class="field"><textarea id="f-val" style="min-height:100px;">${(m.restDays||[]).map(escapeHtml).join(', ')}</textarea></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveHolidays(document.getElementById('f-val').value)">저장</button></div>
   `);
 }
@@ -731,9 +734,9 @@ function renderJobModal(){
   let body = '';
   if(jobStep===1){
     body = `
-      <div class="field"><label>공고 제목</label><input id="f-title" value="${d.title}" placeholder="예: 백엔드 개발자"></div>
+      <div class="field"><label>공고 제목</label><input id="f-title" value="${escapeHtml(d.title)}" placeholder="예: 백엔드 개발자"></div>
       <div class="form-row">
-        <div class="field"><label>팀</label><input id="f-team" value="${d.team}" placeholder="예: 개발팀"></div>
+        <div class="field"><label>팀</label><input id="f-team" value="${escapeHtml(d.team)}" placeholder="예: 개발팀"></div>
         <div class="field"><label>마감일</label><input id="f-deadline" type="date" value="${d.deadline}"></div>
       </div>
       <div class="field"><label>공고 본문</label><textarea id="f-body" placeholder="담당업무, 자격요건, 우대사항 등을 자유롭게 작성하세요" style="min-height:140px;"></textarea></div>
@@ -799,7 +802,7 @@ function renderStagePipeline(){
   const el = document.getElementById('stage-pipeline'); if(!el) return;
   el.innerHTML = jobDraft.stages.map((s,i)=>{
     const fixed = i===0 || i===jobDraft.stages.length-1;
-    return `${i>0?'<span class="arrow">→</span>':''}<span class="stage-chip ${fixed?'fixed':''}">${s}${fixed?'':` <span class="rm" onclick="removeStage(${i})">×</span>`}</span>`;
+    return `${i>0?'<span class="arrow">→</span>':''}<span class="stage-chip ${fixed?'fixed':''}">${escapeHtml(s)}${fixed?'':` <span class="rm" onclick="removeStage(${i})">×</span>`}</span>`;
   }).join('');
 }
 function addStage(){
@@ -813,7 +816,7 @@ function removeStage(i){ jobDraft.stages.splice(i,1); renderStagePipeline(); }
 
 function renderDocsList(){
   document.getElementById('submission-docs').innerHTML = jobDraft.submissionDocs.map((d,i)=>`
-    <div class="req-row"><input type="text" value="${d.name}" onchange="jobDraft.submissionDocs[${i}].name=this.value">
+    <div class="req-row"><input type="text" value="${escapeHtml(d.name)}" onchange="jobDraft.submissionDocs[${i}].name=this.value">
     <select onchange="jobDraft.submissionDocs[${i}].required=(this.value==='필수')"><option ${d.required?'selected':''}>필수</option><option ${!d.required?'selected':''}>선택</option></select>
     <span class="rm" style="cursor:pointer;" onclick="jobDraft.submissionDocs.splice(${i},1);renderDocsList();">×</span></div>
   `).join('') || '<div class="empty" style="padding:10px 0;">등록된 제출자료가 없어요</div>';
@@ -825,7 +828,7 @@ function addDoc(){
 }
 function renderQuestionsList(){
   document.getElementById('pre-questions').innerHTML = jobDraft.preQuestions.map((q,i)=>`
-    <div class="req-row"><input type="text" value="${q.q}" onchange="jobDraft.preQuestions[${i}].q=this.value">
+    <div class="req-row"><input type="text" value="${escapeHtml(q.q)}" onchange="jobDraft.preQuestions[${i}].q=this.value">
     <select onchange="jobDraft.preQuestions[${i}].required=(this.value==='필수')"><option ${q.required?'selected':''}>필수</option><option ${!q.required?'selected':''}>선택</option></select>
     <span class="rm" style="cursor:pointer;" onclick="jobDraft.preQuestions.splice(${i},1);renderQuestionsList();">×</span></div>
   `).join('') || '<div class="empty" style="padding:10px 0;">등록된 사전 질문이 없어요</div>';
@@ -877,8 +880,8 @@ async function changeStage(candId, newStage){
 }
 function viewCandidateHistory(candId){
   const c = DB.candidates.find(x=>x.id===candId);
-  const items = c.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-date">${h.date}</div><div class="tl-body"><b>${h.stage}</b> — ${h.note}</div></div>`).join('');
-  showModal(`<h3>${c.name} 님 전형 히스토리</h3><div class="timeline">${items||'<div class="empty">기록 없음</div>'}</div><div class="modal-actions"><button class="btn primary" onclick="closeModal()">닫기</button></div>`);
+  const items = c.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-date">${h.date}</div><div class="tl-body"><b>${escapeHtml(h.stage)}</b> — ${escapeHtml(h.note)}</div></div>`).join('');
+  showModal(`<h3>${escapeHtml(c.name)} 님 전형 히스토리</h3><div class="timeline">${items||'<div class="empty">기록 없음</div>'}</div><div class="modal-actions"><button class="btn primary" onclick="closeModal()">닫기</button></div>`);
 }
 async function deleteJob(id){
   await apiDelete('/jobs/'+id);
@@ -898,7 +901,7 @@ function openOkrModal(){
     <div class="form-row">
       <div class="field"><label>담당 주체</label><input id="f-oowner" placeholder="담당자/팀"></div>
       <div class="field"><label>상위 목표</label>
-        <select id="f-oparent"><option value="">상위 목표 선택 안함</option>${DB.okrs.map(o=>`<option value="${o.id}">[${o.level}] ${o.title}</option>`).join('')}</select>
+        <select id="f-oparent"><option value="">상위 목표 선택 안함</option>${DB.okrs.map(o=>`<option value="${o.id}">[${o.level}] ${escapeHtml(o.title)}</option>`).join('')}</select>
       </div>
     </div>
     <div class="field"><label>목표 설명</label><textarea id="f-odesc" placeholder="목표에 대한 설명을 적어주세요"></textarea></div>
@@ -932,7 +935,7 @@ function openEvalModal(){
     <h3>평가 만들기</h3>
     <div class="modal-sub">역량 3요소 + 성과 + 커스텀 구조로 평가해요</div>
     <div class="form-row">
-      <div class="field"><label>구성원</label><select id="f-ename">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+      <div class="field"><label>구성원</label><select id="f-ename">${DB.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
       <div class="field"><label>분기</label><input id="f-equarter" placeholder="2026-Q2"></div>
     </div>
     <div class="form-row3">
@@ -967,7 +970,7 @@ function gradeFor(perf, comp){
 function quarterOptionsHtml(){
   const qs = [...new Set(DB.evals.map(e=>e.quarter))];
   if(qs.length===0) qs.push('2026-Q2');
-  return qs.map(q=>`<option value="${q}">${q}</option>`).join('');
+  return qs.map(q=>`<option value="${escapeHtml(q)}">${escapeHtml(q)}</option>`).join('');
 }
 function renderEval(){
   const sel = document.getElementById('eval-quarter-filter');
@@ -987,13 +990,13 @@ function renderEval(){
       const label = r===2? (c===0?'잠재 인재':c===1?'우수 성과자':'핵심 인재') : r===1? (c===0?'성장 필요':c===1?'안정적 기여자':'고성장 인재') : (c===0?'저성과자':c===1?'역할 재검토':'미스매치');
       const div = document.createElement('div');
       div.className='cell9';
-      div.innerHTML = `<div class="clabel">${label}</div><div class="chips">${people.map(p=>`<span class="chip">${p.employeeName}</span>`).join('') || ''}</div>`;
+      div.innerHTML = `<div class="clabel">${label}</div><div class="chips">${people.map(p=>`<span class="chip">${escapeHtml(p.employeeName)}</span>`).join('') || ''}</div>`;
       grid.appendChild(div);
     }
   });
 
   document.getElementById('eval-table').innerHTML = evalsQ.map(e=>`
-    <tr><td>${e.employeeName}</td><td>${e.quarter}</td><td>${e.common}</td><td>${e.lead}</td><td>${e.job}</td><td>${e.performance}</td><td>${e.custom}</td>
+    <tr><td>${escapeHtml(e.employeeName)}</td><td>${escapeHtml(e.quarter)}</td><td>${e.common}</td><td>${e.lead}</td><td>${e.job}</td><td>${e.performance}</td><td>${e.custom}</td>
     <td><span class="badge blue">${gradeFor(e.performance,competency(e))}</span></td>
     <td><button class="btn ghost sm" onclick="deleteEval('${e.id}')">삭제</button></td></tr>
   `).join('') || `<tr><td colspan="9" class="empty">등록된 평가가 없어요</td></tr>`;
@@ -1002,8 +1005,8 @@ function renderEval(){
     const grade = gradeFor(e.performance,competency(e));
     const tone = e.performance>=4? '이번 분기 목표 달성 흐름이 좋아요.' : e.performance<=2? '목표 달성 측면에서 보완이 필요해요.' : '안정적으로 목표를 수행하고 있어요.';
     return `<div class="ai-card">
-      <div class="head"><b>${e.employeeName} · ${grade}등급</b><span class="aitag">AI 자동 요약</span></div>
-      <p>${tone} 강점으로는 "${e.strength}"이(가) 확인돼요. 다음 분기에는 "${e.improve}"에 집중하면 더 좋은 결과를 만들 수 있을 것으로 보여요.</p>
+      <div class="head"><b>${escapeHtml(e.employeeName)} · ${grade}등급</b><span class="aitag">AI 자동 요약</span></div>
+      <p>${tone} 강점으로는 "${escapeHtml(e.strength)}"이(가) 확인돼요. 다음 분기에는 "${escapeHtml(e.improve)}"에 집중하면 더 좋은 결과를 만들 수 있을 것으로 보여요.</p>
       <div class="subscores"><span>공동역량 ${e.common}</span><span>리드역량 ${e.lead}</span><span>직무역량 ${e.job}</span><span>성과 ${e.performance}</span><span>커스텀 ${e.custom}</span></div>
     </div>`;
   }).join('') || `<div class="empty">평가 데이터가 쌓이면 AI 요약이 자동으로 생성돼요</div>`;
@@ -1044,14 +1047,14 @@ function renderCalibration(){
     const final = cal.overrides[e.id]?.grade || computed;
     const reason = cal.overrides[e.id]?.reason || '';
     return `<tr>
-      <td>${e.employeeName}</td>
+      <td>${escapeHtml(e.employeeName)}</td>
       <td><span class="badge grey">${computed}</span></td>
       <td>
         <select onchange="setOverride('${quarter}','${e.id}', this.value, document.getElementById('reason-${e.id}').value)">
           ${['S','A','B','C','D'].map(g=>`<option value="${g}" ${g===final?'selected':''}>${g}</option>`).join('')}
         </select>
       </td>
-      <td><input id="reason-${e.id}" placeholder="조정 사유" value="${reason}" onchange="setOverride('${quarter}','${e.id}', undefined, this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;width:100%;"></td>
+      <td><input id="reason-${e.id}" placeholder="조정 사유" value="${escapeHtml(reason)}" onchange="setOverride('${quarter}','${e.id}', undefined, this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;width:100%;"></td>
       <td></td>
     </tr>`;
   }).join('') || `<tr><td colspan="5" class="empty">해당 분기 평가 데이터가 없어요</td></tr>`;
@@ -1073,7 +1076,7 @@ function openOneOnOneModal(){
   showModal(`
     <h3>원온원 보내기</h3>
     <div class="form-row">
-      <div class="field"><label>구성원</label><select id="f-mname">${DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
+      <div class="field"><label>구성원</label><select id="f-mname">${DB.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
       <div class="field"><label>날짜</label><input id="f-mdate" type="date" value="${today()}"></div>
     </div>
     <div class="field"><label>내용</label><textarea id="f-mnote" placeholder="면담 내용을 기록하세요"></textarea></div>
@@ -1090,10 +1093,10 @@ function renderOneOnOne(){
   const peopleIds = [...new Set(DB.oneonones.map(m=>m.employee))];
   if(!currentEmployee && peopleIds.length) currentEmployee = peopleIds[0];
   const nameOf = id => (DB.oneonones.find(m=>m.employee===id)||{}).employeeName || '';
-  document.getElementById('oneonone-people').innerHTML = peopleIds.map(id=>`<button class="btn sm ${id===currentEmployee?'primary':''}" onclick="selectEmployee('${id}')">${nameOf(id)}</button>`).join('') || '<span class="empty">기록된 구성원이 없어요</span>';
+  document.getElementById('oneonone-people').innerHTML = peopleIds.map(id=>`<button class="btn sm ${id===currentEmployee?'primary':''}" onclick="selectEmployee('${id}')">${escapeHtml(nameOf(id))}</button>`).join('') || '<span class="empty">기록된 구성원이 없어요</span>';
   const list = DB.oneonones.filter(m=>m.employee===currentEmployee).sort((a,b)=>b.date.localeCompare(a.date));
   document.getElementById('oneonone-title').textContent = currentEmployee ? nameOf(currentEmployee)+' 님 히스토리' : '히스토리';
-  document.getElementById('oneonone-timeline').innerHTML = list.map(m=>`<div class="tl-item"><div class="tl-date">${m.date}</div><div class="tl-body">${m.note}</div></div>`).join('') || '<div class="empty">기록이 없어요</div>';
+  document.getElementById('oneonone-timeline').innerHTML = list.map(m=>`<div class="tl-item"><div class="tl-date">${m.date}</div><div class="tl-body">${escapeHtml(m.note)}</div></div>`).join('') || '<div class="empty">기록이 없어요</div>';
 }
 function selectEmployee(id){ currentEmployee = id; renderOneOnOne(); }
 
@@ -1110,8 +1113,8 @@ function renderDashboard(){
     <div class="kpi"><div class="label">등록된 평가</div><div class="value">${evalCount}건</div></div>
   `;
   const events = [];
-  DB.candidates.forEach(c=>c.history.forEach(h=>events.push({date:h.date, text:`[채용] ${c.name} 님 — ${h.stage} (${h.note})`})));
-  DB.oneonones.forEach(m=>events.push({date:m.date, text:`[원온원] ${m.employeeName} 님과 면담 기록`}));
+  DB.candidates.forEach(c=>c.history.forEach(h=>events.push({date:h.date, text:`[채용] ${escapeHtml(c.name)} 님 — ${escapeHtml(h.stage)} (${escapeHtml(h.note)})`})));
+  DB.oneonones.forEach(m=>events.push({date:m.date, text:`[원온원] ${escapeHtml(m.employeeName)} 님과 면담 기록`}));
   events.sort((a,b)=>b.date.localeCompare(a.date));
   document.getElementById('dash-timeline').innerHTML = events.slice(0,8).map(e=>`<div class="tl-item"><div class="tl-date">${e.date}</div><div class="tl-body">${e.text}</div></div>`).join('') || '<div class="empty">아직 기록이 없어요</div>';
 }
@@ -1121,7 +1124,7 @@ function renderJobs(){
   document.getElementById('jobs-table').innerHTML = DB.jobs.map(j=>{
     const count = DB.candidates.filter(c=>c.jobId===j.id).length;
     return `<tr class="clickable" onclick="openCandidatesFor('${j.id}')">
-      <td><b>${j.title}</b></td><td>${j.team}</td><td style="font-size:11.5px;color:var(--sub);">${j.stages.join(' → ')}</td><td>${j.deadline||'-'}</td><td>${count}명</td>
+      <td><b>${escapeHtml(j.title)}</b></td><td>${escapeHtml(j.team)}</td><td style="font-size:11.5px;color:var(--sub);">${j.stages.map(escapeHtml).join(' → ')}</td><td>${j.deadline||'-'}</td><td>${count}명</td>
       <td><span class="badge green">${j.status}</span></td>
       <td><button class="btn ghost sm" onclick="event.stopPropagation(); deleteJob('${j.id}')">삭제</button></td>
     </tr>`;
@@ -1129,7 +1132,7 @@ function renderJobs(){
 
   const sel = document.getElementById('cand-job-select');
   const prev = sel.value;
-  sel.innerHTML = DB.jobs.map(j=>`<option value="${j.id}">${j.title}</option>`).join('') || '<option value="">등록된 공고 없음</option>';
+  sel.innerHTML = DB.jobs.map(j=>`<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('') || '<option value="">등록된 공고 없음</option>';
   if(prev) sel.value = prev;
 }
 function renderCandidates(){
@@ -1138,8 +1141,8 @@ function renderCandidates(){
   const list = DB.candidates.filter(c=>c.jobId===jobId);
   document.getElementById('candidates-table').innerHTML = list.map(c=>`
     <tr>
-      <td><b>${c.name}</b></td><td>${c.phone}</td>
-      <td><select onchange="changeStage('${c.id}', this.value)">${(job?job.stages:[]).map(s=>`<option ${s===c.stage?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td><b>${escapeHtml(c.name)}</b></td><td>${escapeHtml(c.phone)}</td>
+      <td><select onchange="changeStage('${c.id}', this.value)">${(job?job.stages:[]).map(s=>`<option ${s===c.stage?'selected':''}>${escapeHtml(s)}</option>`).join('')}</select></td>
       <td>${c.history[c.history.length-1]?.date||'-'}</td>
       <td><button class="btn ghost sm" onclick="viewCandidateHistory('${c.id}')">히스토리</button></td>
     </tr>
@@ -1157,8 +1160,8 @@ function renderOkr(){
       return `
       <div style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;">
-          <span>${o.title} <span class="badge grey">${o.quarter}</span> <span style="color:var(--sub);font-weight:500;">${o.owner}</span>${parent?` <span style="color:var(--sub);font-weight:500;">↳ 상위: ${parent.title}</span>`:''}</span>
-          <span>${o.progress}${o.unit||'%'}</span>
+          <span>${escapeHtml(o.title)} <span class="badge grey">${escapeHtml(o.quarter)}</span> <span style="color:var(--sub);font-weight:500;">${escapeHtml(o.owner)}</span>${parent?` <span style="color:var(--sub);font-weight:500;">↳ 상위: ${escapeHtml(parent.title)}</span>`:''}</span>
+          <span>${o.progress}${escapeHtml(o.unit||'%')}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="bar" style="flex:1;"><i style="width:${Math.min(100,o.progress)}%"></i></div>
