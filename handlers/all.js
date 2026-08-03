@@ -1,7 +1,9 @@
 import { sql } from './_lib/db.js';
+import { requireHrAuth } from './_lib/hrAuth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireHrAuth(req, res)) return;
 
   try {
     const [members, leaveHistory, awards, discipline, career, education, family,

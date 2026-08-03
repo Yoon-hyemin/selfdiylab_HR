@@ -1,9 +1,11 @@
 import { sql } from '../../_lib/db.js';
+import { requireHrAuth } from '../../_lib/hrAuth.js';
 
 const KNOWN_LISTS = ['leaveHistory', 'awards', 'discipline', 'career', 'education', 'family'];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireHrAuth(req, res)) return;
   const { id } = req.query;
   const { list, item } = req.body || {};
   if (!KNOWN_LISTS.includes(list)) return res.status(400).json({ error: 'Unknown list: ' + list });

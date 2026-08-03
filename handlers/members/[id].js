@@ -1,4 +1,5 @@
 import { sql } from '../_lib/db.js';
+import { requireHrAuth } from '../_lib/hrAuth.js';
 
 const FIELD_MAP = {
   name: 'name', nickname: 'nickname', team: 'team', position: 'position',
@@ -18,6 +19,7 @@ const DATE_FIELDS = new Set(['hireDate', 'groupHireDate', 'birthday']);
 export default async function handler(req, res) {
   const { id } = req.query;
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireHrAuth(req, res)) return;
 
   const body = req.body || {};
   const sets = [];

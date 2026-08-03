@@ -199,11 +199,12 @@
   <div class="sidebar">
     <div class="logo" onclick="goHome()" style="cursor:pointer;"><span class="logo-mark"></span>SELFDIYLAB HR</div>
     <div class="trial-chip">주식회사 셀디랩</div>
-    <button class="nav-item active" data-view="dashboard">📊 홈 피드</button>
     <div class="nav-sep">인사</div>
+    <button class="nav-item" data-view="hrdash">📊 인사 대시보드</button>
     <button class="nav-item" data-view="members">👥 구성원</button>
     <button class="nav-item" data-view="recruit">📥 채용</button>
     <div class="nav-sep">성과관리</div>
+    <button class="nav-item active" data-view="perfdash">📊 성과 대시보드</button>
     <button class="nav-item" data-view="okr">🎯 목표</button>
     <button class="nav-item" data-view="eval">🧩 평가</button>
     <button class="nav-item" data-view="calibration">⚖️ 등급 배분(캘리브레이션)</button>
@@ -214,13 +215,23 @@
 
   <div class="main">
 
-    <!-- DASHBOARD -->
-    <div class="view active" id="view-dashboard">
-      <div class="page-head"><div><h1>홈 피드</h1><p>채용과 성과관리 현황을 한눈에 확인하세요</p></div></div>
-      <div class="grid4" id="dash-kpis"></div>
+    <!-- 성과 대시보드 (전사 공개 · 비밀번호 없음) -->
+    <div class="view active" id="view-perfdash">
+      <div class="page-head"><div><h1>성과 대시보드</h1><p>전사 목표와 평가 현황이에요. 모든 구성원이 볼 수 있어요</p></div></div>
+      <div class="grid4" id="perfdash-kpis"></div>
       <div class="section">
-        <div class="section-head"><div><h3>최근 히스토리</h3><div class="desc">채용 전형 변경, 평가, 원온원 등 최근 활동 기록</div></div></div>
-        <div class="timeline" id="dash-timeline"></div>
+        <div class="section-head"><div><h3>최근 성과관리 활동</h3><div class="desc">목표 등록, 평가 작성, 원온원 기록</div></div></div>
+        <div class="timeline" id="perfdash-timeline"></div>
+      </div>
+    </div>
+
+    <!-- 인사 대시보드 (비밀번호 필요) -->
+    <div class="view" id="view-hrdash">
+      <div class="page-head"><div><h1>인사 대시보드</h1><p>채용 현황을 한눈에 확인하세요</p></div></div>
+      <div class="grid4" id="hrdash-kpis"></div>
+      <div class="section">
+        <div class="section-head"><div><h3>최근 히스토리</h3><div class="desc">채용 전형 변경, 공고 등록 등 최근 채용 활동 기록</div></div></div>
+        <div class="timeline" id="hrdash-timeline"></div>
       </div>
     </div>
 
@@ -414,11 +425,16 @@
 <script>
 /* ---------- API client ---------- */
 const API = '/api';
-async function apiGet(path){ const r = await fetch(API+path); if(!r.ok) throw new Error('GET '+path+' failed'); return r.json(); }
-async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('POST '+path+' failed'); return r.json(); }
-async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PATCH '+path+' failed'); return r.json(); }
-async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PUT '+path+' failed'); return r.json(); }
-async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE'}); if(!r.ok) throw new Error('DELETE '+path+' failed'); return r.json(); }
+// Populated with {'X-HR-Password': ...} once the user unlocks the 인사 area
+// (see unlockHr()); merged into every request below so 인사 endpoints -- which
+// check the same header server-side -- accept them. Stays empty for the
+// company-wide 성과관리 endpoints, which need no auth.
+let hrHeaders = {};
+async function apiGet(path){ const r = await fetch(API+path, {headers:{...hrHeaders}}); if(!r.ok) throw new Error('GET '+path+' failed'); return r.json(); }
+async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('POST '+path+' failed'); return r.json(); }
+async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PATCH '+path+' failed'); return r.json(); }
+async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PUT '+path+' failed'); return r.json(); }
+async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE', headers:{...hrHeaders}}); if(!r.ok) throw new Error('DELETE '+path+' failed'); return r.json(); }
 
 function today(){ return new Date().toISOString().slice(0,10); }
 // The API returns date columns (hireDate, groupHireDate, birthday) as full ISO
@@ -430,30 +446,107 @@ function escapeHtml(s){
 }
 
 let DB = { members:[], jobs:[], candidates:[], okrs:[], evals:[], calibration:{}, oneonones:[] };
-async function refreshDB(){ DB = await apiGet('/all'); }
+
+/* 인사 영역 잠금 해제 여부. 페이지 로드마다 초기화돼요
+   (localStorage/sessionStorage에 저장하지 않아요). */
+let hrAuthed = false;
+
+/* 성과관리 데이터: 전사 공개. 비밀번호 없이 매 페이지 로드마다 받아와요. */
+async function refreshPublicData(){
+  const d = await apiGet('/public-data');
+  DB.okrs = d.okrs; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+}
+/* 인사 데이터(구성원·채용): HR 비밀번호가 있어야 받아올 수 있어요. hrHeaders가
+   비어 있으면 서버가 401을 돌려주므로 unlockHr() 이후에만 호출해요. */
+async function refreshHrData(){
+  const d = await apiGet('/all');
+  DB.members = d.members; DB.jobs = d.jobs; DB.candidates = d.candidates;
+  DB.okrs = d.okrs; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+}
+/* 기존 호출부 호환용. 인사 화면에서만 쓰이므로 잠금 해제 전이면 공개 데이터만 갱신해요. */
+async function refreshDB(){
+  if(hrAuthed) await refreshHrData();
+  else await refreshPublicData();
+}
 async function initApp(){
-  await refreshDB();
+  await refreshPublicData();
   renderAll();
 }
 initApp();
 
+/* ---------- 인사 영역 비밀번호 잠금 ---------- */
+const HR_VIEWS = ['members','recruit','hrdash'];
+
+function activateView(view){
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  const btn = document.querySelector('.nav-item[data-view="'+view+'"]');
+  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const el = document.getElementById('view-'+view);
+  if(el) el.classList.add('active');
+  renderAll();
+}
+
+function openHrAuthModal(targetView){
+  showModal(`
+    <h3>인사 영역 잠금 해제</h3>
+    <div class="modal-sub">구성원·채용 정보에는 개인정보가 있어서 공용 비밀번호가 필요해요</div>
+    <div class="field"><label>비밀번호</label><input id="f-hrpw" type="password" placeholder="비밀번호를 입력해주세요" onkeydown="if(event.key==='Enter')submitHrAuth('${targetView}')"></div>
+    <div id="hrpw-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="submitHrAuth('${targetView}')">잠금 해제</button></div>
+  `);
+  const input = document.getElementById('f-hrpw');
+  if(input) input.focus();
+}
+
+function showHrAuthError(msg){
+  const box = document.getElementById('hrpw-error');
+  if(box){ box.textContent = msg; box.style.display = 'block'; }
+  const input = document.getElementById('f-hrpw');
+  if(input){ input.value = ''; input.focus(); }
+}
+
+async function submitHrAuth(targetView){
+  const input = document.getElementById('f-hrpw');
+  if(!input) return;
+  const pw = input.value;
+  if(!pw){ return showHrAuthError('비밀번호를 입력해주세요'); }
+
+  let res;
+  try{
+    res = await fetch(API+'/hr-auth', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})});
+  }catch(err){
+    return showHrAuthError('서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요');
+  }
+
+  let data = null;
+  try{ data = await res.json(); }catch{ /* 본문이 없을 수도 있어요 */ }
+
+  if(!res.ok || !data || !data.ok){
+    return showHrAuthError((data && data.error) || '비밀번호가 올바르지 않아요');
+  }
+
+  hrHeaders = {'X-HR-Password': pw};
+  hrAuthed = true;
+  try{
+    await refreshHrData();
+  }catch(err){
+    hrHeaders = {}; hrAuthed = false;
+    return showHrAuthError('인사 데이터를 불러오지 못했어요. 다시 시도해주세요');
+  }
+  closeModal();
+  activateView(targetView);
+}
+
 /* ---------- Nav ---------- */
 document.querySelectorAll('.nav-item').forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    document.getElementById('view-'+btn.dataset.view).classList.add('active');
-    renderAll();
+    const view = btn.dataset.view;
+    if(HR_VIEWS.includes(view) && !hrAuthed) return openHrAuthModal(view);
+    activateView(view);
   });
 });
-function goHome(){
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-  document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.getElementById('view-dashboard').classList.add('active');
-  renderAll();
-}
+function goHome(){ activateView('perfdash'); }
 function switchToApplyLanding(){ switchRecruitTab('jobs'); }
 function switchRecruitTab(tab){
   ['jobs','candidates','site'].forEach(t=>{
@@ -879,11 +972,11 @@ async function saveCandidate(jobId){
   const name = document.getElementById('f-cname').value.trim();
   if(!name) return alert('이름을 입력해주세요');
   await apiPost('/jobs/'+jobId+'/candidates', {name, phone:document.getElementById('f-cphone').value||'-'});
-  await refreshDB(); closeModal(); renderCandidates(); renderDashboard();
+  await refreshDB(); closeModal(); renderCandidates(); renderHrDash();
 }
 async function changeStage(candId, newStage){
   await apiPatch('/candidates/'+candId, {stage:newStage});
-  await refreshDB(); renderCandidates(); renderDashboard();
+  await refreshDB(); renderCandidates(); renderHrDash();
 }
 function viewCandidateHistory(candId){
   const c = DB.candidates.find(x=>x.id===candId);
@@ -1107,23 +1200,70 @@ function renderOneOnOne(){
 }
 function selectEmployee(id){ currentEmployee = id; renderOneOnOne(); }
 
-/* ---------- DASHBOARD ---------- */
-function renderDashboard(){
-  const totalCandidates = DB.candidates.length;
-  const inProgress = DB.jobs.filter(j=>j.status==='진행중').length;
-  const avgOkr = DB.okrs.length? Math.round(DB.okrs.reduce((a,o)=>a+o.progress,0)/DB.okrs.length) : 0;
-  const evalCount = DB.evals.length;
-  document.getElementById('dash-kpis').innerHTML = `
-    <div class="kpi"><div class="label">진행중인 채용공고</div><div class="value">${inProgress}건</div></div>
-    <div class="kpi"><div class="label">전체 지원자</div><div class="value">${totalCandidates}명</div></div>
-    <div class="kpi"><div class="label">목표 평균 진척률</div><div class="value">${avgOkr}%</div></div>
-    <div class="kpi"><div class="label">등록된 평가</div><div class="value">${evalCount}건</div></div>
+/* ---------- DASHBOARDS ---------- */
+// 날짜 컬럼은 API에서 ISO datetime 문자열로 오기도 하고("2026-07-19T15:00:00.000Z")
+// 'YYYY-MM-DD'로 오기도 해요. 둘 다 Date로 파싱한 뒤 로컬 시간대 기준으로
+// 'YYYY-MM' / 'YYYY-MM-DD'를 뽑아서 월 비교와 표시에 씁니다.
+function monthKeyOf(v){
+  if(!v) return '';
+  const d = new Date(v);
+  if(isNaN(d.getTime())) return String(v).slice(0,7);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function dayKeyOf(v){
+  if(!v) return '';
+  const d = new Date(v);
+  if(isNaN(d.getTime())) return String(v).slice(0,10);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function renderTimelineInto(elId, events, emptyMsg){
+  events.sort((a,b)=>String(b.sort).localeCompare(String(a.sort)));
+  document.getElementById(elId).innerHTML = events.slice(0,8)
+    .map(e=>`<div class="tl-item"><div class="tl-date">${e.date||'-'}</div><div class="tl-body">${e.text}</div></div>`).join('')
+    || `<div class="empty">${emptyMsg}</div>`;
+}
+
+/* 성과 대시보드 — 전사 공개. 개인정보(구성원·지원자)는 쓰지 않아요. */
+function renderPerfDash(){
+  const okrCount = DB.okrs.length;
+  const avgOkr = okrCount ? Math.round(DB.okrs.reduce((a,o)=>a+(Number(o.progress)||0),0)/okrCount) : 0;
+  document.getElementById('perfdash-kpis').innerHTML = `
+    <div class="kpi"><div class="label">전사 목표 평균 진척률</div><div class="value">${avgOkr}%</div></div>
+    <div class="kpi"><div class="label">진행중인 목표</div><div class="value">${okrCount}건</div></div>
+    <div class="kpi"><div class="label">등록된 평가</div><div class="value">${DB.evals.length}건</div></div>
+    <div class="kpi"><div class="label">원온원 기록</div><div class="value">${DB.oneonones.length}건</div></div>
   `;
   const events = [];
-  DB.candidates.forEach(c=>c.history.forEach(h=>events.push({date:h.date, text:`[채용] ${escapeHtml(c.name)} 님 — ${escapeHtml(h.stage)} (${escapeHtml(h.note)})`})));
-  DB.oneonones.forEach(m=>events.push({date:m.date, text:`[원온원] ${escapeHtml(m.employeeName)} 님과 면담 기록`}));
-  events.sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById('dash-timeline').innerHTML = events.slice(0,8).map(e=>`<div class="tl-item"><div class="tl-date">${e.date}</div><div class="tl-body">${e.text}</div></div>`).join('') || '<div class="empty">아직 기록이 없어요</div>';
+  DB.oneonones.forEach(m=>events.push({sort:m.date, date:dayKeyOf(m.date), text:`[원온원] ${escapeHtml(m.employeeName)} 님과 면담 기록`}));
+  DB.evals.forEach(e=>events.push({sort:e.quarter, date:escapeHtml(e.quarter), text:`[평가] ${escapeHtml(e.employeeName)} 님 ${escapeHtml(e.quarter)} 평가 등록`}));
+  DB.okrs.forEach(o=>events.push({sort:o.quarter, date:escapeHtml(o.quarter), text:`[목표] ${escapeHtml(o.level)} 목표 「${escapeHtml(o.title)}」 ${o.progress}${escapeHtml(o.unit||'%')} 진행중`}));
+  renderTimelineInto('perfdash-timeline', events, '아직 성과관리 기록이 없어요');
+}
+
+/* 인사 대시보드 — 비밀번호 필요. 채용 관련 지표만 보여줘요. */
+function renderHrDash(){
+  const inProgress = DB.jobs.filter(j=>j.status==='진행중').length;
+  const totalCandidates = DB.candidates.length;
+
+  // 이번달 채용율: 이번 달에 지원서를 접수한(history[0], '지원서 접수') 지원자 중
+  // 현재 stage가 '입사'인 비율. 이번 달 지원자가 0명이면 0%로 표시해요.
+  const thisMonth = monthKeyOf(new Date());
+  const applied = DB.candidates.filter(c=>c.history && c.history.length && monthKeyOf(c.history[0].date)===thisMonth);
+  const hired = applied.filter(c=>c.stage==='입사').length;
+  const rate = applied.length ? Math.round(hired/applied.length*100) : 0;
+
+  document.getElementById('hrdash-kpis').innerHTML = `
+    <div class="kpi"><div class="label">진행중인 채용공고</div><div class="value">${inProgress}건</div></div>
+    <div class="kpi"><div class="label">전체 지원자</div><div class="value">${totalCandidates}명</div></div>
+    <div class="kpi"><div class="label">등록된 공고</div><div class="value">${DB.jobs.length}건</div></div>
+    <div class="kpi"><div class="label">이번달 채용율</div><div class="value">${rate}%</div>
+      <div class="label" style="margin-top:4px;">이번 달 지원자 ${applied.length}명 중 ${hired}명 입사</div></div>
+  `;
+
+  const events = [];
+  DB.candidates.forEach(c=>(c.history||[]).forEach(h=>events.push({sort:h.date, date:dayKeyOf(h.date), text:`[채용] ${escapeHtml(c.name)} 님 — ${escapeHtml(h.stage)} (${escapeHtml(h.note)})`})));
+  DB.jobs.forEach(j=>events.push({sort:j.deadline||'', date:j.deadline?dayKeyOf(j.deadline)+' 마감':'-', text:`[공고] ${escapeHtml(j.title)} (${escapeHtml(j.team)}) — ${escapeHtml(j.status)}`}));
+  renderTimelineInto('hrdash-timeline', events, '아직 채용 기록이 없어요');
 }
 
 /* ---------- RECRUIT RENDER ---------- */
@@ -1192,7 +1332,8 @@ function resetData(){ alert('실제 데이터베이스로 전환된 이후에는
 
 /* ---------- INIT ---------- */
 function renderAll(){
-  renderDashboard();
+  renderPerfDash();
+  renderHrDash();
   renderMembers();
   if(currentMemberId) renderMemberProfile();
   renderJobs();

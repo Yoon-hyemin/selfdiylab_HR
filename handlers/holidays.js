@@ -1,7 +1,9 @@
 import { sql } from './_lib/db.js';
+import { requireHrAuth } from './_lib/hrAuth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireHrAuth(req, res)) return;
   const { names } = req.body || {};
   if (!Array.isArray(names) || names.length === 0 || names.some(n => typeof n !== 'string' || !n.trim())) {
     return res.status(400).json({ error: 'names must be a non-empty array of non-empty strings' });
