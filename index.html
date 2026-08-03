@@ -989,6 +989,36 @@ async function deleteJob(id){
   await refreshDB(); renderJobs();
 }
 
+/* ---------- 목표 계층 집계 유틸 ---------- */
+// '2026-Q3' -> ['2026-07','2026-08','2026-09']
+function monthsOfQuarter(quarter){
+  const m = /^(\d{4})-Q([1-4])$/.exec(quarter||'');
+  if(!m) return [];
+  const year = m[1], q = Number(m[2]);
+  const startMonth = (q-1)*3 + 1;
+  return [0,1,2].map(i => `${year}-${String(startMonth+i).padStart(2,'0')}`);
+}
+function individualProgress(okr){
+  const tasks = DB.okrTasks.filter(t=>t.okrId===okr.id);
+  if(!tasks.length) return 0;
+  return Math.round(100 * tasks.filter(t=>t.done).length / tasks.length);
+}
+function orgProgress(okr){
+  const children = DB.okrs.filter(o=>o.level==='개인' && o.parent===okr.id);
+  if(!children.length) return 0;
+  return Math.round(children.reduce((a,c)=>a+individualProgress(c),0) / children.length);
+}
+function companyMonthProgress(companyOkr, month){
+  const orgs = DB.okrs.filter(o=>o.level==='조직' && o.parent===companyOkr.id && o.month===month);
+  if(!orgs.length) return null;
+  return Math.round(orgs.reduce((a,o)=>a+orgProgress(o),0) / orgs.length);
+}
+function companyQuarterProgress(companyOkr){
+  const orgs = DB.okrs.filter(o=>o.level==='조직' && o.parent===companyOkr.id);
+  if(!orgs.length) return 0;
+  return Math.round(orgs.reduce((a,o)=>a+orgProgress(o),0) / orgs.length);
+}
+
 /* ---------- OKR ---------- */
 function openOkrModal(){
   showModal(`
