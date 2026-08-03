@@ -178,15 +178,21 @@ const server = createServer(async (req, res) => {
   const fakeReq = { method: req.method, query, body, headers: req.headers };
   const fakeRes = {
     _status: 200,
+    _headers: {},
     status(code) {
       this._status = code;
       return this;
     },
+    setHeader(name, value) {
+      this._headers[name] = value;
+      return this;
+    },
     json(obj) {
-      send(res, this._status, obj);
+      res.writeHead(this._status, { 'Content-Type': 'application/json', ...this._headers });
+      res.end(JSON.stringify(obj));
     },
     end() {
-      res.writeHead(this._status);
+      res.writeHead(this._status, this._headers);
       res.end();
     }
   };

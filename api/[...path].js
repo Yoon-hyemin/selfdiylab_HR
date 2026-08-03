@@ -22,6 +22,9 @@ import allHandler from '../handlers/all.js';
 import publicJobsHandler from '../handlers/public-jobs.js';
 import publicDataHandler from '../handlers/public-data.js';
 import hrAuthHandler from '../handlers/hr-auth.js';
+import memberLoginHandler from '../handlers/member-login.js';
+import memberLogoutHandler from '../handlers/member-logout.js';
+import meHandler from '../handlers/me.js';
 import membersIndex from '../handlers/members/index.js';
 import membersId from '../handlers/members/[id].js';
 import membersIdLists from '../handlers/members/[id]/lists.js';
@@ -42,6 +45,9 @@ const ROUTES = [
   { pattern: ['public-jobs'], handler: publicJobsHandler },
   { pattern: ['public-data'], handler: publicDataHandler },
   { pattern: ['hr-auth'], handler: hrAuthHandler },
+  { pattern: ['member-login'], handler: memberLoginHandler },
+  { pattern: ['member-logout'], handler: memberLogoutHandler },
+  { pattern: ['me'], handler: meHandler },
   { pattern: ['members'], handler: membersIndex },
   { pattern: ['members', ':id'], handler: membersId },
   { pattern: ['members', ':id', 'lists'], handler: membersIdLists },
