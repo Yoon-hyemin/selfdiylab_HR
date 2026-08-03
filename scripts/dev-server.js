@@ -6,7 +6,8 @@
  * Why this exists: the normal way to run Vercel serverless functions locally
  * is `vercel dev`, but that requires an interactive browser OAuth login,
  * which is not possible in this automated/headless environment. This script
- * is a small stand-in so `api/**` handlers and the static HTML pages
+ * is a small stand-in so `handlers/**` (the same handlers Vercel serves via
+ * the api/[...path].js catch-all function) and the static HTML pages
  * (hr-system.html, apply-landing.html, job-detail.html, index.html) can be
  * exercised locally without that login step.
  *
@@ -14,7 +15,7 @@
  *   - static file serving from the project root
  *   - Vercel's file-based routing for /api/*, including dynamic `[param]`
  *     folder/file segments (e.g. /api/jobs/abc-123/candidates ->
- *     api/jobs/[id]/candidates.js with req.query.id === 'abc-123')
+ *     handlers/jobs/[id]/candidates.js with req.query.id === 'abc-123')
  *   - JSON body parsing for POST/PATCH/PUT/DELETE, exposed as req.body
  *   - req.query as route params merged with the URL query string
  *   - a minimal res.status(code).json(obj) / res.end() API
@@ -33,7 +34,7 @@ import { extname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Load DATABASE_URL from .env.local, same pattern as scripts/run-sql.js and
-// scripts/verify-seed.js, so api/_lib/db.js can find it when handlers import it.
+// scripts/verify-seed.js, so handlers/_lib/db.js can find it when handlers import it.
 if (!process.env.DATABASE_URL && existsSync('.env.local')) {
   for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
     const m = line.match(/^([^#=]+)=(.*)$/);
@@ -43,7 +44,7 @@ if (!process.env.DATABASE_URL && existsSync('.env.local')) {
 
 const PORT = process.env.PORT || 3000;
 const ROOT = process.cwd();
-const API_ROOT = join(ROOT, 'api');
+const API_ROOT = join(ROOT, 'handlers');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
@@ -57,7 +58,7 @@ const MIME = {
 };
 
 /**
- * Walk api/ segment by segment, matching literal files/dirs first and
+ * Walk handlers/ segment by segment, matching literal files/dirs first and
  * falling back to a single `[param]` dynamic file/dir per level, the same
  * precedence Vercel's file-system router uses.
  */
