@@ -220,6 +220,14 @@
       <div class="page-head"><div><h1>성과 대시보드</h1><p>전사 목표와 평가 현황이에요. 모든 구성원이 볼 수 있어요</p></div></div>
       <div class="grid4" id="perfdash-kpis"></div>
       <div class="section">
+        <div class="section-head"><h3>기업 목표 달성률</h3><div class="desc">분기 목표별 월간 달성률이에요</div></div>
+        <div id="perfdash-goal-cards"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>부서별 달성률</h3></div>
+        <div id="perfdash-dept-bars"></div>
+      </div>
+      <div class="section">
         <div class="section-head"><div><h3>최근 성과관리 활동</h3><div class="desc">목표 등록, 평가 작성, 원온원 기록</div></div></div>
         <div class="timeline" id="perfdash-timeline"></div>
       </div>
@@ -1263,18 +1271,51 @@ function renderTimelineInto(elId, events, emptyMsg){
 
 /* 성과 대시보드 — 전사 공개. 개인정보(구성원·지원자)는 쓰지 않아요. */
 function renderPerfDash(){
-  const okrCount = DB.okrs.length;
-  const avgOkr = okrCount ? Math.round(DB.okrs.reduce((a,o)=>a+(Number(o.progress)||0),0)/okrCount) : 0;
+  const companies = DB.okrs.filter(o=>o.level==='회사');
+  const companyAvg = companies.length ? Math.round(companies.reduce((a,c)=>a+companyQuarterProgress(c),0)/companies.length) : 0;
+
   document.getElementById('perfdash-kpis').innerHTML = `
-    <div class="kpi"><div class="label">전사 목표 평균 진척률</div><div class="value">${avgOkr}%</div></div>
-    <div class="kpi"><div class="label">진행중인 목표</div><div class="value">${okrCount}건</div></div>
+    <div class="kpi"><div class="label">기업 목표 평균 달성률</div><div class="value">${companyAvg}%</div></div>
+    <div class="kpi"><div class="label">진행중인 기업 목표</div><div class="value">${companies.length}건</div></div>
     <div class="kpi"><div class="label">등록된 평가</div><div class="value">${DB.evals.length}건</div></div>
     <div class="kpi"><div class="label">원온원 기록</div><div class="value">${DB.oneonones.length}건</div></div>
   `;
+
+  document.getElementById('perfdash-goal-cards').innerHTML = companies.map(c=>{
+    const qp = companyQuarterProgress(c);
+    return `
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:8px;">
+        <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.quarter)}</span></span><span>${qp}%</span>
+      </div>
+      <div style="display:flex;gap:10px;">
+        ${monthsOfQuarter(c.quarter).map(m=>{
+          const mp = companyMonthProgress(c, m);
+          return `<div style="flex:1;text-align:center;font-size:11.5px;color:var(--sub);">
+            <div>${m.slice(5)}월</div>
+            <div class="bar" style="margin:4px 0;"><i style="width:${mp==null?0:mp}%"></i></div>
+            <div>${mp==null?'-':mp+'%'}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">등록된 기업 목표가 없어요</div>';
+
+  const teams = [...new Set(DB.okrs.filter(o=>o.level==='조직').map(o=>o.owner))];
+  document.getElementById('perfdash-dept-bars').innerHTML = teams.map(team=>{
+    const orgs = DB.okrs.filter(o=>o.level==='조직' && o.owner===team);
+    const avg = orgs.length ? Math.round(orgs.reduce((a,o)=>a+orgProgress(o),0)/orgs.length) : 0;
+    return `<div class="cal-row">
+      <div class="name">${escapeHtml(team)}</div>
+      <div class="barwrap"><div class="bar"><i style="width:${avg}%"></i></div></div>
+      <div class="pct">${avg}%</div>
+    </div>`;
+  }).join('') || '<div class="empty">등록된 부서 목표가 없어요</div>';
+
   const events = [];
   DB.oneonones.forEach(m=>events.push({sort:m.date, date:dayKeyOf(m.date), text:`[원온원] ${escapeHtml(m.employeeName)} 님과 면담 기록`}));
   DB.evals.forEach(e=>events.push({sort:e.quarter, date:escapeHtml(e.quarter), text:`[평가] ${escapeHtml(e.employeeName)} 님 ${escapeHtml(e.quarter)} 평가 등록`}));
-  DB.okrs.forEach(o=>events.push({sort:o.quarter, date:escapeHtml(o.quarter), text:`[목표] ${escapeHtml(o.level)} 목표 「${escapeHtml(o.title)}」 ${o.progress}${escapeHtml(o.unit||'%')} 진행중`}));
+  DB.okrs.filter(o=>o.level!=='개인').forEach(o=>events.push({sort:o.month||o.quarter, date:escapeHtml(o.month||o.quarter), text:`[목표] ${escapeHtml(o.level)} 목표 「${escapeHtml(o.title)}」 등록`}));
   renderTimelineInto('perfdash-timeline', events, '아직 성과관리 기록이 없어요');
 }
 
