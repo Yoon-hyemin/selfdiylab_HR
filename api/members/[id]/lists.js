@@ -20,8 +20,10 @@ export default async function handler(req, res) {
     } else if (list === 'education') {
       await sql`INSERT INTO member_education (member_id, school, major, period) VALUES (${id}, ${item.school || ''}, ${item.major || ''}, ${item.period || ''})`;
     } else if (list === 'family') {
-      await sql`INSERT INTO member_family (member_id, name, relation) VALUES (${id}, ${item.name || ''}, ${item.relation || ''})`;
-      await sql`UPDATE members SET deduction_basic = (SELECT COUNT(*) FROM member_family WHERE member_id = ${id}) + 1 WHERE id = ${id}`;
+      await sql.transaction([
+        sql`INSERT INTO member_family (member_id, name, relation) VALUES (${id}, ${item.name || ''}, ${item.relation || ''})`,
+        sql`UPDATE members SET deduction_basic = (SELECT COUNT(*) FROM member_family WHERE member_id = ${id}) + 1 WHERE id = ${id}`
+      ]);
     }
     res.status(201).json({ ok: true });
   } catch (err) {

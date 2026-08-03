@@ -156,21 +156,28 @@ function escapeHtml(s){
 }
 
 async function loadJobs(){
-  const res = await fetch('/api/public-jobs');
-  const jobs = await res.json();
   const list = document.getElementById('job-list');
-  list.innerHTML = jobs.map(j => `
-    <a class="job-card" href="job-detail.html">
-      <div class="l">
-        <b>${escapeHtml(j.title)}</b>
-        <div class="meta"><span>${escapeHtml(j.team||'-')}</span></div>
-      </div>
-      <div class="r"><span class="apply-mini">공고 보기</span></div>
-    </a>
-  `).join('') || '<div class="empty">진행중인 채용공고가 없어요</div>';
+  try{
+    const res = await fetch('/api/public-jobs');
+    if(!res.ok) throw new Error('Failed to load jobs: ' + res.status);
+    const jobs = await res.json();
 
-  const select = document.getElementById('f-job');
-  select.innerHTML = jobs.map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
+    list.innerHTML = jobs.map(j => `
+      <a class="job-card" href="job-detail.html">
+        <div class="l">
+          <b>${escapeHtml(j.title)}</b>
+          <div class="meta"><span>${escapeHtml(j.team||'-')}</span></div>
+        </div>
+        <div class="r"><span class="apply-mini">공고 보기</span></div>
+      </a>
+    `).join('') || '<div class="empty">진행중인 채용공고가 없어요</div>';
+
+    const select = document.getElementById('f-job');
+    select.innerHTML = jobs.map(j => `<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('');
+  }catch(err){
+    console.error(err);
+    list.innerHTML = '<div class="empty">채용공고를 불러오지 못했어요. 잠시 후 다시 시도해주세요.</div>';
+  }
 }
 
 async function submitApplication(){

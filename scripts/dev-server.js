@@ -125,6 +125,15 @@ function serveStatic(req, res, pathname) {
     res.end();
     return;
   }
+  // Refuse dotfiles/dotdirs (e.g. .env.local, .git) -- no legitimate static
+  // asset in this project needs a dotfile segment, and .env.local holds the
+  // live Neon connection string.
+  const decodedPath = decodeURIComponent(filePath);
+  if (decodedPath.split(/[\\/]/).some(seg => seg.startsWith('.') && seg !== '')) {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
   if (!existsSync(fullPath) || statSync(fullPath).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
@@ -192,7 +201,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`Dev server running at http://localhost:${PORT}`);
   console.log('(dev-only Vercel routing shim -- do not use in production)');
 });

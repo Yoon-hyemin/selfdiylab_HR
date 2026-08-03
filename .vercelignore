@@ -1,0 +1,13 @@
+# Vercel CLI treats this file as authoritative for direct deploys and does
+# NOT reliably inherit .gitignore, so secrets/PII/dev-only files must be
+# listed explicitly here even though they're also gitignored.
+
+.env.local
+sql/
+scripts/
+docs/
+.superpowers/
+*.md
+node_modules/
+.git/
+.worktrees/
