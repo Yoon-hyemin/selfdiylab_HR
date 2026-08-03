@@ -3,294 +3,1206 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SelfDIYLab HR Portal</title>
+<title>SelfDIYLab HR System</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
   :root{
-    --primary:#5B5FEF;
-    --primary-dark:#4245C4;
-    --primary-light:#EEF0FF;
-    --green:#1FAE72;
-    --green-light:#E7F8F0;
-    --amber:#F2994A;
-    --amber-light:#FDF1E7;
-    --text:#191A23;
-    --sub:#6B6E85;
-    --bg:#F5F6FA;
-    --card:#FFFFFF;
-    --border:#ECEDF3;
+    --primary:#12B76A; --primary-dark:#0D9457; --primary-light:#E6F9F0;
+    --accent:#7C4DFF; --accent-light:#F1ECFF;
+    --amber:#F2994A;--amber-light:#FDF1E7;
+    --red:#EB5757;--red-light:#FBEAEA;
+    --text:#191A23;--sub:#6B6E85;--bg:#F5F6FA;--card:#FFFFFF;--border:#ECEDF3;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--bg);color:var(--text);}
   a{text-decoration:none;color:inherit;}
+  button{font-family:inherit;cursor:pointer;border:none;}
 
-  /* Top nav */
-  .topnav{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:16px 40px;background:var(--card);border-bottom:1px solid var(--border);
-    position:sticky;top:0;z-index:100;
-  }
-  .topnav .left{display:flex;align-items:center;gap:36px;}
-  .logo{display:flex;align-items:center;gap:8px;font-weight:900;font-size:20px;color:var(--primary-dark);}
-  .logo span.dot{width:10px;height:10px;background:var(--primary);border-radius:3px;display:inline-block;}
-  .navlinks{display:flex;gap:28px;font-size:14px;font-weight:500;color:var(--sub);}
-  .navlinks a.active{color:var(--text);font-weight:700;position:relative;}
-  .navlinks a.active::after{content:"";position:absolute;left:0;right:0;bottom:-19px;height:2px;background:var(--primary);}
-  .topnav .right{display:flex;align-items:center;gap:18px;}
-  .icon-btn{width:36px;height:36px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;}
-  .badge{position:absolute;top:-2px;right:-2px;background:#EB5757;color:#fff;font-size:9px;border-radius:8px;padding:1px 5px;font-weight:700;}
-  .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#8B8FF7);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+  .trialbar{background:linear-gradient(90deg,#7C4DFF,#9B7BFF);color:#fff;text-align:center;font-size:12.5px;font-weight:700;padding:7px;}
 
-  .wrap{max-width:1200px;margin:0 auto;padding:32px 40px 80px;}
+  .app{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 32px);}
+  .sidebar{background:var(--card);border-right:1px solid var(--border);padding:22px 16px;position:sticky;top:0;height:100vh;}
+  .logo{font-weight:900;font-size:15.5px;color:var(--text);display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:0 6px;}
+  .logo-mark{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#B39DFF);display:inline-block;}
+  .trial-chip{font-size:10.5px;color:var(--sub);font-weight:600;margin-bottom:20px;padding:0 6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--sub);margin-bottom:4px;background:none;width:100%;text-align:left;}
+  .nav-item:hover{background:var(--bg);}
+  .nav-item.active{background:var(--primary-light);color:var(--primary-dark);font-weight:800;}
+  .nav-sep{font-size:11px;color:#B4B6C4;font-weight:800;margin:18px 10px 8px;letter-spacing:.5px;}
 
-  /* Greeting */
-  .greeting{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px;flex-wrap:wrap;gap:12px;}
-  .greeting h1{font-size:26px;font-weight:900;}
-  .greeting p{color:var(--sub);font-size:14px;margin-top:6px;}
-  .date-chip{background:var(--card);border:1px solid var(--border);padding:8px 16px;border-radius:30px;font-size:13px;color:var(--sub);font-weight:500;}
+  .main{padding:26px 34px 80px;max-width:1180px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .page-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;flex-wrap:wrap;gap:10px;}
+  .page-head h1{font-size:22px;font-weight:900;}
+  .page-head p{font-size:13px;color:var(--sub);margin-top:4px;font-weight:500;}
 
-  /* Todo checklist banner ("필요한 일을 딱 알려주는 체크리스트") */
-  .todo-banner{
-    background:linear-gradient(120deg,var(--primary) 0%, #7477F2 100%);
-    border-radius:20px;padding:24px 28px;color:#fff;margin-bottom:28px;
-    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;
-  }
-  .todo-banner h2{font-size:17px;font-weight:700;margin-bottom:4px;}
-  .todo-banner p{font-size:13px;opacity:0.85;}
-  .todo-items{display:flex;gap:10px;flex-wrap:wrap;}
-  .todo-pill{background:rgba(255,255,255,0.16);padding:8px 14px;border-radius:12px;font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:6px;}
-  .todo-pill b{font-weight:800;}
-
-  /* Grid */
-  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:28px;}
-  .kpi{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px 22px;}
-  .kpi .label{font-size:12.5px;color:var(--sub);font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
-  .kpi .value{font-size:26px;font-weight:900;}
-  .kpi .sub{font-size:12px;color:var(--green);font-weight:700;margin-top:6px;}
-  .kpi .sub.warn{color:var(--amber);}
-  .tag{font-size:10.5px;padding:3px 8px;border-radius:20px;font-weight:700;}
-  .tag.blue{background:var(--primary-light);color:var(--primary-dark);}
-  .tag.green{background:var(--green-light);color:var(--green);}
-  .tag.amber{background:var(--amber-light);color:var(--amber);}
-
-  .section{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:26px 28px;margin-bottom:22px;}
-  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
-  .section-head h3{font-size:17px;font-weight:800;}
-  .section-head .desc{font-size:12.5px;color:var(--sub);margin-top:4px;font-weight:500;}
-  .link-btn{font-size:13px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:4px;}
-
-  .two-col{display:grid;grid-template-columns:1.15fr 0.85fr;gap:22px;}
-
-  /* Recruiting funnel */
-  .funnel{display:flex;gap:10px;}
-  .funnel-step{flex:1;background:var(--bg);border-radius:14px;padding:16px 14px;text-align:center;}
-  .funnel-step .n{font-size:22px;font-weight:900;color:var(--primary-dark);}
-  .funnel-step .l{font-size:12px;color:var(--sub);font-weight:600;margin-top:4px;}
-
-  .job-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);}
-  .job-row:last-child{border-bottom:none;}
-  .job-info b{font-size:14px;font-weight:700;}
-  .job-info .meta{font-size:12px;color:var(--sub);margin-top:3px;}
-  .job-actions{display:flex;gap:8px;}
-  .btn{padding:8px 14px;border-radius:10px;font-size:12.5px;font-weight:700;border:1px solid var(--border);background:#fff;}
+  .btn{padding:9px 16px;border-radius:10px;font-size:13px;font-weight:700;border:1px solid var(--border);background:#fff;color:var(--text);}
   .btn.primary{background:var(--primary);color:#fff;border:none;}
+  .btn.ghost{background:none;border:none;color:var(--primary-dark);}
+  .btn.danger{color:var(--red);}
+  .btn.sm{padding:5px 10px;font-size:12px;border-radius:8px;}
+  .btn.step{background:var(--bg);color:var(--sub);}
+  .btn.step.active{background:var(--text);color:#fff;}
 
-  /* OKR tree */
-  .okr-item{margin-bottom:16px;}
-  .okr-item .top{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;}
-  .okr-item .top span.pct{color:var(--primary-dark);}
-  .bar{height:8px;background:var(--bg);border-radius:6px;overflow:hidden;}
-  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#8B8FF7);border-radius:6px;}
-  .okr-sub{margin-left:18px;margin-top:8px;}
-  .okr-sub .top{font-size:12px;color:var(--sub);font-weight:600;}
+  .tabs{display:flex;gap:6px;margin-bottom:20px;background:var(--bg);padding:5px;border-radius:12px;width:fit-content;}
+  .tab{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;color:var(--sub);background:none;}
+  .tab.active{background:#fff;color:var(--primary-dark);box-shadow:0 1px 3px rgba(0,0,0,0.08);}
 
-  /* schedule list */
-  .sched-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);align-items:flex-start;}
-  .sched-item:last-child{border-bottom:none;}
-  .sched-date{background:var(--primary-light);color:var(--primary-dark);border-radius:10px;padding:8px 10px;text-align:center;font-size:11px;font-weight:800;min-width:46px;}
-  .sched-date .d{font-size:16px;}
-  .sched-info b{font-size:13.5px;font-weight:700;}
-  .sched-info .meta{font-size:12px;color:var(--sub);margin-top:2px;}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;}
+  .kpi .label{font-size:12px;color:var(--sub);font-weight:700;margin-bottom:8px;}
+  .kpi .value{font-size:24px;font-weight:900;}
 
-  .quicklinks{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
-  .qcard{background:var(--bg);border-radius:16px;padding:18px;font-weight:700;font-size:13.5px;display:flex;flex-direction:column;gap:8px;}
-  .qcard .emoji{font-size:22px;}
-  .qcard .desc{font-size:11.5px;color:var(--sub);font-weight:500;}
+  .section{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px 24px;margin-bottom:20px;}
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .section-head h3{font-size:15.5px;font-weight:800;}
+  .section-head .desc{font-size:12px;color:var(--sub);margin-top:3px;font-weight:500;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--sub);font-weight:700;font-size:11.5px;padding:8px 10px;border-bottom:1px solid var(--border);}
+  td{padding:10px 10px;border-bottom:1px solid var(--border);}
+  tr:last-child td{border-bottom:none;}
+  tr.clickable:hover{background:var(--bg);cursor:pointer;}
+
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-block;}
+  .badge.blue{background:var(--accent-light);color:var(--accent);}
+  .badge.green{background:var(--primary-light);color:var(--primary-dark);}
+  .badge.amber{background:var(--amber-light);color:var(--amber);}
+  .badge.red{background:var(--red-light);color:var(--red);}
+  .badge.grey{background:var(--bg);color:var(--sub);}
+
+  .bar{height:7px;background:var(--bg);border-radius:5px;overflow:hidden;width:100%;}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#5FDBA0);}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(20,20,30,0.45);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+  .overlay.active{display:flex;}
+  .modal{background:#fff;border-radius:20px;padding:28px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;}
+  .modal.wide{max-width:640px;}
+  .modal h3{font-size:17px;font-weight:800;margin-bottom:6px;}
+  .modal .modal-sub{font-size:12px;color:var(--sub);margin-bottom:16px;}
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+  .field label{font-size:12.5px;font-weight:700;color:var(--sub);}
+  .field input,.field select,.field textarea{border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:13.5px;font-family:inherit;}
+  .field textarea{min-height:70px;resize:vertical;}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
+  .step-tabs{display:flex;gap:6px;margin-bottom:18px;}
+
+  .stage-pipeline{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+  .stage-chip{background:var(--bg);border-radius:20px;padding:6px 14px;font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;}
+  .stage-chip.fixed{background:var(--primary-light);color:var(--primary-dark);}
+  .stage-chip .rm{color:var(--red);cursor:pointer;font-weight:900;}
+  .arrow{color:var(--sub);font-size:12px;}
+
+  .req-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+  .req-row input[type=text]{flex:1;border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13px;}
+  .req-row select{border:1px solid var(--border);border-radius:9px;padding:9px 8px;font-size:12.5px;}
+  .checkline{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;}
+  .checkline:last-child{border-bottom:none;}
+  .checkline label{display:flex;align-items:center;gap:8px;}
+
+  /* 9-grid */
+  .grid9{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,90px);gap:6px;margin-bottom:8px;}
+  .cell9{background:var(--bg);border-radius:10px;padding:8px 10px;position:relative;overflow:hidden;}
+  .cell9 .clabel{font-size:10.5px;font-weight:800;color:var(--sub);}
+  .cell9 .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
+  .chip{background:var(--primary);color:#fff;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;}
+  .axis-label{font-size:11px;color:var(--sub);font-weight:700;text-align:center;margin:4px 0;}
+
+  .axis-note{font-size:11.5px;color:var(--sub);background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:14px;}
+
+  .cal-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .cal-row:last-child{border-bottom:none;}
+  .cal-row .name{width:110px;font-weight:700;font-size:13px;}
+  .cal-row .barwrap{flex:1;}
+  .cal-row .pct{width:110px;text-align:right;font-size:12.5px;font-weight:700;color:var(--sub);}
+
+  .ai-card{background:linear-gradient(120deg,var(--primary-light) 0%,#fff 70%);border:1px solid var(--primary-light);border-radius:16px;padding:18px 20px;margin-bottom:12px;}
+  .ai-card .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .ai-card .head b{font-size:14.5px;}
+  .ai-card .aitag{font-size:10.5px;font-weight:800;color:var(--primary-dark);background:#fff;padding:3px 9px;border-radius:20px;}
+  .ai-card p{font-size:12.5px;line-height:1.7;color:#33344a;}
+  .ai-card .subscores{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .ai-card .subscores span{font-size:10.5px;background:#fff;border:1px solid var(--border);padding:3px 8px;border-radius:20px;font-weight:700;color:var(--sub);}
+
+  .timeline{border-left:2px solid var(--border);padding-left:16px;margin-left:6px;}
+  .tl-item{position:relative;padding-bottom:18px;}
+  .tl-item::before{content:"";position:absolute;left:-21px;top:2px;width:9px;height:9px;border-radius:50%;background:var(--primary);}
+  .tl-date{font-size:11px;color:var(--sub);font-weight:700;}
+  .tl-body{font-size:13px;margin-top:2px;}
+
+  .empty{color:var(--sub);font-size:13px;text-align:center;padding:30px 0;}
+
+  /* Member profile (구성원 정보 탭) */
+  .member-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .member-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;cursor:pointer;transition:box-shadow .15s;}
+  .member-card:hover{box-shadow:0 6px 18px rgba(0,0,0,0.07);}
+  .member-card .mc-top{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+  .avatar-circle{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#B39DFF);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;}
+  .avatar-circle.lg{width:72px;height:72px;font-size:20px;border-radius:20px;}
+  .member-card .mc-name{font-weight:800;font-size:14.5px;}
+  .member-card .mc-sub{font-size:11.5px;color:var(--sub);font-weight:600;}
+  .member-card .mc-meta{font-size:11.5px;color:var(--sub);display:flex;flex-direction:column;gap:3px;}
+
+  .profile-cover{height:110px;border-radius:18px 18px 0 0;background:linear-gradient(120deg,#B48CFF 0%,#5B4FE0 45%,#191A23 100%);position:relative;}
+  .profile-head{background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 18px 18px;padding:0 26px 18px;margin-bottom:20px;}
+  .profile-head .avatar-wrap{margin-top:-36px;margin-bottom:10px;}
+  .profile-head h2{font-size:19px;font-weight:900;}
+  .profile-head .sub{font-size:12.5px;color:var(--sub);font-weight:600;margin-top:2px;}
+  .profile-tabs{display:flex;gap:4px;margin-top:16px;border-top:1px solid var(--border);padding-top:12px;flex-wrap:wrap;}
+  .ptab{padding:8px 14px;border-radius:8px;font-size:12.5px;font-weight:700;color:var(--sub);background:none;}
+  .ptab.active{background:var(--primary-light);color:var(--primary-dark);}
+  .ptab.locked{color:#C7C9D6;cursor:default;}
+
+  .profile-layout{display:grid;grid-template-columns:1fr 260px;gap:20px;}
+  .info-section{margin-bottom:6px;}
+  .info-section .is-head{display:flex;justify-content:space-between;align-items:center;padding:14px 0 8px;border-top:1px solid var(--border);}
+  .info-section:first-child .is-head{border-top:none;}
+  .info-section .is-head h4{font-size:12.5px;font-weight:800;color:var(--sub);}
+  .info-section .is-head button{font-size:11.5px;font-weight:700;color:var(--primary-dark);background:none;}
+  .info-row{display:flex;flex-wrap:wrap;gap:22px;padding:6px 0 14px;}
+  .info-row .iv{font-size:13.5px;}
+  .info-row .iv .ik{font-size:11px;color:var(--sub);font-weight:600;margin-right:6px;}
+  .info-row .iv b{font-weight:700;}
+  .info-row .placeholder{color:#C7C9D6;font-size:13px;}
+  .lock-icon{font-size:10px;margin-left:4px;}
+  .list-chip{display:inline-block;background:var(--bg);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:600;margin:4px 6px 4px 0;}
+
+  .side-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;}
+  .side-card h5{font-size:12px;font-weight:800;color:var(--sub);margin-bottom:10px;}
+  .side-stat{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;padding:6px 0;border-bottom:1px solid var(--border);}
+  .side-stat:last-child{border-bottom:none;}
+  .jump-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .jump-chip{font-size:11px;font-weight:700;background:var(--bg);color:var(--sub);padding:5px 10px;border-radius:20px;}
+  .jump-chip:hover{background:var(--primary-light);color:var(--primary-dark);}
 
   @media(max-width:900px){
-    .grid{grid-template-columns:repeat(2,1fr);}
-    .two-col{grid-template-columns:1fr;}
-    .quicklinks{grid-template-columns:1fr;}
-    .topnav{padding:14px 18px;}
-    .wrap{padding:24px 18px 60px;}
-    .navlinks{display:none;}
+    .app{grid-template-columns:1fr;}
+    .sidebar{position:relative;height:auto;display:flex;overflow-x:auto;gap:4px;}
+    .nav-sep{display:none;}
+    .grid4{grid-template-columns:repeat(2,1fr);}
+    .form-row,.form-row3{grid-template-columns:1fr;}
+    .main{padding:18px;}
+    .member-grid{grid-template-columns:1fr;}
+    .profile-layout{grid-template-columns:1fr;}
   }
 </style>
 </head>
 <body>
 
-<div class="topnav">
-  <div class="left">
-    <div class="logo"><span class="dot"></span>SelfDIYLab HR</div>
-    <div class="navlinks">
-      <a class="active" href="#">홈</a>
-      <a href="job-detail.html">채용</a>
-      <a href="#">성과관리</a>
-      <a href="#">구성원</a>
-      <a href="#">급여</a>
-    </div>
+<div class="trialbar">SelfDIYLab 자체 HR 시스템</div>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="logo" onclick="goHome()" style="cursor:pointer;"><span class="logo-mark"></span>SELFDIYLAB HR</div>
+    <div class="trial-chip">주식회사 셀디랩</div>
+    <button class="nav-item active" data-view="dashboard">📊 홈 피드</button>
+    <div class="nav-sep">인사</div>
+    <button class="nav-item" data-view="members">👥 구성원</button>
+    <button class="nav-item" data-view="recruit">📥 채용</button>
+    <div class="nav-sep">성과관리</div>
+    <button class="nav-item" data-view="okr">🎯 목표</button>
+    <button class="nav-item" data-view="eval">🧩 평가</button>
+    <button class="nav-item" data-view="calibration">⚖️ 등급 배분(캘리브레이션)</button>
+    <button class="nav-item" data-view="oneonone">💬 원온원</button>
+    <div class="nav-sep">시스템</div>
+    <button class="nav-item" data-view="data">🗂 데이터 관리</button>
   </div>
-  <div class="right">
-    <div class="icon-btn">🔔<span class="badge">3</span></div>
-    <div class="avatar">이도</div>
+
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div class="view active" id="view-dashboard">
+      <div class="page-head"><div><h1>홈 피드</h1><p>채용과 성과관리 현황을 한눈에 확인하세요</p></div></div>
+      <div class="grid4" id="dash-kpis"></div>
+      <div class="section">
+        <div class="section-head"><div><h3>최근 히스토리</h3><div class="desc">채용 전형 변경, 평가, 원온원 등 최근 활동 기록</div></div></div>
+        <div class="timeline" id="dash-timeline"></div>
+      </div>
+    </div>
+
+    <!-- MEMBERS -->
+    <div class="view" id="view-members">
+      <div id="members-list">
+        <div class="page-head">
+          <div><h1>구성원</h1><p>지금은 "정보" 탭만 실제로 동작해요</p></div>
+          <button class="btn primary" onclick="openMemberAddModal()">+ 구성원 추가하기</button>
+        </div>
+        <div class="member-grid" id="members-grid"></div>
+      </div>
+
+      <div id="member-profile" style="display:none;">
+        <button class="btn sm" style="margin-bottom:14px;" onclick="closeMemberProfile()">← 구성원 목록으로</button>
+        <div class="profile-cover"></div>
+        <div class="profile-head">
+          <div class="avatar-wrap"><div class="avatar-circle lg" id="mp-avatar"></div></div>
+          <h2 id="mp-name"></h2>
+          <div class="sub" id="mp-sub"></div>
+          <div class="profile-tabs">
+            <button class="ptab active">정보</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">목표</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">성장</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">평가</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">교육</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">급여</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">문서·증명서</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">인사노트</button>
+            <button class="ptab locked" title="다음 구획에서 구현 예정">계약서</button>
+          </div>
+        </div>
+
+        <div class="profile-layout">
+          <div id="profile-info-sections"></div>
+          <div>
+            <div class="side-card">
+              <h5>프로필</h5>
+              <div id="mp-intro" style="font-size:12.5px;color:var(--sub);margin-bottom:10px;"></div>
+              <div class="side-stat"><span>📞 전화</span><span id="mp-side-phone"></span></div>
+              <div class="side-stat"><span>✉️ 이메일</span><span id="mp-side-email"></span></div>
+            </div>
+            <div class="side-card">
+              <div class="side-stat"><span>근무한 시간</span><b id="mp-worked-hours"></b></div>
+              <div class="side-stat"><span>보유한 연차</span><b id="mp-leave-left"></b></div>
+            </div>
+            <div class="side-card">
+              <h5>다음으로 이동...</h5>
+              <div class="jump-chips" id="mp-jump-chips"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECRUIT -->
+    <div class="view" id="view-recruit">
+      <div class="page-head">
+        <div><h1>채용</h1><p>후보자 · 공고 · 사이트를 한 곳에서 관리해요</p></div>
+        <button class="btn primary" onclick="openJobModal()">+ 공고 만들기</button>
+      </div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchRecruitTab('jobs')" id="rtab-jobs">공고</button>
+        <button class="tab" onclick="switchRecruitTab('candidates')" id="rtab-candidates">후보자</button>
+        <button class="tab" onclick="switchRecruitTab('site')" id="rtab-site">사이트</button>
+      </div>
+
+      <div id="recruit-jobs">
+        <div class="section">
+          <div class="section-head"><h3>공고 목록</h3></div>
+          <table><thead><tr><th>공고명</th><th>팀</th><th>전형단계</th><th>마감일</th><th>지원자</th><th>상태</th><th></th></tr></thead>
+          <tbody id="jobs-table"></tbody></table>
+        </div>
+      </div>
+
+      <div id="recruit-candidates" style="display:none;">
+        <div class="section">
+          <div class="section-head">
+            <div><h3>후보자</h3><div class="desc">공고를 선택하면 해당 후보자 목록이 보여요. 전형 단계를 바꾸면 히스토리에 자동 기록돼요</div></div>
+          </div>
+          <select id="cand-job-select" class="btn sm" onchange="renderCandidates()" style="margin-bottom:14px;"></select>
+          <button class="btn primary sm" onclick="openCandidateModal()" style="margin-left:8px;margin-bottom:14px;">+ 후보자 등록하기</button>
+          <table><thead><tr><th>이름</th><th>연락처</th><th>현재 전형</th><th>최근 업데이트</th><th></th></tr></thead>
+          <tbody id="candidates-table"></tbody></table>
+        </div>
+      </div>
+
+      <div id="recruit-site" style="display:none;">
+        <div class="section">
+          <div class="section-head"><div><h3>채용사이트</h3><div class="desc">회사명 기반으로 자동 생성되는 채용 사이트 미리보기예요</div></div></div>
+          <div style="background:linear-gradient(120deg,#EAF6FF,#F7F5FF);border-radius:18px;padding:36px;text-align:center;">
+            <div style="font-size:12.5px;color:var(--sub);font-weight:700;margin-bottom:10px;">🏢 주식회사 셀디랩 채용</div>
+            <h2 style="font-size:22px;font-weight:900;margin-bottom:8px;">우리팀과 멋진 여정을 함께 하고 싶다면?</h2>
+            <p style="color:var(--sub);font-size:13px;margin-bottom:16px;">큰 꿈을 꾸고 현실로 만드는 당신을 지지합니다.</p>
+            <button class="btn primary sm" onclick="switchToApplyLanding()">채용 중인 공고 보기 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OKR -->
+    <div class="view" id="view-okr">
+      <div class="page-head">
+        <div><h1>목표</h1><p>회사 · 조직 · 개인 3단계 목표를 등록하고 진척률을 추적하세요</p></div>
+        <button class="btn primary" onclick="openOkrModal()">+ 새 목표 추가</button>
+      </div>
+      <div class="section" id="okr-list"></div>
+    </div>
+
+    <!-- EVAL -->
+    <div class="view" id="view-eval">
+      <div class="page-head">
+        <div><h1>평가</h1><p>역량(공동·리드·직무) + 성과 + 커스텀 구조로 평가해요</p></div>
+        <button class="btn primary" onclick="openEvalModal()">+ 평가 만들기</button>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><div><h3>9-Grid 매트릭스</h3><div class="desc">가로: 역량 평균(공동·리드·직무), 세로: 성과 (선택한 분기 기준)</div></div>
+          <select id="eval-quarter-filter" onchange="renderEval()" class="btn sm"></select>
+        </div>
+        <div class="axis-label">↑ 성과 높음</div>
+        <div class="grid9" id="grid9"></div>
+        <div class="axis-label">역량 낮음 → 역량 높음</div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h3>AI 기반 평가 리포트 요약</h3><div class="desc">점수와 코멘트를 바탕으로 자동 생성돼요 (규칙 기반 자동 요약, 실제 AI API 호출 아님)</div></div>
+        <div id="ai-reports"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h3>평가 기록</h3></div>
+        <table><thead><tr><th>구성원</th><th>분기</th><th>공동역량</th><th>리드역량</th><th>직무역량</th><th>성과</th><th>커스텀</th><th>등급</th><th></th></tr></thead>
+        <tbody id="eval-table"></tbody></table>
+      </div>
+    </div>
+
+    <!-- CALIBRATION -->
+    <div class="view" id="view-calibration">
+      <div class="page-head">
+        <div><h1>등급 배분 (캘리브레이션)</h1><p>평가 마법사의 마지막 단계 "등급 배분"에 해당해요 — 목표 배분율에 맞춰 등급을 조정하고 사유를 기록하세요</p></div>
+        <select id="cal-quarter-filter" onchange="renderCalibration()" class="btn sm"></select>
+      </div>
+      <div class="section">
+        <div class="section-head"><div><h3>등급 배분 현황</h3><div class="desc">목표 배분율 대비 현재 분포를 비교하세요</div></div></div>
+        <div id="cal-bars"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>개별 등급 조정</h3></div>
+        <table><thead><tr><th>구성원</th><th>산출 등급</th><th>최종 등급</th><th>조정 사유</th><th></th></tr></thead>
+        <tbody id="cal-table"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ONE ON ONE -->
+    <div class="view" id="view-oneonone">
+      <div class="page-head">
+        <div><h1>원온원</h1><p>구성원별 1:1 면담 기록을 시간순으로 관리하세요</p></div>
+        <button class="btn primary" onclick="openOneOnOneModal()">+ 원온원 보내기</button>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>구성원 선택</h3></div>
+        <div id="oneonone-people" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3 id="oneonone-title">히스토리</h3></div>
+        <div class="timeline" id="oneonone-timeline"></div>
+      </div>
+    </div>
+
+    <!-- DATA -->
+    <div class="view" id="view-data">
+      <div class="page-head"><div><h1>데이터 관리</h1><p>이 앱의 모든 데이터는 Neon 데이터베이스에 저장되고 팀원 모두에게 공유돼요.</p></div></div>
+      <div class="section">
+        <div class="section-head"><h3>백업</h3></div>
+        <button class="btn primary" onclick="exportData()">⬇ 전체 데이터 내보내기 (JSON)</button>
+        <label class="btn" style="margin-left:8px;display:inline-block;">⬆ 가져오기<input type="file" accept=".json" onchange="importData(event)" style="display:none;"></label>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>초기화</h3><div class="desc">실제 데이터베이스로 전환된 이후에는 지원되지 않아요</div></div>
+        <button class="btn danger" onclick="resetData()">전체 데이터 초기화</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
-<div class="wrap">
+<!-- MODALS -->
+<div class="overlay" id="overlay"><div class="modal" id="modal-content"></div></div>
 
-  <div class="greeting">
-    <div>
-      <h1>안녕하세요, 이도현 님 👋</h1>
-      <p>오늘도 좋은 하루 보내세요. 놓치기 쉬운 업무를 미리 챙겨드릴게요.</p>
-    </div>
-    <div class="date-chip">2026년 7월 28일 화요일</div>
-  </div>
+<script>
+/* ---------- API client ---------- */
+const API = '/api';
+async function apiGet(path){ const r = await fetch(API+path); if(!r.ok) throw new Error('GET '+path+' failed'); return r.json(); }
+async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('POST '+path+' failed'); return r.json(); }
+async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PATCH '+path+' failed'); return r.json(); }
+async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PUT '+path+' failed'); return r.json(); }
+async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE'}); if(!r.ok) throw new Error('DELETE '+path+' failed'); return r.json(); }
 
-  <div class="todo-banner">
-    <div>
-      <h2>오늘 꼭 챙겨야 할 일</h2>
-      <p>단계별로 지금 처리해야 할 업무를 모아봤어요.</p>
-    </div>
-    <div class="todo-items">
-      <div class="todo-pill">📋 서류심사 미완료 <b>4건</b></div>
-      <div class="todo-pill">🗓 면접 일정 확정 필요 <b>2건</b></div>
-      <div class="todo-pill">📝 2분기 평가 마감 임박 <b>D-3</b></div>
-      <div class="todo-pill">💬 원온원 미진행 <b>3명</b></div>
-    </div>
-  </div>
+function today(){ return new Date().toISOString().slice(0,10); }
+// The API returns date columns (hireDate, groupHireDate, birthday) as full ISO
+// datetime strings (e.g. "2026-07-30T15:00:00.000Z"); <input type="date"> only
+// accepts "YYYY-MM-DD" and silently blanks out otherwise, so trim to that.
+function dateOnly(v){ return v ? String(v).slice(0,10) : ''; }
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
-  <div class="grid">
-    <div class="kpi">
-      <div class="label">진행중인 채용공고 <span class="tag blue">채용</span></div>
-      <div class="value">6건</div>
-      <div class="sub">신규 지원자 +18 (이번주)</div>
-    </div>
-    <div class="kpi">
-      <div class="label">전체 지원자 <span class="tag blue">채용</span></div>
-      <div class="value">142명</div>
-      <div class="sub warn">서류심사 대기 37명</div>
-    </div>
-    <div class="kpi">
-      <div class="label">전사 목표 평균 진척률 <span class="tag green">성과관리</span></div>
-      <div class="value">78%</div>
-      <div class="sub">전분기 대비 +6%p</div>
-    </div>
-    <div class="kpi">
-      <div class="label">2분기 평가 진행률 <span class="tag green">성과관리</span></div>
-      <div class="value">64%</div>
-      <div class="sub warn">마감까지 D-3</div>
-    </div>
-  </div>
+let DB = { members:[], jobs:[], candidates:[], okrs:[], evals:[], calibration:{}, oneonones:[] };
+async function refreshDB(){ DB = await apiGet('/all'); }
+async function initApp(){
+  await refreshDB();
+  renderAll();
+}
+initApp();
 
-  <div class="two-col">
-    <div>
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <h3>채용 현황</h3>
-            <div class="desc">전형 단계별 지원자 현황을 한눈에 확인하세요</div>
-          </div>
-          <a class="link-btn" href="apply-landing.html">지원서 랜딩페이지 보기 →</a>
-        </div>
-        <div class="funnel">
-          <div class="funnel-step"><div class="n">142</div><div class="l">지원 접수</div></div>
-          <div class="funnel-step"><div class="n">61</div><div class="l">서류심사</div></div>
-          <div class="funnel-step"><div class="n">24</div><div class="l">실무면접</div></div>
-          <div class="funnel-step"><div class="n">9</div><div class="l">임원면접</div></div>
-          <div class="funnel-step"><div class="n">3</div><div class="l">처우협의</div></div>
-        </div>
-        <div style="margin-top:18px;">
-          <div class="job-row">
-            <div class="job-info"><b>프론트엔드 개발자 (3년 이상)</b><div class="meta">개발팀 · 지원자 38명 · 마감 8/15</div></div>
-            <div class="job-actions"><a class="btn" href="job-detail.html">공고 보기</a><span class="btn primary">전형 관리</span></div>
-          </div>
-          <div class="job-row">
-            <div class="job-info"><b>HR 매니저 (성과관리 담당)</b><div class="meta">피플팀 · 지원자 27명 · 마감 8/10</div></div>
-            <div class="job-actions"><a class="btn" href="job-detail.html">공고 보기</a><span class="btn primary">전형 관리</span></div>
-          </div>
-          <div class="job-row">
-            <div class="job-info"><b>퍼포먼스 마케터</b><div class="meta">마케팅팀 · 지원자 41명 · 마감 8/20</div></div>
-            <div class="job-actions"><a class="btn" href="job-detail.html">공고 보기</a><span class="btn primary">전형 관리</span></div>
-          </div>
+/* ---------- Nav ---------- */
+document.querySelectorAll('.nav-item').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    renderAll();
+  });
+});
+function goHome(){
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-dashboard').classList.add('active');
+  renderAll();
+}
+function switchToApplyLanding(){ switchRecruitTab('jobs'); }
+function switchRecruitTab(tab){
+  ['jobs','candidates','site'].forEach(t=>{
+    document.getElementById('recruit-'+t).style.display = t===tab? 'block':'none';
+    document.getElementById('rtab-'+t).classList.toggle('active', t===tab);
+  });
+  if(tab==='candidates') renderCandidates();
+}
+
+/* ---------- MEMBERS (구성원 프로필 · 정보 탭) ---------- */
+let currentMemberId = null;
+
+function initials(name){ return name ? name.slice(-2) : '?'; }
+
+function renderMembers(){
+  const grid = document.getElementById('members-grid');
+  if(!grid) return;
+  grid.innerHTML = DB.members.map(m=>`
+    <div class="member-card" onclick="openMemberProfile('${m.id}')">
+      <div class="mc-top">
+        <div class="avatar-circle">${escapeHtml(initials(m.name))}</div>
+        <div><div class="mc-name">${escapeHtml(m.name)}</div><div class="mc-sub">${escapeHtml(m.team||'조직 없음')} · ${escapeHtml(m.position||'-')}</div></div>
+      </div>
+      <div class="mc-meta"><span>✉️ ${escapeHtml(m.email)}</span><span>📞 ${escapeHtml(m.phone||'-')}</span></div>
+    </div>
+  `).join('') || '<div class="empty">등록된 구성원이 없어요</div>';
+}
+
+function openMemberAddModal(){
+  showModal(`
+    <h3>구성원 추가하기</h3>
+    <div class="form-row">
+      <div class="field"><label>이름</label><input id="f-mname2" placeholder="홍길동"></div>
+      <div class="field"><label>이메일</label><input id="f-memail" placeholder="name@selfdiylab.com"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>소속 조직</label><input id="f-mteam" placeholder="예: 개발팀"></div>
+      <div class="field"><label>직책</label><input id="f-mposition" placeholder="예: 매니저"></div>
+    </div>
+    <div class="field"><label>휴대전화번호</label><input id="f-mphone" placeholder="010-0000-0000"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMember()">추가</button></div>
+  `);
+}
+async function saveMember(){
+  const name = document.getElementById('f-mname2').value.trim();
+  if(!name) return alert('이름을 입력해주세요');
+  await apiPost('/members', {
+    name, team:document.getElementById('f-mteam').value||'', position:document.getElementById('f-mposition').value||'',
+    email:document.getElementById('f-memail').value||'', phone:document.getElementById('f-mphone').value||''
+  });
+  await refreshDB(); closeModal(); renderMembers();
+}
+
+function openMemberProfile(id){
+  currentMemberId = id;
+  document.getElementById('members-list').style.display = 'none';
+  document.getElementById('member-profile').style.display = 'block';
+  renderMemberProfile();
+}
+function closeMemberProfile(){
+  document.getElementById('member-profile').style.display = 'none';
+  document.getElementById('members-list').style.display = 'block';
+  currentMemberId = null;
+  renderMembers();
+}
+function getCurrentMember(){ return DB.members.find(m=>m.id===currentMemberId); }
+
+function val(v){ return v && String(v).trim() ? `<b>${escapeHtml(v)}</b>` : `<span class="placeholder">입력하기</span>`; }
+function listChips(arr, mapFn){ return arr && arr.length ? arr.map(mapFn).map(t=>`<span class="list-chip">${escapeHtml(t)}</span>`).join('') : `<span class="placeholder">입력하기</span>`; }
+
+function renderMemberProfile(){
+  const m = getCurrentMember(); if(!m) return;
+  document.getElementById('mp-avatar').textContent = initials(m.name);
+  document.getElementById('mp-name').textContent = m.name;
+  document.getElementById('mp-sub').textContent = `${m.position||'직무 없음'} · ${m.team||'조직 없음'}`;
+  document.getElementById('mp-intro').textContent = m.intro || '내 소개 작성하기';
+  document.getElementById('mp-side-phone').textContent = m.phone || '-';
+  document.getElementById('mp-side-email').textContent = m.email || '-';
+  document.getElementById('mp-worked-hours').textContent = m.workedHours || '-';
+  document.getElementById('mp-leave-left').textContent = m.leaveLeft || '-';
+
+  const sections = [
+    {key:'hr', anchor:'sec-hr', title:'인사 정보', action:['추가','openEditHrInfo'],
+      body: `<div class="info-row"><div class="iv">${val(m.hrInfo)}</div></div>`},
+
+    {key:'basic', anchor:'sec-basic', title:'기본 정보', action:['변경','openEditBasicInfo'],
+      body: `
+      <div class="info-row">
+        <div class="iv"><span class="ik">이름</span>본명 ${val(m.name)} &nbsp;닉네임 ${val(m.nickname)}</div>
+      </div>
+      <div class="info-row">
+        <div class="iv"><span class="ik">이메일·사번</span>이메일 ${val(m.email)} &nbsp;개인이메일 ${val(m.personalEmail)} &nbsp;사번 ${val(m.employeeNo)}</div>
+      </div>
+      <div class="info-row">
+        <div class="iv"><span class="ik">입사 정보</span>입사일 ${val(m.hireDate)} &nbsp;그룹입사일 ${val(m.groupHireDate)} &nbsp;입사유형 ${val(m.hireType)}</div>
+      </div>
+      <div class="info-row">
+        <div class="iv"><span class="ik">주민등록번호·생일</span>주민등록번호 <span class="placeholder">보안상 이 데모에서는 입력받지 않아요</span> &nbsp;생일 ${val(m.birthday)}</div>
+      </div>
+      <div class="info-row"><div class="iv"><span class="ik">휴대전화번호</span>${val(m.phone)}</div></div>
+      <div class="info-row"><div class="iv"><span class="ik">주소</span>${val(m.address)}</div></div>
+      `},
+
+    {key:'labor', anchor:'sec-labor', title:'근로 계약 정보', action:['추가','openEditText','laborContract','근로 계약 정보'],
+      body:`<div class="info-row"><div class="iv">${val(m.laborContract)}</div></div>`},
+    {key:'wage', anchor:'sec-wage', title:'임금 계약 정보', action:['추가','openEditText','wageContract','임금 계약 정보'],
+      body:`<div class="info-row"><div class="iv">${val(m.wageContract)}</div></div>`},
+    {key:'salary', anchor:'sec-salary', title:'급여 지급 정보 <span class="lock-icon">🔒</span>', action:['추가','openEditText','salaryPayInfo','급여 지급 정보'],
+      body:`<div class="info-row"><div class="iv">${val(m.salaryPayInfo)}</div></div>`},
+
+    {key:'work', anchor:'sec-work', title:'근무 정보', action:['변경','openEditWorkType'],
+      body:`<div class="info-row"><div class="iv">${val(m.workType.name)} ${m.workType.name? `<span class="badge green">${m.workType.fixed?'고정':'선택'}</span> ${escapeHtml(m.workType.hours||'')}`:''}</div></div>`},
+    {key:'overtime', anchor:'sec-overtime', title:'초과 근무 보상 정보 <span class="lock-icon">🔒</span>', action:['변경','openEditText','overtimePolicy','초과 근무 보상 정보'],
+      body:`<div class="info-row"><div class="iv">${val(m.overtimePolicy)}</div></div>`},
+
+    {key:'leavepolicy', anchor:'sec-leavepolicy', title:'휴가 정보', action:['변경','openEditLeavePolicy'],
+      body:`<div class="info-row"><div class="iv">${m.leavePolicy.basis? `<b>${escapeHtml(m.leavePolicy.basis)}</b> <span class="badge grey">${m.leavePolicy.halfDay}</span> <span class="badge grey">${m.leavePolicy.promotion}</span>`:'<span class="placeholder">입력하기</span>'}</div></div>`},
+    {key:'restdays', anchor:'sec-restdays', title:'쉬는 날 정보', action:['변경','openEditRestDays'],
+      body:`<div class="info-row"><div class="iv">${listChips(m.restDays, r=>r)}</div></div>`},
+
+    {key:'leavehist', anchor:'sec-leavehist', title:'휴직 이력', action:['추가','openAddLeaveHistory'],
+      body:`<div class="info-row"><div class="iv">${listChips(m.leaveHistory, h=>`${h.reason} (${h.period})`)}</div></div>`},
+    {key:'awards', anchor:'sec-awards', title:'수상', action:['추가','openAddAward'],
+      body:`<div class="info-row"><div class="iv">${listChips(m.awards, a=>`${a.title} · ${a.date}`)}</div></div>`},
+    {key:'discipline', anchor:'sec-discipline', title:'징계', action:['추가','openAddDiscipline'],
+      body:`<div class="info-row"><div class="iv">${listChips(m.discipline, d=>`${d.reason} · ${d.date}`)}</div></div>`},
+    {key:'career', anchor:'sec-career', title:'경력 정보', action:['추가','openAddCareer'],
+      body:`<div class="info-row"><div class="iv">${listChips(m.career, c=>`${c.company} · ${c.role} (${c.period})`)}</div></div>`},
+    {key:'education', anchor:'sec-education', title:'학력 정보', action:['추가','openAddEducation'],
+      body:`<div class="info-row"><div class="iv">${listChips(m.education, e=>`${e.school} · ${e.major} (${e.period})`)}</div></div>`},
+    {key:'special', anchor:'sec-special', title:'특이사항', action:['변경','openEditText','specialNotes','특이사항'],
+      body:`<div class="info-row"><div class="iv">${val(m.specialNotes)}</div></div>`},
+    {key:'family', anchor:'sec-family', title:'가족 정보', action:['추가','openAddFamily'],
+      body:`<div class="info-row"><div class="iv">${listChips(m.family, f=>`${f.name} · ${f.relation}`)}</div></div>
+            <div class="info-row" style="padding-top:0;"><div class="iv" style="font-size:12px;color:var(--sub);">총 공제대상 — 기본공제 <b>${m.deduction.basic}명</b> · 건강보험 피부양자 <b>${m.deduction.healthDependents}명</b></div></div>`}
+  ];
+
+  document.getElementById('profile-info-sections').innerHTML = sections.map(s=>`
+    <div class="info-section" id="${s.anchor}">
+      <div class="is-head"><h4>${s.title}</h4><button onclick="${s.action[1]}(${s.action.slice(2).map(a=>`'${a}'`).join(',')})">${s.action[0]==='변경'?'✎ 변경':'+ 추가'}</button></div>
+      ${s.body}
+    </div>
+  `).join('');
+
+  document.getElementById('mp-jump-chips').innerHTML = sections.map(s=>`<a class="jump-chip" onclick="document.getElementById('${s.anchor}').scrollIntoView({behavior:'smooth',block:'start'})">${s.title.replace(/<[^>]+>/g,'')}</a>`).join('');
+}
+
+async function saveMemberField(field, value){
+  await apiPatch('/members/'+currentMemberId, {[field]: value});
+  await refreshDB(); closeModal(); renderMemberProfile();
+}
+
+function openEditHrInfo(){
+  const m = getCurrentMember();
+  showModal(`<h3>인사 정보</h3><div class="field"><textarea id="f-val" placeholder="인사 관련 메모를 입력하세요">${escapeHtml(m.hrInfo||'')}</textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('hrInfo', document.getElementById('f-val').value)">저장</button></div>`);
+}
+function openEditText(field, label){
+  const m = getCurrentMember();
+  showModal(`<h3>${label}</h3><div class="field"><textarea id="f-val" placeholder="${label}를 입력하세요">${escapeHtml(m[field]||'')}</textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMemberField('${field}', document.getElementById('f-val').value)">저장</button></div>`);
+}
+function openEditBasicInfo(){
+  const m = getCurrentMember();
+  showModal(`
+    <h3>기본 정보 변경</h3>
+    <div class="form-row">
+      <div class="field"><label>본명</label><input id="f-b-name" value="${escapeHtml(m.name)}"></div>
+      <div class="field"><label>닉네임</label><input id="f-b-nick" value="${escapeHtml(m.nickname||'')}"></div>
+    </div>
+    <div class="form-row3">
+      <div class="field"><label>이메일</label><input id="f-b-email" value="${escapeHtml(m.email||'')}"></div>
+      <div class="field"><label>개인 이메일</label><input id="f-b-pemail" value="${escapeHtml(m.personalEmail||'')}"></div>
+      <div class="field"><label>사번</label><input id="f-b-empno" value="${escapeHtml(m.employeeNo||'')}"></div>
+    </div>
+    <div class="form-row3">
+      <div class="field"><label>입사일</label><input id="f-b-hire" type="date" value="${dateOnly(m.hireDate)}"></div>
+      <div class="field"><label>그룹 입사일</label><input id="f-b-ghire" type="date" value="${dateOnly(m.groupHireDate)}"></div>
+      <div class="field"><label>입사 유형</label><input id="f-b-htype" value="${escapeHtml(m.hireType||'')}"></div>
+    </div>
+    <div class="modal-sub">보안을 위해 주민등록번호는 이 데모 앱에서는 입력받지 않아요.</div>
+    <div class="form-row">
+      <div class="field"><label>생일</label><input id="f-b-bday" type="date" value="${dateOnly(m.birthday)}"></div>
+      <div class="field"><label>휴대전화번호</label><input id="f-b-phone" value="${escapeHtml(m.phone||'')}"></div>
+    </div>
+    <div class="field"><label>주소</label><input id="f-b-addr" value="${escapeHtml(m.address||'')}"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveBasicInfo()">저장</button></div>
+  `);
+}
+async function saveBasicInfo(){
+  const patch = {
+    name: document.getElementById('f-b-name').value,
+    nickname: document.getElementById('f-b-nick').value,
+    email: document.getElementById('f-b-email').value,
+    personalEmail: document.getElementById('f-b-pemail').value,
+    employeeNo: document.getElementById('f-b-empno').value,
+    hireDate: document.getElementById('f-b-hire').value,
+    groupHireDate: document.getElementById('f-b-ghire').value,
+    hireType: document.getElementById('f-b-htype').value,
+    birthday: document.getElementById('f-b-bday').value,
+    phone: document.getElementById('f-b-phone').value,
+    address: document.getElementById('f-b-addr').value
+  };
+  await apiPatch('/members/'+currentMemberId, patch);
+  await refreshDB(); closeModal(); renderMemberProfile();
+}
+function openEditWorkType(){
+  const m = getCurrentMember();
+  showModal(`
+    <h3>근무 정보 변경</h3>
+    <div class="field"><label>근무 유형명</label><input id="f-w-name" value="${escapeHtml(m.workType.name||'')}" placeholder="예: 기본 근무유형"></div>
+    <div class="form-row">
+      <div class="field"><label>고정/선택</label><select id="f-w-fixed"><option value="true" ${m.workType.fixed?'selected':''}>고정</option><option value="false" ${!m.workType.fixed?'selected':''}>선택</option></select></div>
+      <div class="field"><label>근무 시간</label><input id="f-w-hours" value="${escapeHtml(m.workType.hours||'')}" placeholder="예: 주 40시간"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveWorkType({name:document.getElementById('f-w-name').value, fixed:document.getElementById('f-w-fixed').value==='true', hours:document.getElementById('f-w-hours').value})">저장</button></div>
+  `);
+}
+async function saveWorkType(workType){
+  await apiPatch('/members/'+currentMemberId, {workType});
+  await refreshDB(); closeModal(); renderMemberProfile();
+}
+function openEditLeavePolicy(){
+  const m = getCurrentMember();
+  showModal(`
+    <h3>휴가 정보 변경</h3>
+    <div class="field"><label>연차 정책명 / 부여 기준</label><input id="f-l-basis" value="${escapeHtml(m.leavePolicy.basis||'')}" placeholder="예: 입사일 기준 부여"></div>
+    <div class="form-row">
+      <div class="field"><label>반차 단위</label><select id="f-l-half"><option ${m.leavePolicy.halfDay==='반차 단위 사용'?'selected':''}>반차 단위 사용</option><option ${m.leavePolicy.halfDay==='반차 단위 미사용'?'selected':''}>반차 단위 미사용</option></select></div>
+      <div class="field"><label>연차 촉진</label><select id="f-l-promo"><option ${m.leavePolicy.promotion==='연차 촉진 사용'?'selected':''}>연차 촉진 사용</option><option ${m.leavePolicy.promotion==='연차 촉진 미사용'?'selected':''}>연차 촉진 미사용</option></select></div>
+    </div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveLeavePolicy({basis:document.getElementById('f-l-basis').value, halfDay:document.getElementById('f-l-half').value, promotion:document.getElementById('f-l-promo').value})">저장</button></div>
+  `);
+}
+async function saveLeavePolicy(leavePolicy){
+  await apiPatch('/members/'+currentMemberId, {leavePolicy});
+  await refreshDB(); closeModal(); renderMemberProfile();
+}
+function openEditRestDays(){
+  const m = getCurrentMember();
+  showModal(`
+    <h3>쉬는 날 정보</h3>
+    <div class="modal-sub">쉼표(,)로 구분해서 입력하세요. 이 목록은 전체 구성원이 함께 사용해요.</div>
+    <div class="field"><textarea id="f-val" style="min-height:100px;">${(m.restDays||[]).map(escapeHtml).join(', ')}</textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveHolidays(document.getElementById('f-val').value)">저장</button></div>
+  `);
+}
+async function saveHolidays(namesText){
+  const names = namesText.split(',').map(s=>s.trim()).filter(Boolean);
+  await apiPut('/holidays', {names});
+  await refreshDB(); closeModal(); renderMemberProfile();
+}
+
+function openListEntryModal(title, fieldDefs, onSave){
+  const inputs = fieldDefs.map((f,i)=>`<div class="field"><label>${f}</label><input id="li-${i}"></div>`).join('');
+  showModal(`<h3>${title}</h3>${inputs}
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="(async()=>{ await (${onSave.toString()})(); closeModal(); renderMemberProfile(); })()">추가</button></div>`);
+}
+function openAddLeaveHistory(){ openListEntryModal('휴직 이력 추가', ['사유','기간'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'leaveHistory', item:{reason:document.getElementById('li-0').value, period:document.getElementById('li-1').value}}); await refreshDB(); }); }
+function openAddAward(){ openListEntryModal('수상 추가', ['수상명','일자'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'awards', item:{title:document.getElementById('li-0').value, date:document.getElementById('li-1').value}}); await refreshDB(); }); }
+function openAddDiscipline(){ openListEntryModal('징계 추가', ['사유','일자'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'discipline', item:{reason:document.getElementById('li-0').value, date:document.getElementById('li-1').value}}); await refreshDB(); }); }
+function openAddCareer(){ openListEntryModal('경력 정보 추가', ['회사명','직책','기간'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'career', item:{company:document.getElementById('li-0').value, role:document.getElementById('li-1').value, period:document.getElementById('li-2').value}}); await refreshDB(); }); }
+function openAddEducation(){ openListEntryModal('학력 정보 추가', ['학교명','전공','기간'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'education', item:{school:document.getElementById('li-0').value, major:document.getElementById('li-1').value, period:document.getElementById('li-2').value}}); await refreshDB(); }); }
+function openAddFamily(){ openListEntryModal('가족 정보 추가', ['이름','관계'], async function(){ await apiPost('/members/'+currentMemberId+'/lists', {list:'family', item:{name:document.getElementById('li-0').value, relation:document.getElementById('li-1').value}}); await refreshDB(); }); }
+
+/* ---------- Modal helpers ---------- */
+function showModal(html, wide){
+  document.getElementById('modal-content').className = 'modal' + (wide? ' wide':'');
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('overlay').classList.add('active');
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('active'); }
+document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
+
+/* ---------- JOBS (3-step: 공고 본문 / 전형단계 / 지원정보) ---------- */
+let jobDraft = null;
+let jobStep = 1;
+function openJobModal(){
+  jobDraft = {title:'', team:'', deadline:'', stages:['접수','서류심사','처우협의'], submissionDocs:[{name:'이력서',required:true}], preQuestions:[], extraInfo:{education:false,career:false,military:false,veteran:false,disability:false}};
+  jobStep = 1;
+  renderJobModal();
+}
+function renderJobModal(){
+  const d = jobDraft;
+  let body = '';
+  if(jobStep===1){
+    body = `
+      <div class="field"><label>공고 제목</label><input id="f-title" value="${escapeHtml(d.title)}" placeholder="예: 백엔드 개발자"></div>
+      <div class="form-row">
+        <div class="field"><label>팀</label><input id="f-team" value="${escapeHtml(d.team)}" placeholder="예: 개발팀"></div>
+        <div class="field"><label>마감일</label><input id="f-deadline" type="date" value="${d.deadline}"></div>
+      </div>
+      <div class="field"><label>공고 본문</label><textarea id="f-body" placeholder="담당업무, 자격요건, 우대사항 등을 자유롭게 작성하세요" style="min-height:140px;"></textarea></div>
+    `;
+  } else if(jobStep===2){
+    body = `
+      <div class="modal-sub">맨 앞 "접수"와 맨 끝 "처우협의"는 고정이고, 그 사이 단계는 자유롭게 추가/삭제할 수 있어요</div>
+      <div class="stage-pipeline" id="stage-pipeline"></div>
+      <div class="field"><label>단계 추가</label>
+        <div style="display:flex;gap:8px;">
+          <input id="f-newstage" placeholder="예: 실무면접" style="flex:1;">
+          <button class="btn sm" onclick="addStage()">+ 전형단계 추가</button>
         </div>
       </div>
+    `;
+  } else {
+    body = `
+      <div class="section-head"><h3 style="font-size:13.5px;">지원 제출자료</h3></div>
+      <div id="submission-docs"></div>
+      <div style="display:flex;gap:8px;margin-bottom:18px;">
+        <input id="f-newdoc" placeholder="예: 포트폴리오" style="flex:1;border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13px;">
+        <button class="btn sm" onclick="addDoc()">+ 추가</button>
+      </div>
+      <div class="section-head"><h3 style="font-size:13.5px;">사전 질문</h3></div>
+      <div id="pre-questions"></div>
+      <div style="display:flex;gap:8px;margin-bottom:18px;">
+        <input id="f-newq" placeholder="예: 지원 동기를 알려주세요" style="flex:1;border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13px;">
+        <button class="btn sm" onclick="addQuestion()">+ 추가</button>
+      </div>
+      <div class="section-head"><h3 style="font-size:13.5px;">추가정보</h3></div>
+      <div id="extra-info"></div>
+    `;
+  }
+  showModal(`
+    <h3>공고 만들기</h3>
+    <div class="modal-sub">채용 공고를 3단계로 나눠서 만들어요</div>
+    <div class="step-tabs">
+      <button class="btn step ${jobStep===1?'active':''}" onclick="goJobStep(1)">1. 공고 본문</button>
+      <button class="btn step ${jobStep===2?'active':''}" onclick="goJobStep(2)">2. 전형단계</button>
+      <button class="btn step ${jobStep===3?'active':''}" onclick="goJobStep(3)">3. 지원정보</button>
+    </div>
+    ${body}
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">취소</button>
+      ${jobStep>1? `<button class="btn" onclick="goJobStep(${jobStep-1})">이전</button>`:''}
+      ${jobStep<3? `<button class="btn primary" onclick="nextJobStep()">다음</button>` : `<button class="btn primary" onclick="saveJob()">공고 저장하기</button>`}
+    </div>
+  `, true);
+  if(jobStep===2) renderStagePipeline();
+  if(jobStep===3){ renderDocsList(); renderQuestionsList(); renderExtraInfo(); }
+}
+function goJobStep(n){ captureJobStep(); jobStep = n; renderJobModal(); }
+function nextJobStep(){ captureJobStep(); jobStep++; renderJobModal(); }
+function captureJobStep(){
+  if(jobStep===1){
+    jobDraft.title = document.getElementById('f-title').value;
+    jobDraft.team = document.getElementById('f-team').value;
+    jobDraft.deadline = document.getElementById('f-deadline').value;
+    jobDraft.body = document.getElementById('f-body').value;
+  }
+}
+function renderStagePipeline(){
+  const el = document.getElementById('stage-pipeline'); if(!el) return;
+  el.innerHTML = jobDraft.stages.map((s,i)=>{
+    const fixed = i===0 || i===jobDraft.stages.length-1;
+    return `${i>0?'<span class="arrow">→</span>':''}<span class="stage-chip ${fixed?'fixed':''}">${escapeHtml(s)}${fixed?'':` <span class="rm" onclick="removeStage(${i})">×</span>`}</span>`;
+  }).join('');
+}
+function addStage(){
+  const val = document.getElementById('f-newstage').value.trim();
+  if(!val) return;
+  jobDraft.stages.splice(jobDraft.stages.length-1, 0, val);
+  document.getElementById('f-newstage').value='';
+  renderStagePipeline();
+}
+function removeStage(i){ jobDraft.stages.splice(i,1); renderStagePipeline(); }
 
-      <div class="section">
-        <div class="section-head">
-          <div>
-            <h3>이번 분기 OKR</h3>
-            <div class="desc">전사 목표와 팀 목표의 정렬 상태를 확인하세요</div>
-          </div>
-          <span class="link-btn">전체 목표 보기 →</span>
-        </div>
-        <div class="okr-item">
-          <div class="top"><span>🏢 O. 신뢰받는 채용 브랜드로 성장한다</span><span class="pct">82%</span></div>
-          <div class="bar"><i style="width:82%"></i></div>
-          <div class="okr-sub">
-            <div class="top">KR1. 지원자 만족도 4.5점 이상 달성</div>
-            <div class="bar"><i style="width:90%"></i></div>
-          </div>
-          <div class="okr-sub" style="margin-top:10px;">
-            <div class="top">KR2. 채용 리드타임 30일 이내로 단축</div>
-            <div class="bar" style="background:var(--amber-light);"><i style="width:58%;background:var(--amber);"></i></div>
-          </div>
-        </div>
-        <div class="okr-item">
-          <div class="top"><span>🎯 O. 성과관리 체계를 데이터 기반으로 고도화한다</span><span class="pct">71%</span></div>
-          <div class="bar"><i style="width:71%"></i></div>
-          <div class="okr-sub">
-            <div class="top">KR1. 전 구성원 목표 등록률 100%</div>
-            <div class="bar"><i style="width:95%"></i></div>
-          </div>
-        </div>
+function renderDocsList(){
+  document.getElementById('submission-docs').innerHTML = jobDraft.submissionDocs.map((d,i)=>`
+    <div class="req-row"><input type="text" value="${escapeHtml(d.name)}" onchange="jobDraft.submissionDocs[${i}].name=this.value">
+    <select onchange="jobDraft.submissionDocs[${i}].required=(this.value==='필수')"><option ${d.required?'selected':''}>필수</option><option ${!d.required?'selected':''}>선택</option></select>
+    <span class="rm" style="cursor:pointer;" onclick="jobDraft.submissionDocs.splice(${i},1);renderDocsList();">×</span></div>
+  `).join('') || '<div class="empty" style="padding:10px 0;">등록된 제출자료가 없어요</div>';
+}
+function addDoc(){
+  const v = document.getElementById('f-newdoc').value.trim(); if(!v) return;
+  jobDraft.submissionDocs.push({name:v, required:true});
+  document.getElementById('f-newdoc').value=''; renderDocsList();
+}
+function renderQuestionsList(){
+  document.getElementById('pre-questions').innerHTML = jobDraft.preQuestions.map((q,i)=>`
+    <div class="req-row"><input type="text" value="${escapeHtml(q.q)}" onchange="jobDraft.preQuestions[${i}].q=this.value">
+    <select onchange="jobDraft.preQuestions[${i}].required=(this.value==='필수')"><option ${q.required?'selected':''}>필수</option><option ${!q.required?'selected':''}>선택</option></select>
+    <span class="rm" style="cursor:pointer;" onclick="jobDraft.preQuestions.splice(${i},1);renderQuestionsList();">×</span></div>
+  `).join('') || '<div class="empty" style="padding:10px 0;">등록된 사전 질문이 없어요</div>';
+}
+function addQuestion(){
+  const v = document.getElementById('f-newq').value.trim(); if(!v) return;
+  jobDraft.preQuestions.push({q:v, required:true});
+  document.getElementById('f-newq').value=''; renderQuestionsList();
+}
+const EXTRA_LABELS = {education:'학력정보', career:'경력정보', military:'병역정보', veteran:'보훈대상', disability:'장애대상'};
+function renderExtraInfo(){
+  document.getElementById('extra-info').innerHTML = Object.keys(EXTRA_LABELS).map(k=>`
+    <div class="checkline"><label><input type="checkbox" ${jobDraft.extraInfo[k]?'checked':''} onchange="jobDraft.extraInfo['${k}']=this.checked"> ${EXTRA_LABELS[k]}</label></div>
+  `).join('');
+}
+async function saveJob(){
+  captureJobStep();
+  if(!jobDraft.title){ alert('공고명을 입력해주세요'); jobStep=1; renderJobModal(); return; }
+  await apiPost('/jobs', {title:jobDraft.title, team:jobDraft.team||'-', deadline:jobDraft.deadline||null,
+    stages:jobDraft.stages, submissionDocs:jobDraft.submissionDocs, preQuestions:jobDraft.preQuestions, extraInfo:jobDraft.extraInfo});
+  await refreshDB(); closeModal(); renderJobs();
+}
+
+/* ---------- CANDIDATES ---------- */
+function openCandidatesFor(jobId){
+  switchRecruitTab('candidates');
+  document.getElementById('cand-job-select').value = jobId;
+  renderCandidates();
+}
+function openCandidateModal(){
+  const jobId = document.getElementById('cand-job-select').value;
+  if(!jobId) return alert('먼저 공고를 선택해주세요');
+  showModal(`
+    <h3>후보자 등록하기</h3>
+    <div class="field"><label>이름</label><input id="f-cname" placeholder="홍길동"></div>
+    <div class="field"><label>연락처</label><input id="f-cphone" placeholder="010-0000-0000"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCandidate('${jobId}')">등록</button></div>
+  `);
+}
+async function saveCandidate(jobId){
+  const name = document.getElementById('f-cname').value.trim();
+  if(!name) return alert('이름을 입력해주세요');
+  await apiPost('/jobs/'+jobId+'/candidates', {name, phone:document.getElementById('f-cphone').value||'-'});
+  await refreshDB(); closeModal(); renderCandidates(); renderDashboard();
+}
+async function changeStage(candId, newStage){
+  await apiPatch('/candidates/'+candId, {stage:newStage});
+  await refreshDB(); renderCandidates(); renderDashboard();
+}
+function viewCandidateHistory(candId){
+  const c = DB.candidates.find(x=>x.id===candId);
+  const items = c.history.slice().reverse().map(h=>`<div class="tl-item"><div class="tl-date">${h.date}</div><div class="tl-body"><b>${escapeHtml(h.stage)}</b> — ${escapeHtml(h.note)}</div></div>`).join('');
+  showModal(`<h3>${escapeHtml(c.name)} 님 전형 히스토리</h3><div class="timeline">${items||'<div class="empty">기록 없음</div>'}</div><div class="modal-actions"><button class="btn primary" onclick="closeModal()">닫기</button></div>`);
+}
+async function deleteJob(id){
+  await apiDelete('/jobs/'+id);
+  await refreshDB(); renderJobs();
+}
+
+/* ---------- OKR ---------- */
+function openOkrModal(){
+  showModal(`
+    <h3>새 목표 추가</h3>
+    <div class="modal-sub">회사 → 조직 → 개인 3단계로 목표를 연결할 수 있어요</div>
+    <div class="form-row">
+      <div class="field"><label>레벨</label><select id="f-olevel"><option>회사</option><option>조직</option><option selected>개인</option></select></div>
+      <div class="field"><label>사이클</label><input id="f-oquarter" placeholder="2026-Q3"></div>
+    </div>
+    <div class="field"><label>목표 제목</label><input id="f-otitle" placeholder="예: 채용 리드타임 단축"></div>
+    <div class="form-row">
+      <div class="field"><label>담당 주체</label><input id="f-oowner" placeholder="담당자/팀"></div>
+      <div class="field"><label>상위 목표</label>
+        <select id="f-oparent"><option value="">상위 목표 선택 안함</option>${DB.okrs.map(o=>`<option value="${o.id}">[${o.level}] ${escapeHtml(o.title)}</option>`).join('')}</select>
       </div>
     </div>
-
-    <div>
-      <div class="section">
-        <div class="section-head">
-          <div><h3>다가오는 일정</h3></div>
-        </div>
-        <div class="sched-item">
-          <div class="sched-date">7월<div class="d">29</div></div>
-          <div class="sched-info"><b>프론트엔드 개발자 1차 면접</b><div class="meta">지원자 3명 · 오후 2시 · 회의실 A</div></div>
-        </div>
-        <div class="sched-item">
-          <div class="sched-date">7월<div class="d">30</div></div>
-          <div class="sched-info"><b>2분기 평가 캘리브레이션 미팅</b><div class="meta">팀장 전체 · 오전 10시</div></div>
-        </div>
-        <div class="sched-item">
-          <div class="sched-date">8월<div class="d">01</div></div>
-          <div class="sched-info"><b>월간 원온원 - 마케팅팀</b><div class="meta">3명 예정</div></div>
-        </div>
-        <div class="sched-item">
-          <div class="sched-date">8월<div class="d">05</div></div>
-          <div class="sched-info"><b>HR 매니저 임원면접</b><div class="meta">최종후보 2명</div></div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-head"><div><h3>바로가기</h3></div></div>
-        <div class="quicklinks">
-          <a class="qcard" href="job-detail.html"><span class="emoji">📄</span>채용 공고 상세<span class="desc">지원자에게 보여지는 공고 페이지</span></a>
-          <a class="qcard" href="apply-landing.html"><span class="emoji">📥</span>지원서 접수<span class="desc">지원서가 모이는 랜딩페이지</span></a>
-          <a class="qcard" href="#"><span class="emoji">📊</span>평가 현황<span class="desc">2분기 평가 진척도 관리</span></a>
-        </div>
-      </div>
+    <div class="field"><label>목표 설명</label><textarea id="f-odesc" placeholder="목표에 대한 설명을 적어주세요"></textarea></div>
+    <div class="form-row3">
+      <div class="field"><label>측정 단위</label><input id="f-ounit" value="%" placeholder="%"></div>
+      <div class="field"><label>시작 수치</label><input id="f-ostart" type="number" value="0"></div>
+      <div class="field"><label>목표 수치</label><input id="f-otarget" type="number" value="100"></div>
     </div>
-  </div>
+    <div class="field"><label>진척률(%)</label><input id="f-oprogress" type="number" min="0" max="100" value="0"></div>
+    <div class="field"><label>공개 범위</label><select id="f-ovisible"><option>모두에게 공개</option><option>일부에게 공개</option></select></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOkr()">목표 생성</button></div>
+  `);
+}
+async function saveOkr(){
+  const title = document.getElementById('f-otitle').value.trim();
+  if(!title) return alert('목표 제목을 입력해주세요');
+  await apiPost('/okrs', {quarter:document.getElementById('f-oquarter').value||'2026-Q3', level:document.getElementById('f-olevel').value, title,
+    owner:document.getElementById('f-oowner').value||'-', parent:document.getElementById('f-oparent').value||null,
+    progress:Number(document.getElementById('f-oprogress').value)||0, unit:document.getElementById('f-ounit').value||'%',
+    target:Number(document.getElementById('f-otarget').value)||100});
+  await refreshDB(); closeModal(); renderOkr();
+}
+async function updateOkrProgress(id, val){
+  await apiPatch('/okrs/'+id, {progress:Number(val)});
+  await refreshDB(); renderOkr();
+}
 
-</div>
+/* ---------- EVAL / 9-GRID (역량: 공동/리드/직무 + 성과 + 커스텀) ---------- */
+function openEvalModal(){
+  showModal(`
+    <h3>평가 만들기</h3>
+    <div class="modal-sub">역량 3요소 + 성과 + 커스텀 구조로 평가해요</div>
+    <div class="form-row">
+      <div class="field"><label>구성원</label><select id="f-ename">${DB.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>분기</label><input id="f-equarter" placeholder="2026-Q2"></div>
+    </div>
+    <div class="form-row3">
+      <div class="field"><label>공동역량 (1~5)</label><input id="f-common" type="number" min="1" max="5" value="3"></div>
+      <div class="field"><label>리드역량 (1~5)</label><input id="f-lead" type="number" min="1" max="5" value="3"></div>
+      <div class="field"><label>직무역량 (1~5)</label><input id="f-job" type="number" min="1" max="5" value="3"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>성과 점수 (1~5)</label><input id="f-eperf" type="number" min="1" max="5" value="3"></div>
+      <div class="field"><label>커스텀 점수 (1~5)</label><input id="f-ecustom" type="number" min="1" max="5" value="3"></div>
+    </div>
+    <div class="field"><label>강점 코멘트</label><textarea id="f-estrength" placeholder="예: 목표 달성률이 높고 협업이 뛰어남"></textarea></div>
+    <div class="field"><label>개선점 코멘트</label><textarea id="f-eimprove" placeholder="예: 커뮤니케이션 속도를 개선하면 좋겠음"></textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveEval()">등록</button></div>
+  `, true);
+}
+async function saveEval(){
+  const employeeId = document.getElementById('f-ename').value;
+  if(!employeeId) return alert('구성원을 선택해주세요');
+  await apiPost('/evals', {quarter:document.getElementById('f-equarter').value||'2026-Q2', employeeId,
+    common:Number(document.getElementById('f-common').value), lead:Number(document.getElementById('f-lead').value), job:Number(document.getElementById('f-job').value),
+    performance:Number(document.getElementById('f-eperf').value), custom:Number(document.getElementById('f-ecustom').value),
+    strength:document.getElementById('f-estrength').value||'-', improve:document.getElementById('f-eimprove').value||'-'});
+  await refreshDB(); closeModal(); renderEval();
+}
+function competency(e){ return (e.common+e.lead+e.job)/3; }
+function bucket(score){ return score<=2?0:(score===3?1:2); }
+function gradeFor(perf, comp){
+  const avg = (perf+comp)/2;
+  if(avg>=4.5) return 'S'; if(avg>=3.5) return 'A'; if(avg>=2.5) return 'B'; if(avg>=1.5) return 'C'; return 'D';
+}
+function quarterOptionsHtml(){
+  const qs = [...new Set(DB.evals.map(e=>e.quarter))];
+  if(qs.length===0) qs.push('2026-Q2');
+  return qs.map(q=>`<option value="${escapeHtml(q)}">${escapeHtml(q)}</option>`).join('');
+}
+function renderEval(){
+  const sel = document.getElementById('eval-quarter-filter');
+  const prevVal = sel.value;
+  sel.innerHTML = quarterOptionsHtml();
+  if(prevVal) sel.value = prevVal;
+  const quarter = sel.value || sel.options[0]?.value;
 
+  const evalsQ = DB.evals.filter(e=>e.quarter===quarter);
+
+  const grid = document.getElementById('grid9');
+  grid.innerHTML='';
+  const rowsOrder = [2,1,0];
+  rowsOrder.forEach(r=>{
+    for(let c=0;c<3;c++){
+      const people = evalsQ.filter(e=>bucket(e.performance)===r && bucket(competency(e))===c);
+      const label = r===2? (c===0?'잠재 인재':c===1?'우수 성과자':'핵심 인재') : r===1? (c===0?'성장 필요':c===1?'안정적 기여자':'고성장 인재') : (c===0?'저성과자':c===1?'역할 재검토':'미스매치');
+      const div = document.createElement('div');
+      div.className='cell9';
+      div.innerHTML = `<div class="clabel">${label}</div><div class="chips">${people.map(p=>`<span class="chip">${escapeHtml(p.employeeName)}</span>`).join('') || ''}</div>`;
+      grid.appendChild(div);
+    }
+  });
+
+  document.getElementById('eval-table').innerHTML = evalsQ.map(e=>`
+    <tr><td>${escapeHtml(e.employeeName)}</td><td>${escapeHtml(e.quarter)}</td><td>${e.common}</td><td>${e.lead}</td><td>${e.job}</td><td>${e.performance}</td><td>${e.custom}</td>
+    <td><span class="badge blue">${gradeFor(e.performance,competency(e))}</span></td>
+    <td><button class="btn ghost sm" onclick="deleteEval('${e.id}')">삭제</button></td></tr>
+  `).join('') || `<tr><td colspan="9" class="empty">등록된 평가가 없어요</td></tr>`;
+
+  document.getElementById('ai-reports').innerHTML = evalsQ.map(e=>{
+    const grade = gradeFor(e.performance,competency(e));
+    const tone = e.performance>=4? '이번 분기 목표 달성 흐름이 좋아요.' : e.performance<=2? '목표 달성 측면에서 보완이 필요해요.' : '안정적으로 목표를 수행하고 있어요.';
+    return `<div class="ai-card">
+      <div class="head"><b>${escapeHtml(e.employeeName)} · ${grade}등급</b><span class="aitag">AI 자동 요약</span></div>
+      <p>${tone} 강점으로는 "${escapeHtml(e.strength)}"이(가) 확인돼요. 다음 분기에는 "${escapeHtml(e.improve)}"에 집중하면 더 좋은 결과를 만들 수 있을 것으로 보여요.</p>
+      <div class="subscores"><span>공동역량 ${e.common}</span><span>리드역량 ${e.lead}</span><span>직무역량 ${e.job}</span><span>성과 ${e.performance}</span><span>커스텀 ${e.custom}</span></div>
+    </div>`;
+  }).join('') || `<div class="empty">평가 데이터가 쌓이면 AI 요약이 자동으로 생성돼요</div>`;
+}
+async function deleteEval(id){ await apiDelete('/evals/'+id); await refreshDB(); renderEval(); }
+
+/* ---------- CALIBRATION (등급 배분) ---------- */
+function renderCalibration(){
+  const sel = document.getElementById('cal-quarter-filter');
+  const prevVal = sel.value;
+  sel.innerHTML = quarterOptionsHtml();
+  if(prevVal) sel.value = prevVal;
+  const quarter = sel.value || sel.options[0]?.value;
+  if(!DB.calibration[quarter]) DB.calibration[quarter] = {targets:{S:10,A:20,B:40,C:20,D:10}, overrides:{}};
+  const cal = DB.calibration[quarter];
+  const evalsQ = DB.evals.filter(e=>e.quarter===quarter);
+  const total = evalsQ.length || 1;
+
+  const counts = {S:0,A:0,B:0,C:0,D:0};
+  evalsQ.forEach(e=>{
+    const g = cal.overrides[e.id]?.grade || gradeFor(e.performance,competency(e));
+    counts[g] = (counts[g]||0)+1;
+  });
+
+  document.getElementById('cal-bars').innerHTML = Object.keys(cal.targets).map(g=>{
+    const pct = Math.round((counts[g]/total)*100);
+    const target = cal.targets[g];
+    const over = pct > target + 5;
+    return `<div class="cal-row">
+      <div class="name">${g}등급</div>
+      <div class="barwrap"><div class="bar"><i style="width:${pct}%;background:${over?'var(--red)':'var(--primary)'}"></i></div></div>
+      <div class="pct">${pct}% / 목표 ${target}%</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('cal-table').innerHTML = evalsQ.map(e=>{
+    const computed = gradeFor(e.performance,competency(e));
+    const final = cal.overrides[e.id]?.grade || computed;
+    const reason = cal.overrides[e.id]?.reason || '';
+    return `<tr>
+      <td>${escapeHtml(e.employeeName)}</td>
+      <td><span class="badge grey">${computed}</span></td>
+      <td>
+        <select onchange="setOverride('${quarter}','${e.id}', this.value, document.getElementById('reason-${e.id}').value)">
+          ${['S','A','B','C','D'].map(g=>`<option value="${g}" ${g===final?'selected':''}>${g}</option>`).join('')}
+        </select>
+      </td>
+      <td><input id="reason-${e.id}" placeholder="조정 사유" value="${escapeHtml(reason)}" onchange="setOverride('${quarter}','${e.id}', undefined, this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;width:100%;"></td>
+      <td></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty">해당 분기 평가 데이터가 없어요</td></tr>`;
+}
+async function setOverride(quarter, evalId, grade, reason){
+  const cal = DB.calibration[quarter] || {overrides:{}};
+  const prev = cal.overrides[evalId] || {};
+  const e = DB.evals.find(x=>x.id===evalId);
+  const computed = gradeFor(e.performance, competency(e));
+  const finalGrade = grade!==undefined ? grade : (prev.grade || computed);
+  const finalReason = reason!==undefined ? reason : (prev.reason || '');
+  await apiPut('/calibration/'+quarter+'/overrides', {evalId, grade:finalGrade, reason:finalReason});
+  await refreshDB(); renderCalibration();
+}
+
+/* ---------- ONE ON ONE ---------- */
+let currentEmployee = null;
+function openOneOnOneModal(){
+  showModal(`
+    <h3>원온원 보내기</h3>
+    <div class="form-row">
+      <div class="field"><label>구성원</label><select id="f-mname">${DB.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>날짜</label><input id="f-mdate" type="date" value="${today()}"></div>
+    </div>
+    <div class="field"><label>내용</label><textarea id="f-mnote" placeholder="면담 내용을 기록하세요"></textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOneOnOne()">저장</button></div>
+  `);
+}
+async function saveOneOnOne(){
+  const employeeId = document.getElementById('f-mname').value;
+  if(!employeeId) return alert('구성원을 선택해주세요');
+  await apiPost('/oneonones', {employeeId, date:document.getElementById('f-mdate').value||today(), note:document.getElementById('f-mnote').value||'-'});
+  await refreshDB(); closeModal(); currentEmployee = employeeId; renderOneOnOne();
+}
+function renderOneOnOne(){
+  const peopleIds = [...new Set(DB.oneonones.map(m=>m.employee))];
+  if(!currentEmployee && peopleIds.length) currentEmployee = peopleIds[0];
+  const nameOf = id => (DB.oneonones.find(m=>m.employee===id)||{}).employeeName || '';
+  document.getElementById('oneonone-people').innerHTML = peopleIds.map(id=>`<button class="btn sm ${id===currentEmployee?'primary':''}" onclick="selectEmployee('${id}')">${escapeHtml(nameOf(id))}</button>`).join('') || '<span class="empty">기록된 구성원이 없어요</span>';
+  const list = DB.oneonones.filter(m=>m.employee===currentEmployee).sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('oneonone-title').textContent = currentEmployee ? nameOf(currentEmployee)+' 님 히스토리' : '히스토리';
+  document.getElementById('oneonone-timeline').innerHTML = list.map(m=>`<div class="tl-item"><div class="tl-date">${m.date}</div><div class="tl-body">${escapeHtml(m.note)}</div></div>`).join('') || '<div class="empty">기록이 없어요</div>';
+}
+function selectEmployee(id){ currentEmployee = id; renderOneOnOne(); }
+
+/* ---------- DASHBOARD ---------- */
+function renderDashboard(){
+  const totalCandidates = DB.candidates.length;
+  const inProgress = DB.jobs.filter(j=>j.status==='진행중').length;
+  const avgOkr = DB.okrs.length? Math.round(DB.okrs.reduce((a,o)=>a+o.progress,0)/DB.okrs.length) : 0;
+  const evalCount = DB.evals.length;
+  document.getElementById('dash-kpis').innerHTML = `
+    <div class="kpi"><div class="label">진행중인 채용공고</div><div class="value">${inProgress}건</div></div>
+    <div class="kpi"><div class="label">전체 지원자</div><div class="value">${totalCandidates}명</div></div>
+    <div class="kpi"><div class="label">목표 평균 진척률</div><div class="value">${avgOkr}%</div></div>
+    <div class="kpi"><div class="label">등록된 평가</div><div class="value">${evalCount}건</div></div>
+  `;
+  const events = [];
+  DB.candidates.forEach(c=>c.history.forEach(h=>events.push({date:h.date, text:`[채용] ${escapeHtml(c.name)} 님 — ${escapeHtml(h.stage)} (${escapeHtml(h.note)})`})));
+  DB.oneonones.forEach(m=>events.push({date:m.date, text:`[원온원] ${escapeHtml(m.employeeName)} 님과 면담 기록`}));
+  events.sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('dash-timeline').innerHTML = events.slice(0,8).map(e=>`<div class="tl-item"><div class="tl-date">${e.date}</div><div class="tl-body">${e.text}</div></div>`).join('') || '<div class="empty">아직 기록이 없어요</div>';
+}
+
+/* ---------- RECRUIT RENDER ---------- */
+function renderJobs(){
+  document.getElementById('jobs-table').innerHTML = DB.jobs.map(j=>{
+    const count = DB.candidates.filter(c=>c.jobId===j.id).length;
+    return `<tr class="clickable" onclick="openCandidatesFor('${j.id}')">
+      <td><b>${escapeHtml(j.title)}</b></td><td>${escapeHtml(j.team)}</td><td style="font-size:11.5px;color:var(--sub);">${j.stages.map(escapeHtml).join(' → ')}</td><td>${j.deadline||'-'}</td><td>${count}명</td>
+      <td><span class="badge green">${j.status}</span></td>
+      <td><button class="btn ghost sm" onclick="event.stopPropagation(); deleteJob('${j.id}')">삭제</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" class="empty">등록된 공고가 없어요</td></tr>`;
+
+  const sel = document.getElementById('cand-job-select');
+  const prev = sel.value;
+  sel.innerHTML = DB.jobs.map(j=>`<option value="${j.id}">${escapeHtml(j.title)}</option>`).join('') || '<option value="">등록된 공고 없음</option>';
+  if(prev) sel.value = prev;
+}
+function renderCandidates(){
+  const jobId = document.getElementById('cand-job-select').value;
+  const job = DB.jobs.find(j=>j.id===jobId);
+  const list = DB.candidates.filter(c=>c.jobId===jobId);
+  document.getElementById('candidates-table').innerHTML = list.map(c=>`
+    <tr>
+      <td><b>${escapeHtml(c.name)}</b></td><td>${escapeHtml(c.phone)}</td>
+      <td><select onchange="changeStage('${c.id}', this.value)">${(job?job.stages:[]).map(s=>`<option ${s===c.stage?'selected':''}>${escapeHtml(s)}</option>`).join('')}</select></td>
+      <td>${c.history[c.history.length-1]?.date||'-'}</td>
+      <td><button class="btn ghost sm" onclick="viewCandidateHistory('${c.id}')">히스토리</button></td>
+    </tr>
+  `).join('') || `<tr><td colspan="5" class="empty">지원자가 없어요</td></tr>`;
+}
+
+/* ---------- OKR RENDER ---------- */
+function renderOkr(){
+  const byLevel = {'회사':[], '조직':[], '개인':[]};
+  DB.okrs.forEach(o=>{ if(!byLevel[o.level]) byLevel[o.level]=[]; byLevel[o.level].push(o); });
+  document.getElementById('okr-list').innerHTML = Object.keys(byLevel).map(level=>`
+    <div class="section-head"><h3>${level} 목표</h3></div>
+    ${byLevel[level].map(o=>{
+      const parent = o.parent ? DB.okrs.find(x=>x.id===o.parent) : null;
+      return `
+      <div style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;">
+          <span>${escapeHtml(o.title)} <span class="badge grey">${escapeHtml(o.quarter)}</span> <span style="color:var(--sub);font-weight:500;">${escapeHtml(o.owner)}</span>${parent?` <span style="color:var(--sub);font-weight:500;">↳ 상위: ${escapeHtml(parent.title)}</span>`:''}</span>
+          <span>${o.progress}${escapeHtml(o.unit||'%')}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="bar" style="flex:1;"><i style="width:${Math.min(100,o.progress)}%"></i></div>
+          <input type="range" min="0" max="${o.target||100}" value="${o.progress}" oninput="updateOkrProgress('${o.id}', this.value)" style="width:120px;">
+        </div>
+      </div>
+    `;}).join('') || '<div class="empty">등록된 목표가 없어요</div>'}
+  `).join('');
+}
+
+/* ---------- DATA MGMT ---------- */
+function exportData(){
+  const blob = new Blob([JSON.stringify(DB, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'selfdiylab-hr-data-'+today()+'.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+function importData(evt){ alert('실제 데이터베이스로 전환된 이후에는 가져오기가 지원되지 않아요. 각 화면에서 개별적으로 추가해주세요.'); evt.target.value=''; }
+function resetData(){ alert('실제 데이터베이스로 전환된 이후에는 전체 초기화가 지원되지 않아요. 필요하면 Neon 콘솔에서 직접 데이터를 관리해주세요.'); }
+
+/* ---------- INIT ---------- */
+function renderAll(){
+  renderDashboard();
+  renderMembers();
+  if(currentMemberId) renderMemberProfile();
+  renderJobs();
+  renderCandidates();
+  renderOkr();
+  renderEval();
+  renderCalibration();
+  renderOneOnOne();
+}
+renderAll();
+</script>
 </body>
 </html>
