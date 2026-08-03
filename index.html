@@ -209,6 +209,8 @@
     <button class="nav-item" data-view="eval">🧩 평가</button>
     <button class="nav-item" data-view="calibration">⚖️ 등급 배분(캘리브레이션)</button>
     <button class="nav-item" data-view="oneonone">💬 원온원</button>
+    <div class="nav-sep">마이페이지</div>
+    <button class="nav-item" data-view="mypage">🙋 마이페이지</button>
     <div class="nav-sep">시스템</div>
     <button class="nav-item" data-view="data">🗂 데이터 관리</button>
   </div>
@@ -403,6 +405,46 @@
       <div class="section">
         <div class="section-head"><h3 id="oneonone-title">히스토리</h3></div>
         <div class="timeline" id="oneonone-timeline"></div>
+      </div>
+    </div>
+
+    <!-- MYPAGE -->
+    <div class="view" id="view-mypage">
+      <div class="page-head"><div><h1>마이페이지</h1><p>내 목표·평가·원온원을 한 곳에서 확인해요</p></div></div>
+
+      <div id="mypage-login">
+        <div class="section">
+          <div class="section-head"><h3>로그인</h3><div class="desc">인사팀에 등록된 이메일을 입력하면 내 화면이 열려요 (비밀번호 없음)</div></div>
+          <div class="field"><label>이메일</label><input id="f-my-email" placeholder="you@selfdiylab.com" onkeydown="if(event.key==='Enter')submitMyLogin()"></div>
+          <div id="mypage-login-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+          <button class="btn primary" onclick="submitMyLogin()">로그인</button>
+        </div>
+      </div>
+
+      <div id="mypage-home" style="display:none;">
+        <div class="page-head">
+          <div><h1 id="mypage-hello" style="font-size:20px;"></h1><p>이번 달 내 목표와 최근 평가·원온원 기록이에요</p></div>
+          <button class="btn ghost" onclick="submitMyLogout()">로그아웃</button>
+        </div>
+        <div class="grid4" id="mypage-kpis"></div>
+
+        <div class="section">
+          <div class="section-head">
+            <div><h3>이번 달 내 목표</h3><div class="desc">우리 팀의 이번 달 목표를 골라 개인 목표를 만들고, 할 일을 체크하면 진척률이 자동 계산돼요</div></div>
+            <button class="btn primary sm" onclick="openMyGoalModal()">+ 목표 추가</button>
+          </div>
+          <div id="mypage-goals"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-head"><h3>내 평가 기록</h3></div>
+          <div id="mypage-evals"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-head"><h3>내 원온원 기록</h3></div>
+          <div class="timeline" id="mypage-oneonones"></div>
+        </div>
       </div>
     </div>
 
