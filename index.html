@@ -426,11 +426,11 @@ const API = '/api';
 // check the same header server-side -- accept them. Stays empty for the
 // company-wide 성과관리 endpoints, which need no auth.
 let hrHeaders = {};
-async function apiGet(path){ const r = await fetch(API+path, {headers:{...hrHeaders}}); if(!r.ok) throw new Error('GET '+path+' failed'); return r.json(); }
-async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('POST '+path+' failed'); return r.json(); }
-async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PATCH '+path+' failed'); return r.json(); }
-async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); if(!r.ok) throw new Error('PUT '+path+' failed'); return r.json(); }
-async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE', headers:{...hrHeaders}}); if(!r.ok) throw new Error('DELETE '+path+' failed'); return r.json(); }
+async function apiGet(path){ const r = await fetch(API+path, {headers:{...hrHeaders}}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('GET '+path+' failed')); return data; }
+async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('POST '+path+' failed')); return data; }
+async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PATCH '+path+' failed')); return data; }
+async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PUT '+path+' failed')); return data; }
+async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE', headers:{...hrHeaders}}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('DELETE '+path+' failed')); return data; }
 
 function today(){ return new Date().toISOString().slice(0,10); }
 // The API returns date columns (hireDate, groupHireDate, birthday) as full ISO
@@ -447,7 +447,8 @@ function escapeHtml(s){
 // 원온원 보내기 are company-wide features, so their 구성원 <select> has to be
 // populated on first load. Use DB.roster for pickers, DB.members only inside
 // the password-gated 구성원 views.
-let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], evals:[], calibration:{}, oneonones:[] };
+let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], evals:[], calibration:{}, oneonones:[] };
+let me = null; // 마이페이지 로그인 상태: {id, name, team} | null
 
 /* 인사 영역 잠금 해제 여부. 페이지 로드마다 초기화돼요
    (localStorage/sessionStorage에 저장하지 않아요). */
@@ -459,7 +460,7 @@ let hrAuthed = false;
 async function refreshPublicData(){
   const d = await apiGet('/public-data');
   DB.roster = d.members;
-  DB.okrs = d.okrs; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+  DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
 /* 인사 데이터(구성원·채용): HR 비밀번호가 있어야 받아올 수 있어요. hrHeaders가
    비어 있으면 서버가 401을 돌려주므로 잠금 해제 이후에만 호출해요. */
@@ -468,7 +469,7 @@ async function refreshHrData(){
   DB.members = d.members; DB.jobs = d.jobs; DB.candidates = d.candidates;
   // 잠금 해제 뒤 새로 추가한 구성원도 선택 목록에 바로 보이도록 명단을 갱신해요.
   DB.roster = d.members.map(m => ({ id: m.id, name: m.name }));
-  DB.okrs = d.okrs; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+  DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
 /* 기존 호출부 호환용. 인사 화면에서만 쓰이므로 잠금 해제 전이면 공개 데이터만 갱신해요. */
 async function refreshDB(){
@@ -477,6 +478,7 @@ async function refreshDB(){
 }
 async function initApp(){
   await refreshPublicData();
+  try { me = await apiGet('/me'); } catch { me = null; }
   renderAll();
 }
 initApp();
