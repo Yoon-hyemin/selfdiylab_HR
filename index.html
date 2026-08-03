@@ -1039,15 +1039,10 @@ async function deleteJob(id){
   await refreshDB(); renderJobs();
 }
 
-/* ---------- 목표 계층 집계 유틸 ---------- */
-// '2026-Q3' -> ['2026-07','2026-08','2026-09']
-function monthsOfQuarter(quarter){
-  const m = /^(\d{4})-Q([1-4])$/.exec(quarter||'');
-  if(!m) return [];
-  const year = m[1], q = Number(m[2]);
-  const startMonth = (q-1)*3 + 1;
-  return [0,1,2].map(i => `${year}-${String(startMonth+i).padStart(2,'0')}`);
-}
+/* ---------- 목표 계층 집계 유틸 ----------
+   기업(회사)·부서(조직)·개인 모두 "월" 단위로 세우는 동일한 구조라, 세
+   레벨의 달성률 계산은 전부 같은 패턴이다: 그 목표의 바로 아래 단계 자식
+   들의 진척률 평균. */
 function individualProgress(okr){
   const tasks = DB.okrTasks.filter(t=>t.okrId===okr.id);
   if(!tasks.length) return 0;
@@ -1058,15 +1053,10 @@ function orgProgress(okr){
   if(!children.length) return 0;
   return Math.round(children.reduce((a,c)=>a+individualProgress(c),0) / children.length);
 }
-function companyMonthProgress(companyOkr, month){
-  const orgs = DB.okrs.filter(o=>o.level==='조직' && o.parent===companyOkr.id && o.month===month);
-  if(!orgs.length) return null;
-  return Math.round(orgs.reduce((a,o)=>a+orgProgress(o),0) / orgs.length);
-}
-function companyQuarterProgress(companyOkr){
-  const orgs = DB.okrs.filter(o=>o.level==='조직' && o.parent===companyOkr.id);
-  if(!orgs.length) return 0;
-  return Math.round(orgs.reduce((a,o)=>a+orgProgress(o),0) / orgs.length);
+function companyProgress(okr){
+  const children = DB.okrs.filter(o=>o.level==='조직' && o.parent===okr.id);
+  if(!children.length) return 0;
+  return Math.round(children.reduce((a,o)=>a+orgProgress(o),0) / children.length);
 }
 
 /* ---------- OKR ---------- */
@@ -1076,38 +1066,41 @@ function openOkrModal(){
     <div class="modal-sub">개인 목표는 마이페이지에서 만들 수 있어요</div>
     <div class="form-row">
       <div class="field"><label>레벨</label><select id="f-olevel" onchange="onOkrLevelChange()"><option value="회사">기업</option><option value="조직" selected>부서</option></select></div>
-      <div class="field" id="f-oquarter-wrap"><label>분기</label><input id="f-oquarter" placeholder="2026-Q3" value="2026-Q3"></div>
-      <div class="field" id="f-omonth-wrap"><label>월</label><input id="f-omonth" type="month"></div>
+      <div class="field"><label>월</label><input id="f-omonth" type="month" onchange="refreshOkrParentOptions()"></div>
     </div>
     <div class="field"><label>목표 제목</label><input id="f-otitle" placeholder="예: 채용 리드타임 단축"></div>
     <div class="form-row" id="f-oorg-fields">
       <div class="field"><label>부서(팀)명</label><input id="f-oowner" placeholder="예: 세일즈팀"></div>
-      <div class="field"><label>상위 기업 목표</label>
-        <select id="f-oparent"><option value="">선택 안함</option>${DB.okrs.filter(o=>o.level==='회사').map(o=>`<option value="${o.id}">${escapeHtml(o.title)} (${escapeHtml(o.quarter)})</option>`).join('')}</select>
+      <div class="field"><label>상위 기업 목표 (같은 달)</label>
+        <select id="f-oparent"></select>
       </div>
     </div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOkr()">목표 생성</button></div>
   `);
   onOkrLevelChange();
 }
+function refreshOkrParentOptions(){
+  const month = document.getElementById('f-omonth').value;
+  const options = DB.okrs.filter(o=>o.level==='회사' && (!month || o.month===month));
+  document.getElementById('f-oparent').innerHTML = `<option value="">선택 안함</option>${options.map(o=>`<option value="${o.id}">${escapeHtml(o.title)} (${escapeHtml(o.month||'')})</option>`).join('')}`;
+}
 function onOkrLevelChange(){
   const level = document.getElementById('f-olevel').value;
-  document.getElementById('f-oquarter-wrap').style.display = level==='회사' ? '' : 'none';
-  document.getElementById('f-omonth-wrap').style.display = level==='조직' ? '' : 'none';
   document.getElementById('f-oorg-fields').style.display = level==='조직' ? '' : 'none';
+  if(level==='조직') refreshOkrParentOptions();
 }
 async function saveOkr(){
   const level = document.getElementById('f-olevel').value;
   const title = document.getElementById('f-otitle').value.trim();
+  const month = document.getElementById('f-omonth').value;
   if(!title) return alert('목표 제목을 입력해주세요');
+  if(!month) return alert('월을 선택해주세요');
 
   try{
     if(level==='회사'){
-      await apiPost('/okrs', {level, title, quarter:document.getElementById('f-oquarter').value||'2026-Q3'});
+      await apiPost('/okrs', {level, title, month});
     } else {
-      const month = document.getElementById('f-omonth').value;
       const parent = document.getElementById('f-oparent').value;
-      if(!month) return alert('월을 선택해주세요');
       if(!parent) return alert('상위 기업 목표를 선택해주세요');
       await apiPost('/okrs', {level, title, month, parent, owner:document.getElementById('f-oowner').value||'-'});
     }
@@ -1314,7 +1307,7 @@ function renderTimelineInto(elId, events, emptyMsg){
 /* 성과 대시보드 — 전사 공개. 개인정보(구성원·지원자)는 쓰지 않아요. */
 function renderPerfDash(){
   const companies = DB.okrs.filter(o=>o.level==='회사');
-  const companyAvg = companies.length ? Math.round(companies.reduce((a,c)=>a+companyQuarterProgress(c),0)/companies.length) : 0;
+  const companyAvg = companies.length ? Math.round(companies.reduce((a,c)=>a+companyProgress(c),0)/companies.length) : 0;
 
   document.getElementById('perfdash-kpis').innerHTML = `
     <div class="kpi"><div class="label">기업 목표 평균 달성률</div><div class="value">${companyAvg}%</div></div>
@@ -1324,22 +1317,13 @@ function renderPerfDash(){
   `;
 
   document.getElementById('perfdash-goal-cards').innerHTML = companies.map(c=>{
-    const qp = companyQuarterProgress(c);
+    const p = companyProgress(c);
     return `
-    <div style="margin-bottom:16px;">
+    <div style="margin-bottom:14px;">
       <div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:8px;">
-        <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.quarter)}</span></span><span>${qp}%</span>
+        <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.month||'')}</span></span><span>${p}%</span>
       </div>
-      <div style="display:flex;gap:10px;">
-        ${monthsOfQuarter(c.quarter).map(m=>{
-          const mp = companyMonthProgress(c, m);
-          return `<div style="flex:1;text-align:center;font-size:11.5px;color:var(--sub);">
-            <div>${m.slice(5)}월</div>
-            <div class="bar" style="margin:4px 0;"><i style="width:${mp==null?0:mp}%"></i></div>
-            <div>${mp==null?'-':mp+'%'}</div>
-          </div>`;
-        }).join('')}
-      </div>
+      <div class="bar"><i style="width:${p}%"></i></div>
     </div>`;
   }).join('') || '<div class="empty">등록된 기업 목표가 없어요</div>';
 
@@ -1424,24 +1408,14 @@ function renderOkr(){
   document.getElementById('okr-list').innerHTML = `
     <div class="section-head"><h3>기업 목표</h3></div>
     ${companies.map(c=>{
-      const qp = companyQuarterProgress(c);
+      const p = companyProgress(c);
       return `
-      <div style="margin-bottom:18px;">
+      <div style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;">
-          <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.quarter)}</span></span>
-          <span>${qp}%</span>
+          <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.month||'')}</span></span>
+          <span>${p}%</span>
         </div>
-        <div class="bar" style="margin-bottom:8px;"><i style="width:${qp}%"></i></div>
-        <div style="display:flex;gap:8px;">
-          ${monthsOfQuarter(c.quarter).map(m=>{
-            const mp = companyMonthProgress(c, m);
-            return `<div style="flex:1;text-align:center;font-size:11.5px;color:var(--sub);">
-              <div>${m.slice(5)}월</div>
-              <div class="bar" style="margin:4px 0;"><i style="width:${mp==null?0:mp}%"></i></div>
-              <div>${mp==null?'-':mp+'%'}</div>
-            </div>`;
-          }).join('')}
-        </div>
+        <div class="bar"><i style="width:${p}%"></i></div>
       </div>`;
     }).join('') || '<div class="empty">등록된 기업 목표가 없어요</div>'}
 
@@ -1497,13 +1471,13 @@ function renderMyPage(){
   const teamAvg = teamOrgsThisMonth.length ? Math.round(teamOrgsThisMonth.reduce((a,o)=>a+orgProgress(o),0)/teamOrgsThisMonth.length) : 0;
 
   const companyIds = [...new Set(teamOrgsThisMonth.map(o=>o.parent))];
-  const companyProgresses = companyIds.map(id=>DB.okrs.find(o=>o.id===id)).filter(Boolean).map(companyQuarterProgress);
+  const companyProgresses = companyIds.map(id=>DB.okrs.find(o=>o.id===id)).filter(Boolean).map(companyProgress);
   const companyAvg = companyProgresses.length ? Math.round(companyProgresses.reduce((a,v)=>a+v,0)/companyProgresses.length) : 0;
 
   document.getElementById('mypage-kpis').innerHTML = `
     <div class="kpi"><div class="label">내 목표 달성률</div><div class="value">${myAvg}%</div></div>
     <div class="kpi"><div class="label">우리 팀 이번 달 달성률</div><div class="value">${teamAvg}%</div></div>
-    <div class="kpi"><div class="label">우리 회사 이번 분기 달성률</div><div class="value">${companyAvg}%</div></div>
+    <div class="kpi"><div class="label">우리 회사 이번 달 달성률</div><div class="value">${companyAvg}%</div></div>
     <div class="kpi"><div class="label">진행중인 내 목표</div><div class="value">${myGoals.length}건</div></div>
   `;
 
@@ -1519,7 +1493,7 @@ function renderMyPage(){
       </div>
       <div class="bar" style="margin-bottom:6px;"><i style="width:${p}%"></i></div>
       <div style="font-size:11.5px;color:var(--sub);margin-bottom:8px;">
-        ${org?`↳ 팀 목표: ${escapeHtml(org.title)} (${orgProgress(org)}%)`:''}${company?` → 회사 목표: ${escapeHtml(company.title)} (${companyQuarterProgress(company)}%)`:''}
+        ${org?`↳ 팀 목표: ${escapeHtml(org.title)} (${orgProgress(org)}%)`:''}${company?` → 회사 목표: ${escapeHtml(company.title)} (${companyProgress(company)}%)`:''}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
         ${tasks.map(t=>`
