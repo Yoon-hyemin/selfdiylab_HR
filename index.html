@@ -275,10 +275,6 @@
               <div class="side-stat"><span>✉️ 이메일</span><span id="mp-side-email"></span></div>
             </div>
             <div class="side-card">
-              <div class="side-stat"><span>근무한 시간</span><b id="mp-worked-hours"></b></div>
-              <div class="side-stat"><span>보유한 연차</span><b id="mp-leave-left"></b></div>
-            </div>
-            <div class="side-card">
               <h5>다음으로 이동...</h5>
               <div class="jump-chips" id="mp-jump-chips"></div>
             </div>
@@ -636,8 +632,6 @@ function renderMemberProfile(){
   document.getElementById('mp-intro').textContent = m.intro || '내 소개 작성하기';
   document.getElementById('mp-side-phone').textContent = m.phone || '-';
   document.getElementById('mp-side-email').textContent = m.email || '-';
-  document.getElementById('mp-worked-hours').textContent = m.workedHours || '-';
-  document.getElementById('mp-leave-left').textContent = m.leaveLeft || '-';
 
   const sections = [
     {key:'hr', anchor:'sec-hr', title:'인사 정보', action:['추가','openEditHrInfo'],
@@ -646,16 +640,16 @@ function renderMemberProfile(){
     {key:'basic', anchor:'sec-basic', title:'기본 정보', action:['변경','openEditBasicInfo'],
       body: `
       <div class="info-row">
-        <div class="iv"><span class="ik">이름</span>본명 ${val(m.name)} &nbsp;닉네임 ${val(m.nickname)}</div>
+        <div class="iv"><span class="ik">이름</span>${val(m.name)}</div>
       </div>
       <div class="info-row">
-        <div class="iv"><span class="ik">이메일·사번</span>이메일 ${val(m.email)} &nbsp;개인이메일 ${val(m.personalEmail)} &nbsp;사번 ${val(m.employeeNo)}</div>
+        <div class="iv"><span class="ik">이메일</span>이메일 ${val(m.email)} &nbsp;개인이메일 ${val(m.personalEmail)}</div>
       </div>
       <div class="info-row">
         <div class="iv"><span class="ik">입사 정보</span>입사일 ${val(m.hireDate)} &nbsp;그룹입사일 ${val(m.groupHireDate)} &nbsp;입사유형 ${val(m.hireType)}</div>
       </div>
       <div class="info-row">
-        <div class="iv"><span class="ik">주민등록번호·생일</span>주민등록번호 <span class="placeholder">보안상 이 데모에서는 입력받지 않아요</span> &nbsp;생일 ${val(m.birthday)}</div>
+        <div class="iv"><span class="ik">생일</span>${val(m.birthday)}</div>
       </div>
       <div class="info-row"><div class="iv"><span class="ik">휴대전화번호</span>${val(m.phone)}</div></div>
       <div class="info-row"><div class="iv"><span class="ik">주소</span>${val(m.address)}</div></div>
@@ -724,14 +718,10 @@ function openEditBasicInfo(){
   const m = getCurrentMember();
   showModal(`
     <h3>기본 정보 변경</h3>
+    <div class="field"><label>본명</label><input id="f-b-name" value="${escapeHtml(m.name)}"></div>
     <div class="form-row">
-      <div class="field"><label>본명</label><input id="f-b-name" value="${escapeHtml(m.name)}"></div>
-      <div class="field"><label>닉네임</label><input id="f-b-nick" value="${escapeHtml(m.nickname||'')}"></div>
-    </div>
-    <div class="form-row3">
       <div class="field"><label>이메일</label><input id="f-b-email" value="${escapeHtml(m.email||'')}"></div>
       <div class="field"><label>개인 이메일</label><input id="f-b-pemail" value="${escapeHtml(m.personalEmail||'')}"></div>
-      <div class="field"><label>사번</label><input id="f-b-empno" value="${escapeHtml(m.employeeNo||'')}"></div>
     </div>
     <div class="form-row3">
       <div class="field"><label>입사일</label><input id="f-b-hire" type="date" value="${dateOnly(m.hireDate)}"></div>
@@ -750,10 +740,8 @@ function openEditBasicInfo(){
 async function saveBasicInfo(){
   const patch = {
     name: document.getElementById('f-b-name').value,
-    nickname: document.getElementById('f-b-nick').value,
     email: document.getElementById('f-b-email').value,
     personalEmail: document.getElementById('f-b-pemail').value,
-    employeeNo: document.getElementById('f-b-empno').value,
     hireDate: document.getElementById('f-b-hire').value,
     groupHireDate: document.getElementById('f-b-ghire').value,
     hireType: document.getElementById('f-b-htype').value,
