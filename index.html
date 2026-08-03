@@ -331,7 +331,7 @@
     <!-- OKR -->
     <div class="view" id="view-okr">
       <div class="page-head">
-        <div><h1>목표</h1><p>회사 · 조직 · 개인 3단계 목표를 등록하고 진척률을 추적하세요</p></div>
+        <div><h1>목표</h1><p>기업(분기) · 부서(월별) 목표를 등록하세요. 개인 목표는 마이페이지에서 만들어요</p></div>
         <button class="btn primary" onclick="openOkrModal()">+ 새 목표 추가</button>
       </div>
       <div class="section" id="okr-list"></div>
@@ -1023,41 +1023,48 @@ function companyQuarterProgress(companyOkr){
 function openOkrModal(){
   showModal(`
     <h3>새 목표 추가</h3>
-    <div class="modal-sub">회사 → 조직 → 개인 3단계로 목표를 연결할 수 있어요</div>
+    <div class="modal-sub">개인 목표는 마이페이지에서 만들 수 있어요</div>
     <div class="form-row">
-      <div class="field"><label>레벨</label><select id="f-olevel"><option>회사</option><option>조직</option><option selected>개인</option></select></div>
-      <div class="field"><label>사이클</label><input id="f-oquarter" placeholder="2026-Q3"></div>
+      <div class="field"><label>레벨</label><select id="f-olevel" onchange="onOkrLevelChange()"><option value="회사">기업</option><option value="조직" selected>부서</option></select></div>
+      <div class="field" id="f-oquarter-wrap"><label>분기</label><input id="f-oquarter" placeholder="2026-Q3" value="2026-Q3"></div>
+      <div class="field" id="f-omonth-wrap"><label>월</label><input id="f-omonth" type="month"></div>
     </div>
     <div class="field"><label>목표 제목</label><input id="f-otitle" placeholder="예: 채용 리드타임 단축"></div>
-    <div class="form-row">
-      <div class="field"><label>담당 주체</label><input id="f-oowner" placeholder="담당자/팀"></div>
-      <div class="field"><label>상위 목표</label>
-        <select id="f-oparent"><option value="">상위 목표 선택 안함</option>${DB.okrs.map(o=>`<option value="${o.id}">[${o.level}] ${escapeHtml(o.title)}</option>`).join('')}</select>
+    <div class="form-row" id="f-oorg-fields">
+      <div class="field"><label>부서(팀)명</label><input id="f-oowner" placeholder="예: 세일즈팀"></div>
+      <div class="field"><label>상위 기업 목표</label>
+        <select id="f-oparent"><option value="">선택 안함</option>${DB.okrs.filter(o=>o.level==='회사').map(o=>`<option value="${o.id}">${escapeHtml(o.title)} (${escapeHtml(o.quarter)})</option>`).join('')}</select>
       </div>
     </div>
-    <div class="field"><label>목표 설명</label><textarea id="f-odesc" placeholder="목표에 대한 설명을 적어주세요"></textarea></div>
-    <div class="form-row3">
-      <div class="field"><label>측정 단위</label><input id="f-ounit" value="%" placeholder="%"></div>
-      <div class="field"><label>시작 수치</label><input id="f-ostart" type="number" value="0"></div>
-      <div class="field"><label>목표 수치</label><input id="f-otarget" type="number" value="100"></div>
-    </div>
-    <div class="field"><label>진척률(%)</label><input id="f-oprogress" type="number" min="0" max="100" value="0"></div>
-    <div class="field"><label>공개 범위</label><select id="f-ovisible"><option>모두에게 공개</option><option>일부에게 공개</option></select></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOkr()">목표 생성</button></div>
   `);
+  onOkrLevelChange();
+}
+function onOkrLevelChange(){
+  const level = document.getElementById('f-olevel').value;
+  document.getElementById('f-oquarter-wrap').style.display = level==='회사' ? '' : 'none';
+  document.getElementById('f-omonth-wrap').style.display = level==='조직' ? '' : 'none';
+  document.getElementById('f-oorg-fields').style.display = level==='조직' ? '' : 'none';
 }
 async function saveOkr(){
+  const level = document.getElementById('f-olevel').value;
   const title = document.getElementById('f-otitle').value.trim();
   if(!title) return alert('목표 제목을 입력해주세요');
-  await apiPost('/okrs', {quarter:document.getElementById('f-oquarter').value||'2026-Q3', level:document.getElementById('f-olevel').value, title,
-    owner:document.getElementById('f-oowner').value||'-', parent:document.getElementById('f-oparent').value||null,
-    progress:Number(document.getElementById('f-oprogress').value)||0, unit:document.getElementById('f-ounit').value||'%',
-    target:Number(document.getElementById('f-otarget').value)||100});
+
+  try{
+    if(level==='회사'){
+      await apiPost('/okrs', {level, title, quarter:document.getElementById('f-oquarter').value||'2026-Q3'});
+    } else {
+      const month = document.getElementById('f-omonth').value;
+      const parent = document.getElementById('f-oparent').value;
+      if(!month) return alert('월을 선택해주세요');
+      if(!parent) return alert('상위 기업 목표를 선택해주세요');
+      await apiPost('/okrs', {level, title, month, parent, owner:document.getElementById('f-oowner').value||'-'});
+    }
+  }catch(err){
+    return alert(err.message);
+  }
   await refreshDB(); closeModal(); renderOkr();
-}
-async function updateOkrProgress(id, val){
-  await apiPatch('/okrs/'+id, {progress:Number(val)});
-  await refreshDB(); renderOkr();
 }
 
 /* ---------- EVAL / 9-GRID (역량: 공동/리드/직무 + 성과 + 커스텀) ---------- */
@@ -1329,25 +1336,46 @@ function renderCandidates(){
 
 /* ---------- OKR RENDER ---------- */
 function renderOkr(){
-  const byLevel = {'회사':[], '조직':[], '개인':[]};
-  DB.okrs.forEach(o=>{ if(!byLevel[o.level]) byLevel[o.level]=[]; byLevel[o.level].push(o); });
-  document.getElementById('okr-list').innerHTML = Object.keys(byLevel).map(level=>`
-    <div class="section-head"><h3>${level} 목표</h3></div>
-    ${byLevel[level].map(o=>{
-      const parent = o.parent ? DB.okrs.find(x=>x.id===o.parent) : null;
+  const companies = DB.okrs.filter(o=>o.level==='회사');
+  const orgs = DB.okrs.filter(o=>o.level==='조직');
+  document.getElementById('okr-list').innerHTML = `
+    <div class="section-head"><h3>기업 목표</h3></div>
+    ${companies.map(c=>{
+      const qp = companyQuarterProgress(c);
+      return `
+      <div style="margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;">
+          <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.quarter)}</span></span>
+          <span>${qp}%</span>
+        </div>
+        <div class="bar" style="margin-bottom:8px;"><i style="width:${qp}%"></i></div>
+        <div style="display:flex;gap:8px;">
+          ${monthsOfQuarter(c.quarter).map(m=>{
+            const mp = companyMonthProgress(c, m);
+            return `<div style="flex:1;text-align:center;font-size:11.5px;color:var(--sub);">
+              <div>${m.slice(5)}월</div>
+              <div class="bar" style="margin:4px 0;"><i style="width:${mp==null?0:mp}%"></i></div>
+              <div>${mp==null?'-':mp+'%'}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('') || '<div class="empty">등록된 기업 목표가 없어요</div>'}
+
+    <div class="section-head" style="margin-top:24px;"><h3>부서 목표</h3></div>
+    ${orgs.map(o=>{
+      const parent = DB.okrs.find(x=>x.id===o.parent);
+      const p = orgProgress(o);
       return `
       <div style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;">
-          <span>${escapeHtml(o.title)} <span class="badge grey">${escapeHtml(o.quarter)}</span> <span style="color:var(--sub);font-weight:500;">${escapeHtml(o.owner)}</span>${parent?` <span style="color:var(--sub);font-weight:500;">↳ 상위: ${escapeHtml(parent.title)}</span>`:''}</span>
-          <span>${o.progress}${escapeHtml(o.unit||'%')}</span>
+          <span>${escapeHtml(o.title)} <span class="badge grey">${escapeHtml(o.month||'')}</span> <span style="color:var(--sub);font-weight:500;">${escapeHtml(o.owner)}</span>${parent?` <span style="color:var(--sub);font-weight:500;">↳ 상위: ${escapeHtml(parent.title)}</span>`:''}</span>
+          <span>${p}%</span>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div class="bar" style="flex:1;"><i style="width:${Math.min(100,o.progress)}%"></i></div>
-          <input type="range" min="0" max="${o.target||100}" value="${o.progress}" oninput="updateOkrProgress('${o.id}', this.value)" style="width:120px;">
-        </div>
-      </div>
-    `;}).join('') || '<div class="empty">등록된 목표가 없어요</div>'}
-  `).join('');
+        <div class="bar"><i style="width:${p}%"></i></div>
+      </div>`;
+    }).join('') || '<div class="empty">등록된 부서 목표가 없어요</div>'}
+  `;
 }
 
 /* ---------- DATA MGMT ---------- */
