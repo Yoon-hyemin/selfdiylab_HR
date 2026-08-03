@@ -445,22 +445,33 @@ function escapeHtml(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-let DB = { members:[], jobs:[], candidates:[], okrs:[], evals:[], calibration:{}, oneonones:[] };
+// DB.members holds FULL member records and stays empty until the HR password
+// unlocks the 인사 area. DB.roster is a name-only [{id, name}] list that is
+// always available, including with no password entered -- 평가 만들기 /
+// 원온원 보내기 are company-wide features, so their 구성원 <select> has to be
+// populated on first load. Use DB.roster for pickers, DB.members only inside
+// the password-gated 구성원 views.
+let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], evals:[], calibration:{}, oneonones:[] };
 
 /* 인사 영역 잠금 해제 여부. 페이지 로드마다 초기화돼요
    (localStorage/sessionStorage에 저장하지 않아요). */
 let hrAuthed = false;
 
-/* 성과관리 데이터: 전사 공개. 비밀번호 없이 매 페이지 로드마다 받아와요. */
+/* 성과관리 데이터: 전사 공개. 비밀번호 없이 매 페이지 로드마다 받아와요.
+   d.members는 {id, name}만 담긴 명단이에요(이름은 이미 evals/oneonones의
+   employeeName으로 공개돼 있어요). 나머지 구성원 정보는 /all에만 있어요. */
 async function refreshPublicData(){
   const d = await apiGet('/public-data');
+  DB.roster = d.members;
   DB.okrs = d.okrs; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
 /* 인사 데이터(구성원·채용): HR 비밀번호가 있어야 받아올 수 있어요. hrHeaders가
-   비어 있으면 서버가 401을 돌려주므로 unlockHr() 이후에만 호출해요. */
+   비어 있으면 서버가 401을 돌려주므로 잠금 해제 이후에만 호출해요. */
 async function refreshHrData(){
   const d = await apiGet('/all');
   DB.members = d.members; DB.jobs = d.jobs; DB.candidates = d.candidates;
+  // 잠금 해제 뒤 새로 추가한 구성원도 선택 목록에 바로 보이도록 명단을 갱신해요.
+  DB.roster = d.members.map(m => ({ id: m.id, name: m.name }));
   DB.okrs = d.okrs; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
 /* 기존 호출부 호환용. 인사 화면에서만 쓰이므로 잠금 해제 전이면 공개 데이터만 갱신해요. */
@@ -1035,7 +1046,7 @@ function openEvalModal(){
     <h3>평가 만들기</h3>
     <div class="modal-sub">역량 3요소 + 성과 + 커스텀 구조로 평가해요</div>
     <div class="form-row">
-      <div class="field"><label>구성원</label><select id="f-ename">${DB.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>구성원</label><select id="f-ename">${DB.roster.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
       <div class="field"><label>분기</label><input id="f-equarter" placeholder="2026-Q2"></div>
     </div>
     <div class="form-row3">
@@ -1176,7 +1187,7 @@ function openOneOnOneModal(){
   showModal(`
     <h3>원온원 보내기</h3>
     <div class="form-row">
-      <div class="field"><label>구성원</label><select id="f-mname">${DB.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>구성원</label><select id="f-mname">${DB.roster.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select></div>
       <div class="field"><label>날짜</label><input id="f-mdate" type="date" value="${today()}"></div>
     </div>
     <div class="field"><label>내용</label><textarea id="f-mnote" placeholder="면담 내용을 기록하세요"></textarea></div>

@@ -8,10 +8,16 @@
  * identical to the corresponding four keys of handlers/all.js so the frontend
  * can use either source interchangeably.
  *
- * The `members` table is queried for the id -> name lookup only (evals and
- * oneonones expose an `employeeName`); no member record or any other member
- * column is ever included in this response, since /api/all is the gated
- * endpoint for anything member-related.
+ * The `members` table is queried for `id, name` ONLY. Those two columns are
+ * returned as a `members` roster so the ungated 평가 만들기 / 원온원 보내기
+ * modals can build their employee <select> without the HR password (POST
+ * /api/evals and /api/oneonones are deliberately ungated, so the picker that
+ * feeds them has to work too). This is not new PII exposure: the same names
+ * already ship in this payload as `employeeName` on every eval/oneonone.
+ *
+ * Every other member column -- team, position, email, phone, address,
+ * contracts, salary, 인사노트 etc. -- stays behind the password gate and is
+ * only reachable via /api/all. Do not widen the SELECT below.
  */
 
 import { sql } from './_lib/db.js';
@@ -21,7 +27,7 @@ export default async function handler(req, res) {
 
   try {
     const [members, okrs, evals, calibrationCycles, calibrationOverrides, oneonones] = await Promise.all([
-      sql`SELECT id, name FROM members`,
+      sql`SELECT id, name FROM members ORDER BY name`,
       sql`SELECT * FROM okrs`,
       sql`SELECT * FROM evals`,
       sql`SELECT * FROM calibration_cycles`,
@@ -61,6 +67,8 @@ export default async function handler(req, res) {
     }));
 
     res.status(200).json({
+      // id + name ONLY -- see the file header before adding any field here.
+      members: members.map(m => ({ id: m.id, name: m.name })),
       okrs: okrs_out,
       evals: evals_out,
       calibration: calibration_out,
