@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **수정 이력(2026-08-03, 구현 완료 후)**: 이 계획 문서 본문은 "기업 목표=분기, 부서/개인=월"을 전제로 작성됐지만, 실제 구현 중 사용자 피드백에 따라 **기업 목표도 부서와 동일하게 매달 세우는 것**으로 바뀌었다(회사 목표에 분기 대신 월 필드 사용, 부서 목표는 같은 달의 회사 목표만 상위로 선택 가능, 달성률은 세 레벨 모두 "바로 아래 자식의 평균"으로 통일). 최신 사양은 `docs/superpowers/specs/2026-08-03-goal-cascade-and-mypage-design.md`와 커밋 `18f0ac7`/`4184d0a`를 참고할 것 — 아래 Task 본문의 "분기"/`quarter` 관련 서술은 그 기준으로 갱신해서 읽는다.
+
 **Goal:** 기업(분기)→부서(월별, 팀당 월 3개)→개인(월별, 체크리스트) 3단계 목표 구조를 만들어, 개인이 할 일을 체크하면 개인→부서→기업 달성률이 자동 집계되고, 성과 대시보드에 기업/부서 달성률이 표시되며, 이메일만으로 로그인하는 "마이페이지"에서 본인의 목표·평가·원온원을 볼 수 있게 한다.
 
 **Architecture:** 기존 패턴(정적 `index.html` + Vercel 서버리스 `/api/*` + Neon Postgres, 클라이언트가 전체 데이터를 한 번에 받아 렌더링/집계) 그대로 확장. 달성률은 DB에 저장하지 않고 매 렌더마다 클라이언트에서 계산. 개인 로그인은 비밀번호 없이 이메일 매칭 + HMAC 서명 쿠키 세션.
