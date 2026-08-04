@@ -1,0 +1,61 @@
+# SelfDIYLab HR 시스템 — 프로젝트 메모
+
+이 폴더 하나로 이 프로젝트 작업에 필요한 모든 게 모여 있어야 한다. 새 세션에서 이 폴더를 열면 아래 내용만 읽고 바로 이어서 작업할 수 있게 유지할 것 — 코드/문서를 옮기거나 크게 바꿀 때는 이 파일도 같이 갱신한다.
+
+## 이게 뭔가
+
+주식회사 셀디랩의 자체 인사(HR) 시스템. 채용, 구성원 관리, OKR/목표, 평가(9-그리드), 캘리브레이션, 원온원을 한 웹앱에서 관리한다. `flex`(외부 HR SaaS)의 화면 구조를 참고해서 자체 제작 중.
+
+- 배포: Vercel 프로젝트 `selfdiylab-hr` (https://selfdiylab-hr.vercel.app), GitHub `Yoon-hyemin/selfdiylab_HR`의 `master` 브랜치를 push하면 자동 배포됨
+- DB: Neon Postgres (Vercel 프로젝트 Settings → Environments → Production → Environment Variables에 `DATABASE_URL`, `HR_PASSWORD`, `SESSION_SECRET`이 Sensitive로 등록돼 있음 — 값은 대시보드에서 다시 조회 불가, 필요하면 Neon 콘솔에서 새로 복사)
+
+## 로컬에서 실행하기
+
+1. `.env.local.example`을 복사해 `.env.local` 생성, `DATABASE_URL`(Neon 콘솔에서 복사)·`HR_PASSWORD`·`SESSION_SECRET`(아무 임의 문자열) 채우기
+2. `npm install`
+3. 스키마 변경이 있었다면 `node scripts/run-sql.js sql/00X_*.sql`로 마이그레이션 적용 (한 번만)
+4. `node scripts/dev-server.js` → `http://localhost:3000` (Vercel 라우팅을 흉내내는 로컬 전용 서버. `vercel dev`는 대화형 로그인이 필요해 이 환경에서 못 씀)
+
+Claude Code에서는 `.claude/launch.json`에 `hr-dev-server` 설정이 있어서, preview 도구로 이름만 지정하면 서버가 자동으로 켜지고 브라우저가 열린다.
+
+## 아키텍처
+
+```
+index.html (정적 SPA, 전체 UI)
+  ├─ 인사(구성원/채용) — HR_PASSWORD 공유 비밀번호로 잠김
+  ├─ 성과관리(목표/평가/캘리브레이션/원온원) — 로그인 없이 전사 공개
+  └─ 마이페이지 — 구성원 개인 이메일 로그인(비밀번호 없음), 본인 목표/평가/원온원만
+        │ fetch
+        ▼
+api/[...path].js  (Vercel 서버리스 함수 1개 — Hobby 플랜 12개 제한 때문에
+                    실제 핸들러는 전부 handlers/*.js에 있고 이 파일이 정적
+                    라우트 테이블로 매칭해서 위임한다)
+        │
+        ▼
+handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgres
+```
+
+**핵심 패턴**: 프론트가 `/api/public-data`(또는 `/api/all`)로 전체 데이터를 한 번에 받아 `DB` 전역 객체에 저장하고, 모든 화면(대시보드 KPI, 9-그리드, 목표 달성률 등)은 그 객체를 클라이언트에서 매 렌더마다 계산한다. 서버는 원본 row만 내려주고 집계는 안 한다 — 이 프로젝트 규모(수십 명)에서는 이게 트리거/배치보다 훨씬 단순하고 충분하다. 새 화면 만들 때도 이 패턴을 따를 것.
+
+## 목표(OKR) 계층 — 2026-08 재설계
+
+기업(회사)·부서(조직)·개인 3단계 전부 **월 단위**로 세운다 (기업만 예외로 분기였다가, 사용자 피드백으로 부서/개인과 동일하게 월 단위로 통일함 — `docs/superpowers/specs/2026-08-03-goal-cascade-and-mypage-design.md`의 "수정 이력" 참고).
+
+- 부서 목표는 반드시 **같은 달**의 기업 목표를 상위로 선택해야 하고, 같은 팀·같은 달에 3개 초과 생성 불가 (서버 검증, `handlers/okrs/index.js`)
+- 개인 목표는 `/api/okrs`가 아니라 `/api/my-goals`로만 생성 (로그인한 본인 명의로만)
+- 달성률은 **DB에 저장하지 않고 매 렌더마다 계산**: 개인 = 체크리스트 완료율, 부서 = 소속 개인 목표 평균, 기업 = 소속 부서 목표 평균 (전부 "바로 아래 자식의 평균" 패턴 — `index.html`의 `individualProgress`/`orgProgress`/`companyProgress`)
+- 개인 로그인("마이페이지")은 비밀번호 없이 `members.email` 일치만으로 세션 발급 (`handlers/member-login.js`) — 의도된 트레이드엄, 후속 과제는 스펙 문서 참고
+
+## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
+
+- 핸들러 파일 상단에 JSDoc 스타일 블록 코멘트로 "왜 이렇게 했는지"(트레이드오프, 보안 이유, 과거 버그 회피)를 남기는 게 이 코드베이스의 관례. 일반적인 "코멘트 최소화" 원칙보다 이 프로젝트의 기존 스타일을 따른다.
+- API 응답 필드는 camelCase, DB 컬럼은 snake_case — 매핑은 각 핸들러의 `*_out` 변환에서 담당
+- `handlers/all.js`(HR 비밀번호 필요)와 `handlers/public-data.js`(공개)는 같은 테이블을 다른 필터로 내보내는 짝 파일 — 하나 고치면 다른 것도 확인
+- 새 API 엔드포인트를 추가하면 `api/[...path].js`의 import + `ROUTES` 배열에도 반드시 등록해야 실제로 라우팅됨 (로컬 dev-server.js는 파일시스템 기반이라 이 등록 없이도 동작하지만, Vercel 배포에는 이 파일이 유일한 진입점)
+
+## 참고 문서
+
+- `docs/superpowers/specs/` — 기능 설계 스펙 (배경/트레이드오프)
+- `docs/superpowers/plans/` — 구현 계획 (파일별 작업 내역)
+- `채용_성과관리_프로세스.md` — 채용·성과관리 프로세스 전체 그림(RACI, SLA)
+- `flex_*.md` — 참고 대상인 flex(외부 HR SaaS) 화면 구조 실측 노트. 화면/필드 설계할 때 참고
