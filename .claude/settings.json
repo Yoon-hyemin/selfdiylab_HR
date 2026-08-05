@@ -17,7 +17,14 @@
       "Bash(node scripts/dev-server.js)",
       "Bash(node scripts/dev-server.js *)",
       "Bash(node scripts/run-sql.js *)",
-      "Bash(node scripts/verify-seed.js)"
+      "Bash(node scripts/verify-seed.js)",
+      "Bash(bash \"/c/Users/user/.claude/skills/subagent-driven-development/scripts/task-brief\"*)",
+      "Bash(bash \"/c/Users/user/.claude/skills/subagent-driven-development/scripts/review-package\"*)",
+      "Bash(bash \"/c/Users/user/.claude/skills/subagent-driven-development/scripts/sdd-workspace\"*)",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__find",
+      "mcp__Claude_Browser__read_console_messages"
     ]
   }
 }
