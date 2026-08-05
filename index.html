@@ -1127,6 +1127,67 @@ function switchOkrTab(tab){
 }
 
 /* ---------- OKR ---------- */
+function monthOptionsHtml(){
+  const t = thisMonthKey(), p = prevMonthKey();
+  return `<option value="${t}">${t} (이번 달)</option><option value="${p}">${p} (지난달)</option>`;
+}
+function openCompanyGoalModal(){
+  showModal(`
+    <h3>회사 목표 만들기</h3>
+    <div class="field"><label>월</label><select id="f-cgoal-month">${monthOptionsHtml()}</select></div>
+    <div class="field"><label>목표 제목</label><input id="f-cgoal-title" placeholder="예: 신뢰받는 채용 브랜드로 성장한다"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCompanyGoal()">목표 생성</button></div>
+  `);
+}
+async function saveCompanyGoal(){
+  const month = document.getElementById('f-cgoal-month').value;
+  const title = document.getElementById('f-cgoal-title').value.trim();
+  if(!title) return alert('목표 제목을 입력해주세요');
+  try{ await apiPost('/okrs', {level:'회사', title, month}); }catch(err){ return alert(err.message); }
+  await refreshDB(); closeModal(); renderOkrOverview(); renderOkrDept();
+}
+function renderOkrOverview(){
+  const el = document.getElementById('okr-overview-body');
+  if(!el) return;
+  const month = thisMonthKey();
+  const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===month);
+  const orgs = DB.okrs.filter(o=>o.level==='조직' && o.month===month);
+  const orgAvgs = orgs.map(orgProgress);
+  const overallAvg = orgAvgs.length ? Math.round(orgAvgs.reduce((a,v)=>a+v,0)/orgAvgs.length) : 0;
+  const teams = [...new Set(orgs.map(o=>o.owner))];
+
+  el.innerHTML = `
+    ${me && me.role==='관리자' ? `<div style="text-align:right;margin-bottom:12px;"><button class="btn primary sm" onclick="openCompanyGoalModal()">+ 회사 목표 추가</button></div>` : ''}
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;"><span>📊 이번 달(${month}) 전사 달성률</span><span style="color:${progressTextColor(overallAvg)}">${overallAvg}%</span></div>
+      <div class="bar"><i style="width:${overallAvg}%;${progressBarStyle(overallAvg)}"></i></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>기업 목표</h3></div>
+      ${companies.map(c=>{
+        const p = companyProgress(c);
+        return `<div style="margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;"><span>${escapeHtml(c.title)}</span><span style="color:${progressTextColor(p)}">${p}%</span></div>
+          <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
+        </div>`;
+      }).join('') || '<div class="empty">등록된 기업 목표가 없어요</div>'}
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>부서 목표</h3></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        ${teams.map(team=>{
+          const teamGoals = orgs.filter(o=>o.owner===team);
+          const avg = teamGoals.length ? Math.round(teamGoals.reduce((a,g)=>a+orgProgress(g),0)/teamGoals.length) : 0;
+          return `<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:var(--sub);text-transform:uppercase;margin-bottom:6px;"><span>${escapeHtml(team)}</span><span style="color:${progressTextColor(avg)}">${avg}%</span></div>
+            ${teamGoals.map(g=>`<div style="font-size:13px;margin-bottom:4px;">${escapeHtml(g.title)}</div>`).join('')}
+            <div class="bar"><i style="width:${avg}%;${progressBarStyle(avg)}"></i></div>
+          </div>`;
+        }).join('') || '<div class="empty">등록된 부서 목표가 없어요</div>'}
+      </div>
+    </div>
+  `;
+}
 
 /* ---------- EVAL / 9-GRID (역량: 공동/리드/직무 + 성과 + 커스텀) ---------- */
 function openEvalModal(){
@@ -1417,40 +1478,6 @@ function renderCandidates(){
       <td><button class="btn ghost sm" onclick="viewCandidateHistory('${c.id}')">히스토리</button></td>
     </tr>
   `).join('') || `<tr><td colspan="5" class="empty">지원자가 없어요</td></tr>`;
-}
-
-/* ---------- OKR RENDER ---------- */
-function renderOkr(){
-  const companies = DB.okrs.filter(o=>o.level==='회사');
-  const orgs = DB.okrs.filter(o=>o.level==='조직');
-  document.getElementById('okr-list').innerHTML = `
-    <div class="section-head"><h3>기업 목표</h3></div>
-    ${companies.map(c=>{
-      const p = companyProgress(c);
-      return `
-      <div style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;">
-          <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.month||'')}</span></span>
-          <span>${p}%</span>
-        </div>
-        <div class="bar"><i style="width:${p}%"></i></div>
-      </div>`;
-    }).join('') || '<div class="empty">등록된 기업 목표가 없어요</div>'}
-
-    <div class="section-head" style="margin-top:24px;"><h3>부서 목표</h3></div>
-    ${orgs.map(o=>{
-      const parent = DB.okrs.find(x=>x.id===o.parent);
-      const p = orgProgress(o);
-      return `
-      <div style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:6px;">
-          <span>${escapeHtml(o.title)} <span class="badge grey">${escapeHtml(o.month||'')}</span> <span style="color:var(--sub);font-weight:500;">${escapeHtml(o.owner)}</span>${parent?` <span style="color:var(--sub);font-weight:500;">↳ 상위: ${escapeHtml(parent.title)}</span>`:''}</span>
-          <span>${p}%</span>
-        </div>
-        <div class="bar"><i style="width:${p}%"></i></div>
-      </div>`;
-    }).join('') || '<div class="empty">등록된 부서 목표가 없어요</div>'}
-  `;
 }
 
 /* ---------- 마이페이지 ---------- */
