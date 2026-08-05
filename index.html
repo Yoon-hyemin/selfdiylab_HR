@@ -1188,6 +1188,115 @@ function renderOkrOverview(){
     </div>
   `;
 }
+function openDeptGoalModal(){
+  showModal(`
+    <h3>${escapeHtml(me.team)} 목표 만들기</h3>
+    <div class="field"><label>월</label><select id="f-dept-month">${monthOptionsHtml()}</select></div>
+    <div class="field"><label>파트 (선택)</label><input id="f-dept-part" placeholder="예: 인사, 회계 — 한 팀 안에서 안 나누면 비워두세요"></div>
+    <div class="field"><label>목표 제목</label><input id="f-dept-title" placeholder="예: 전 직원 월간 목표 등록률 100%"></div>
+    <div class="modal-sub">파트별로 한 달에 최대 5개까지 만들 수 있어요. 상위 기업 목표는 고른 월의 회사 목표로 자동 연결돼요</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveDeptGoal()">목표 생성</button></div>
+  `);
+}
+async function saveDeptGoal(){
+  const month = document.getElementById('f-dept-month').value;
+  const title = document.getElementById('f-dept-title').value.trim();
+  const part = document.getElementById('f-dept-part').value.trim();
+  if(!title) return alert('목표 제목을 입력해주세요');
+  const company = DB.okrs.find(o=>o.level==='회사' && o.month===month);
+  if(!company) return alert(month + ' 기업 목표가 아직 없어요. 관리자에게 등록을 요청해주세요');
+  try{ await apiPost('/okrs', {level:'조직', title, month, parent:company.id, owner:me.team, part}); }
+  catch(err){ return alert(err.message); }
+  await refreshDB(); closeModal(); renderOkrDept(); renderOkrOverview();
+}
+function renderOkrDept(){
+  const el = document.getElementById('okr-dept-body');
+  if(!el) return;
+  if(!me){ el.innerHTML = memberLoginBoxHtml('내 팀 목표 화면을 보려면 로그인해주세요'); return; }
+
+  const month = thisMonthKey();
+  const myTeam = me.team;
+  const teamOrgs = DB.okrs.filter(o=>o.level==='조직' && o.owner===myTeam && o.month===month);
+  const parts = [...new Set(teamOrgs.map(o=>o.part||''))];
+  const canCreate = me.role === '부서장';
+
+  const banners = (parts.length ? parts : ['']).map(part=>{
+    const goals = teamOrgs.filter(o=>(o.part||'')===part);
+    return `
+      <div class="section" style="margin-bottom:10px;">
+        <div style="font-size:11.5px;font-weight:800;color:var(--primary-dark);text-transform:uppercase;margin-bottom:8px;">${escapeHtml(myTeam)}${part?` <span class="badge blue">${escapeHtml(part)}</span>`:''}</div>
+        ${goals.map(g=>{
+          const p = orgProgress(g);
+          return `<div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;"><span>${escapeHtml(g.title)}</span><span style="color:${progressTextColor(p)}">${p}%</span></div>
+            <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
+          </div>`;
+        }).join('') || '<div class="empty">이번 달 목표가 없어요</div>'}
+      </div>`;
+  }).join('');
+
+  const createForm = canCreate ? `
+    <div class="section">
+      <div class="section-head"><h3>새 팀 목표 만들기</h3></div>
+      <button class="btn primary sm" onclick="openDeptGoalModal()">+ 목표 추가</button>
+    </div>` : '';
+
+  function memberPartKey(m){
+    const g = DB.okrs.find(o=>o.level==='개인' && o.member===m.id && o.month===month);
+    if(!g) return null;
+    const parent = DB.okrs.find(o=>o.id===g.parent);
+    return parent ? (parent.part||'') : null;
+  }
+  const teammates = DB.roster.filter(m=>m.team===myTeam);
+  const groups = {};
+  teammates.forEach(m=>{
+    const key = parts.length ? (memberPartKey(m) ?? '__unassigned__') : '';
+    (groups[key] = groups[key] || []).push(m);
+  });
+  Object.values(groups).forEach(list => list.sort((a,b)=>positionRank(a.position)-positionRank(b.position)));
+
+  const teammatesHtml = Object.keys(groups).sort((a,b)=>{
+    if(a==='__unassigned__') return 1; if(b==='__unassigned__') return -1; return a.localeCompare(b);
+  }).map(key=>{
+    const heading = key==='__unassigned__' ? '파트 미지정' : (key || myTeam);
+    const rows = groups[key].map(m=>{
+      const g = DB.okrs.find(o=>o.level==='개인' && o.member===m.id && o.month===month);
+      const p = g ? individualProgress(g) : 0;
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border);">
+          <div class="avatar-circle" style="width:32px;height:32px;font-size:12px;">${initials(m.name)}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;">${escapeHtml(m.name)} · ${escapeHtml(m.position||'')}${m.id===me.id?' (나)':''}</div>
+            <div style="font-size:12px;color:var(--sub);">${g ? escapeHtml(g.title) : '이번 달 개인 목표 없음'}</div>
+          </div>
+          <div style="width:100px;">
+            <div style="text-align:right;font-size:11.5px;color:${progressTextColor(p)};margin-bottom:4px;">${p}%</div>
+            <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
+          </div>
+        </div>`;
+    }).join('');
+    return `<div style="font-size:12px;font-weight:800;color:var(--sub);margin:14px 0 4px;text-transform:uppercase;">${escapeHtml(heading)}</div>${rows}`;
+  }).join('') || '<div class="empty">같은 팀 구성원이 없어요</div>';
+
+  const otherTeams = [...new Set(DB.okrs.filter(o=>o.level==='조직' && o.owner!==myTeam && o.month===month).map(o=>o.owner))];
+  const otherHtml = otherTeams.map(team=>{
+    const goals = DB.okrs.filter(o=>o.level==='조직' && o.owner===team && o.month===month);
+    const avg = goals.length ? Math.round(goals.reduce((a,g)=>a+orgProgress(g),0)/goals.length) : 0;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
+      <span style="font-size:12.5px;font-weight:700;">${escapeHtml(team)}</span>
+      <div class="bar" style="flex:1;margin:0 10px;"><i style="width:${avg}%;${progressBarStyle(avg)}"></i></div>
+      <span style="font-size:12.5px;font-weight:800;color:${progressTextColor(avg)};width:32px;text-align:right;">${avg}%</span>
+    </div>`;
+  }).join('') || '<div class="empty">다른 팀 목표가 없어요</div>';
+
+  el.innerHTML = `
+    ${banners}
+    ${createForm}
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;margin-top:20px;">
+      <div><div class="section-head"><h3>👥 ${escapeHtml(myTeam)} 팀원별 현황</h3></div>${teammatesHtml}</div>
+      <div><div class="section-head"><h3>다른 팀</h3></div>${otherHtml}</div>
+    </div>`;
+}
 
 /* ---------- EVAL / 9-GRID (역량: 공동/리드/직무 + 성과 + 커스텀) ---------- */
 function openEvalModal(){
