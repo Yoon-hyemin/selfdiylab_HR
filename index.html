@@ -645,7 +645,12 @@ function openMemberAddModal(){
       <div class="field"><label>소속 조직</label><input id="f-mteam" placeholder="예: 개발팀"></div>
       <div class="field"><label>직책</label><input id="f-mposition" placeholder="예: 매니저"></div>
     </div>
-    <div class="field"><label>휴대전화번호</label><input id="f-mphone" placeholder="010-0000-0000"></div>
+    <div class="form-row">
+      <div class="field"><label>휴대전화번호</label><input id="f-mphone" placeholder="010-0000-0000"></div>
+      <div class="field"><label>목표 화면 권한</label>
+        <select id="f-mrole"><option value="팀원" selected>팀원</option><option value="부서장">부서장</option><option value="관리자">관리자</option></select>
+      </div>
+    </div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMember()">추가</button></div>
   `);
 }
@@ -654,7 +659,8 @@ async function saveMember(){
   if(!name) return alert('이름을 입력해주세요');
   await apiPost('/members', {
     name, team:document.getElementById('f-mteam').value||'', position:document.getElementById('f-mposition').value||'',
-    email:document.getElementById('f-memail').value||'', phone:document.getElementById('f-mphone').value||''
+    email:document.getElementById('f-memail').value||'', phone:document.getElementById('f-mphone').value||'',
+    role:document.getElementById('f-mrole').value
   });
   await refreshDB(); closeModal(); renderMembers();
 }
@@ -786,6 +792,11 @@ function openEditBasicInfo(){
       <div class="field"><label>휴대전화번호</label><input id="f-b-phone" value="${escapeHtml(m.phone||'')}"></div>
     </div>
     <div class="field"><label>주소</label><input id="f-b-addr" value="${escapeHtml(m.address||'')}"></div>
+    <div class="field"><label>목표 화면 권한</label>
+      <select id="f-b-role">
+        ${['팀원','부서장','관리자'].map(r=>`<option value="${r}" ${(m.role||'팀원')===r?'selected':''}>${r}</option>`).join('')}
+      </select>
+    </div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveBasicInfo()">저장</button></div>
   `);
 }
@@ -799,7 +810,8 @@ async function saveBasicInfo(){
     hireType: document.getElementById('f-b-htype').value,
     birthday: document.getElementById('f-b-bday').value,
     phone: document.getElementById('f-b-phone').value,
-    address: document.getElementById('f-b-addr').value
+    address: document.getElementById('f-b-addr').value,
+    role: document.getElementById('f-b-role').value
   };
   await apiPatch('/members/'+currentMemberId, patch);
   await refreshDB(); closeModal(); renderMemberProfile();
