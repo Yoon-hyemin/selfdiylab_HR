@@ -1218,9 +1218,10 @@ function renderOkrDept(){
   const myTeam = me.team;
   const teamOrgs = DB.okrs.filter(o=>o.level==='조직' && o.owner===myTeam && o.month===month);
   const parts = [...new Set(teamOrgs.map(o=>o.part||''))];
+  const hasParts = parts.some(p=>p);
   const canCreate = me.role === '부서장';
 
-  const banners = (parts.length ? parts : ['']).map(part=>{
+  const banners = (hasParts ? parts : ['']).map(part=>{
     const goals = teamOrgs.filter(o=>(o.part||'')===part);
     return `
       <div class="section" style="margin-bottom:10px;">
@@ -1250,7 +1251,7 @@ function renderOkrDept(){
   const teammates = DB.roster.filter(m=>m.team===myTeam);
   const groups = {};
   teammates.forEach(m=>{
-    const key = parts.length ? (memberPartKey(m) ?? '__unassigned__') : '';
+    const key = hasParts ? (memberPartKey(m) ?? '__unassigned__') : '';
     (groups[key] = groups[key] || []).push(m);
   });
   Object.values(groups).forEach(list => list.sort((a,b)=>positionRank(a.position)-positionRank(b.position)));
