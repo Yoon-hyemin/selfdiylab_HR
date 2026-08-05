@@ -36,8 +36,6 @@ export default async function handler(req, res) {
 
   const memberId = getSessionMemberId(req);
   if (!memberId) return res.status(401).json({ error: '로그인이 필요해요' });
-  const [me] = await sql`SELECT role, team FROM members WHERE id = ${memberId}`;
-  if (!me) return res.status(401).json({ error: '로그인이 필요해요' });
 
   const b = req.body || {};
   if (!b.title || !b.title.trim()) return res.status(400).json({ error: 'title is required' });
@@ -47,6 +45,13 @@ export default async function handler(req, res) {
   if (!isEditableMonth(b.month)) return res.status(400).json({ error: '이번 달/지난달 목표만 만들 수 있어요' });
 
   try {
+    // 세션 검사(getSessionMemberId)는 DB에 접근하지 않지만, 이 조회는 접근하므로
+    // try 안에서 실행해 일시적인 DB 오류도 나머지 코드와 같은 500 JSON 응답으로
+    // 처리되게 한다(전에는 try 시작 전에 있어서 그런 오류가 처리 안 된 예외로
+    // 튀어나갔다).
+    const [me] = await sql`SELECT role, team FROM members WHERE id = ${memberId}`;
+    if (!me) return res.status(401).json({ error: '로그인이 필요해요' });
+
     if (b.level === '조직') {
       if (me.role !== '부서장') return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
 

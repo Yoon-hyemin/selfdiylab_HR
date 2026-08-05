@@ -486,11 +486,12 @@ function escapeHtml(s){
 }
 
 // DB.members holds FULL member records and stays empty until the HR password
-// unlocks the 인사 area. DB.roster is a name-only [{id, name}] list that is
-// always available, including with no password entered -- 평가 만들기 /
-// 원온원 보내기 are company-wide features, so their 구성원 <select> has to be
-// populated on first load. Use DB.roster for pickers, DB.members only inside
-// the password-gated 구성원 views.
+// unlocks the 인사 area. DB.roster is a lighter [{id, name, team, position}]
+// list that is always available, including with no password entered --
+// 평가 만들기 / 원온원 보내기 are company-wide features, so their 구성원
+// <select> has to be populated on first load, and renderOkrDept()의 팀원별
+// 현황 목록도 team으로 DB.roster를 필터링해요. Use DB.roster for pickers,
+// DB.members only inside the password-gated 구성원 views.
 let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], evals:[], calibration:{}, oneonones:[] };
 let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, role} | null
 
@@ -499,8 +500,9 @@ let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, r
 let hrAuthed = false;
 
 /* 성과관리 데이터: 전사 공개. 비밀번호 없이 매 페이지 로드마다 받아와요.
-   d.members는 {id, name}만 담긴 명단이에요(이름은 이미 evals/oneonones의
-   employeeName으로 공개돼 있어요). 나머지 구성원 정보는 /all에만 있어요. */
+   d.members는 {id, name, team, position}만 담긴 명단이에요(이름/팀/직책은
+   이미 evals/oneonones의 employeeName이나 목표 탭의 팀원별 현황으로 공개돼
+   있어요). 나머지 구성원 정보는 /all에만 있어요. */
 async function refreshPublicData(){
   const d = await apiGet('/public-data');
   DB.roster = d.members;
@@ -512,7 +514,9 @@ async function refreshHrData(){
   const d = await apiGet('/all');
   DB.members = d.members; DB.jobs = d.jobs; DB.candidates = d.candidates;
   // 잠금 해제 뒤 새로 추가한 구성원도 선택 목록에 바로 보이도록 명단을 갱신해요.
-  DB.roster = d.members.map(m => ({ id: m.id, name: m.name }));
+  // team/position도 같이 담아요 -- renderOkrDept()가 DB.roster를 팀으로 필터링해서
+  // 팀원별 현황을 만들기 때문에 이름만 있으면 그 목록이 비어버려요.
+  DB.roster = d.members.map(m => ({ id: m.id, name: m.name, team: m.team || '', position: m.position || '' }));
   DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
 /* 기존 호출부 호환용. 인사 화면에서만 쓰이므로 잠금 해제 전이면 공개 데이터만 갱신해요. */
@@ -1071,7 +1075,13 @@ function shiftMonthKey(monthKey, delta){
   const d = new Date(Date.UTC(y, m-1+delta, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
 }
-function thisMonthKey(){ return monthKeyOf(new Date()); }
+/* 서버(handlers/_lib/monthWindow.js)의 currentMonthKey()와 반드시 같은 결과가
+   나와야 해요 -- 서버는 UTC 기준으로 "이번 달"을 판단하는데 여기서 로컬 시간
+   기준인 monthKeyOf()를 쓰면, 한국 시간 매월 1일 00:00~09:00 사이에는
+   프론트는 이미 새 달이라고 생각하고 서버는 아직 지난달이라고 판단해서
+   "(이번 달)" 옵션으로 목표를 만들어도 서버가 거부하는 문제가 생겨요.
+   그래서 monthKeyOf()를 그대로 쓰지 않고 UTC로 직접 계산해요. */
+function thisMonthKey(){ const d = new Date(); return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`; }
 function prevMonthKey(){ return shiftMonthKey(thisMonthKey(), -1); }
 function progressBarStyle(pct){
   if(pct>=70) return 'background:linear-gradient(90deg,var(--primary),#5FDBA0);';
@@ -1112,7 +1122,7 @@ async function submitOkrLogin(scope){
     await apiPost('/member-login', {email});
     me = await apiGet('/me');
   }catch(err){ errBox.textContent = err.message; errBox.style.display='block'; return; }
-  renderOkrDept(); renderOkrPersonal(); renderMyPage();
+  renderOkrDept(); renderOkrPersonal(); renderMyPage(); renderOkrOverview();
 }
 function switchOkrTab(tab){
   ['overview','dept','personal'].forEach(t=>{
@@ -1203,6 +1213,12 @@ async function saveDeptGoal(){
   try{ await apiPost('/okrs', {level:'조직', title, month, parent:company.id, owner:me.team, part}); }
   catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrDept(); renderOkrOverview();
+  // 전체현황/부서목표 모두 이번 달 목표만 보여주기 때문에, 지난달 목표를
+  // 등록했을 땐 화면에 아무 변화가 없어서 실패한 것처럼 보일 수 있어요.
+  // 그래서 등록은 됐다는 걸 짧게 알려줘요.
+  if(month !== thisMonthKey()){
+    alert(`${month} 목표로 등록됐어요. 이번 달 화면에는 안 보이고, 개인 목표 연결에서 확인할 수 있어요.`);
+  }
 }
 function renderOkrDept(){
   const el = document.getElementById('okr-dept-body');
@@ -1657,7 +1673,7 @@ async function submitMyLogin(){
   try{
     await apiPost('/member-login', {email});
     me = await apiGet('/me');
-    renderMyPage(); renderOkrDept(); renderOkrPersonal();
+    renderMyPage(); renderOkrDept(); renderOkrPersonal(); renderOkrOverview();
   }catch(err){
     errBox.textContent = err.message; errBox.style.display = 'block';
   }
@@ -1665,7 +1681,7 @@ async function submitMyLogin(){
 async function submitMyLogout(){
   await apiPost('/member-logout', {});
   me = null;
-  renderMyPage(); renderOkrDept(); renderOkrPersonal();
+  renderMyPage(); renderOkrDept(); renderOkrPersonal(); renderOkrOverview();
 }
 function renderMyPage(){
   const loginBox = document.getElementById('mypage-login');
@@ -1690,11 +1706,11 @@ function renderMyPage(){
 }
 async function toggleMyTask(id, done){
   try{ await apiPatch('/okr-tasks/'+id, {done}); }catch(err){ alert(err.message); }
-  await refreshDB(); renderOkrPersonal(); renderOkrDept();
+  await refreshDB(); renderOkrPersonal(); renderOkrDept(); renderOkrOverview();
 }
 async function deleteMyTask(id){
   try{ await apiDelete('/okr-tasks/'+id); }catch(err){ alert(err.message); }
-  await refreshDB(); renderOkrPersonal(); renderOkrDept();
+  await refreshDB(); renderOkrPersonal(); renderOkrDept(); renderOkrOverview();
 }
 
 /* ---------- DATA MGMT ---------- */
