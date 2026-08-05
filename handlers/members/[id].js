@@ -33,6 +33,10 @@ export default async function handler(req, res) {
       sets.push(`${column} = $${i++}`); values.push(value);
     }
   }
+  const ALLOWED_ROLES = ['관리자', '부서장', '팀원'];
+  if ('role' in body) {
+    sets.push(`role = $${i++}`); values.push(ALLOWED_ROLES.includes(body.role) ? body.role : '팀원');
+  }
   if (body.workType) {
     sets.push(`work_type_name = $${i++}`); values.push(body.workType.name || '');
     sets.push(`work_type_fixed = $${i++}`); values.push(!!body.workType.fixed);

@@ -35,6 +35,7 @@ export default async function handler(req, res) {
       id: m.id,
       name: m.name,
       nickname: m.nickname || '',
+      role: m.role || '팀원',
       team: m.team || '',
       position: m.position || '',
       email: m.email || '',
