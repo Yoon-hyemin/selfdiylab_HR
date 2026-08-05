@@ -414,7 +414,7 @@
 
     <!-- MYPAGE -->
     <div class="view" id="view-mypage">
-      <div class="page-head"><div><h1>마이페이지</h1><p>내 목표·평가·원온원을 한 곳에서 확인해요</p></div></div>
+      <div class="page-head"><div><h1>마이페이지</h1><p>내 평가·원온원 기록을 한 곳에서 확인해요</p></div></div>
 
       <div id="mypage-login">
         <div class="section">
@@ -427,19 +427,9 @@
 
       <div id="mypage-home" style="display:none;">
         <div class="page-head">
-          <div><h1 id="mypage-hello" style="font-size:20px;"></h1><p>이번 달 내 목표와 최근 평가·원온원 기록이에요</p></div>
+          <div><h1 id="mypage-hello" style="font-size:20px;"></h1><p>최근 평가·원온원 기록이에요</p></div>
           <button class="btn ghost" onclick="submitMyLogout()">로그아웃</button>
         </div>
-        <div class="grid4" id="mypage-kpis"></div>
-
-        <div class="section">
-          <div class="section-head">
-            <div><h3>이번 달 내 목표</h3><div class="desc">우리 팀의 이번 달 목표를 골라 개인 목표를 만들고, 할 일을 체크하면 진척률이 자동 계산돼요</div></div>
-            <button class="btn primary sm" onclick="openMyGoalModal()">+ 목표 추가</button>
-          </div>
-          <div id="mypage-goals"></div>
-        </div>
-
         <div class="section">
           <div class="section-head"><h3>내 평가 기록</h3></div>
           <div id="mypage-evals"></div>
@@ -1098,18 +1088,23 @@ function positionRank(position){
   const i = POSITION_RANK.indexOf(position);
   return i===-1 ? POSITION_RANK.length : i;
 }
-function memberLoginBoxHtml(promptText){
+function memberLoginBoxHtml(promptText, scope){
+  // scope로 id를 구분해요: 부서목표/개인목표 두 서브탭이 동시에 DOM에 존재하다 보니(로그인 전엔 둘 다
+  // 이 로그인 박스를 렌더링) id를 고정값으로 두면 문서에 중복 id가 생겨 getElementById가 화면에
+  // 보이지 않는 쪽 input을 집어 로그인이 조용히 실패하는 버그가 있었음(Task 12에서 발견).
+  const s = scope || 'default';
   return `
     <div class="section">
       <div class="section-head"><h3>로그인</h3><div class="desc">${escapeHtml(promptText)} (인사팀에 등록된 이메일, 비밀번호 없음)</div></div>
-      <div class="field"><label>이메일</label><input id="f-okr-login-email" placeholder="you@selfdiylab.com" onkeydown="if(event.key==='Enter')submitOkrLogin()"></div>
-      <div id="okr-login-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
-      <button class="btn primary" onclick="submitOkrLogin()">로그인</button>
+      <div class="field"><label>이메일</label><input id="f-okr-login-email-${s}" placeholder="you@selfdiylab.com" onkeydown="if(event.key==='Enter')submitOkrLogin('${s}')"></div>
+      <div id="okr-login-error-${s}" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+      <button class="btn primary" onclick="submitOkrLogin('${s}')">로그인</button>
     </div>`;
 }
-async function submitOkrLogin(){
-  const input = document.getElementById('f-okr-login-email');
-  const errBox = document.getElementById('okr-login-error');
+async function submitOkrLogin(scope){
+  const s = scope || 'default';
+  const input = document.getElementById('f-okr-login-email-'+s);
+  const errBox = document.getElementById('okr-login-error-'+s);
   errBox.style.display='none';
   const email = input.value.trim();
   if(!email){ errBox.textContent='이메일을 입력해주세요'; errBox.style.display='block'; return; }
@@ -1212,7 +1207,7 @@ async function saveDeptGoal(){
 function renderOkrDept(){
   const el = document.getElementById('okr-dept-body');
   if(!el) return;
-  if(!me){ el.innerHTML = memberLoginBoxHtml('내 팀 목표 화면을 보려면 로그인해주세요'); return; }
+  if(!me){ el.innerHTML = memberLoginBoxHtml('내 팀 목표 화면을 보려면 로그인해주세요', 'dept'); return; }
 
   const month = thisMonthKey();
   const myTeam = me.team;
@@ -1297,6 +1292,67 @@ function renderOkrDept(){
       <div><div class="section-head"><h3>👥 ${escapeHtml(myTeam)} 팀원별 현황</h3></div>${teammatesHtml}</div>
       <div><div class="section-head"><h3>다른 팀</h3></div>${otherHtml}</div>
     </div>`;
+}
+function renderOkrPersonal(){
+  const el = document.getElementById('okr-personal-body');
+  if(!el) return;
+  if(!me){ el.innerHTML = memberLoginBoxHtml('개인 목표를 만들려면 로그인해주세요', 'personal'); return; }
+
+  const month = thisMonthKey(), prevMonth = prevMonthKey();
+  const candidateOrgs = DB.okrs.filter(o=>o.level==='조직' && o.owner===me.team && (o.month===month || o.month===prevMonth));
+  const myGoals = DB.okrs.filter(o=>o.level==='개인' && o.member===me.id && (o.month===month || o.month===prevMonth));
+
+  el.innerHTML = `
+    <div class="section">
+      <div class="section-head"><h3>새 개인 목표 만들기</h3></div>
+      <div class="field"><label>연결할 부서 목표</label>
+        <select id="f-pgoal-parent">${candidateOrgs.map(o=>`<option value="${o.id}">${escapeHtml(o.title)}${o.part?` (${escapeHtml(o.part)})`:''} · ${escapeHtml(o.month)}</option>`).join('') || '<option value="">이번 달/지난달 등록된 팀 목표가 없어요</option>'}</select>
+      </div>
+      <div class="field"><label>목표 제목</label><input id="f-pgoal-title" placeholder="예: 우리 팀 목표 등록 100% 만들기"></div>
+      <button class="btn primary" onclick="savePersonalGoal()">+ 목표 추가</button>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>내 개인 목표</h3></div>
+      ${myGoals.map(g=>{
+        const org = DB.okrs.find(o=>o.id===g.parent);
+        const p = individualProgress(g);
+        const tasks = DB.okrTasks.filter(t=>t.okrId===g.id);
+        return `
+        <div style="margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;margin-bottom:4px;">
+            <span>${escapeHtml(g.title)}</span><span style="color:${progressTextColor(p)}">${p}%</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--sub);margin-bottom:6px;">↳ ${escapeHtml(me.team)}${org&&org.part?` (${escapeHtml(org.part)})`:''}${org?` · ${escapeHtml(org.title)}`:''}</div>
+          <div class="bar" style="margin-bottom:8px;"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+            ${tasks.map(t=>`
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+                <input type="checkbox" ${t.done?'checked':''} onchange="toggleMyTask('${t.id}', this.checked)">
+                <span style="flex:1;${t.done?'text-decoration:line-through;color:var(--sub);':''}">${escapeHtml(t.title)}</span>
+                <button class="btn ghost sm" onclick="deleteMyTask('${t.id}')">삭제</button>
+              </label>`).join('') || '<div class="empty">할 일이 없어요</div>'}
+          </div>
+          <div style="display:flex;gap:8px;">
+            <input id="new-ptask-${g.id}" placeholder="할 일 추가" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;" onkeydown="if(event.key==='Enter')addPersonalTask('${g.id}')">
+            <button class="btn sm" onclick="addPersonalTask('${g.id}')">추가</button>
+          </div>
+        </div>`;
+      }).join('') || '<div class="empty">이번 달 목표가 없어요. 위에서 추가해보세요</div>'}
+    </div>`;
+}
+async function savePersonalGoal(){
+  const parentId = document.getElementById('f-pgoal-parent').value;
+  const title = document.getElementById('f-pgoal-title').value.trim();
+  if(!parentId) return alert('연결할 팀 목표가 없어요');
+  if(!title) return alert('목표 제목을 입력해주세요');
+  try{ await apiPost('/my-goals', {parentId, title}); }catch(err){ return alert(err.message); }
+  await refreshDB(); renderOkrPersonal(); renderOkrDept(); renderOkrOverview();
+}
+async function addPersonalTask(okrId){
+  const input = document.getElementById('new-ptask-'+okrId);
+  const title = input.value.trim(); if(!title) return;
+  try{ await apiPost('/okr-tasks', {okrId, title}); }catch(err){ return alert(err.message); }
+  await refreshDB(); renderOkrPersonal(); renderOkrDept();
 }
 
 /* ---------- EVAL / 9-GRID (역량: 공동/리드/직무 + 성과 + 커스텀) ---------- */
@@ -1601,7 +1657,7 @@ async function submitMyLogin(){
   try{
     await apiPost('/member-login', {email});
     me = await apiGet('/me');
-    renderMyPage();
+    renderMyPage(); renderOkrDept(); renderOkrPersonal();
   }catch(err){
     errBox.textContent = err.message; errBox.style.display = 'block';
   }
@@ -1609,7 +1665,7 @@ async function submitMyLogin(){
 async function submitMyLogout(){
   await apiPost('/member-logout', {});
   me = null;
-  renderMyPage();
+  renderMyPage(); renderOkrDept(); renderOkrPersonal();
 }
 function renderMyPage(){
   const loginBox = document.getElementById('mypage-login');
@@ -1617,53 +1673,6 @@ function renderMyPage(){
   if(!me){ loginBox.style.display=''; homeBox.style.display='none'; return; }
   loginBox.style.display='none'; homeBox.style.display='';
   document.getElementById('mypage-hello').textContent = `${me.name}님, 안녕하세요`;
-
-  const thisMonth = monthKeyOf(new Date());
-  const myGoals = DB.okrs.filter(o=>o.level==='개인' && o.member===me.id);
-  const myAvg = myGoals.length ? Math.round(myGoals.reduce((a,g)=>a+individualProgress(g),0)/myGoals.length) : 0;
-
-  const teamOrgsThisMonth = DB.okrs.filter(o=>o.level==='조직' && o.owner===me.team && o.month===thisMonth);
-  const teamAvg = teamOrgsThisMonth.length ? Math.round(teamOrgsThisMonth.reduce((a,o)=>a+orgProgress(o),0)/teamOrgsThisMonth.length) : 0;
-
-  const companyIds = [...new Set(teamOrgsThisMonth.map(o=>o.parent))];
-  const companyProgresses = companyIds.map(id=>DB.okrs.find(o=>o.id===id)).filter(Boolean).map(companyProgress);
-  const companyAvg = companyProgresses.length ? Math.round(companyProgresses.reduce((a,v)=>a+v,0)/companyProgresses.length) : 0;
-
-  document.getElementById('mypage-kpis').innerHTML = `
-    <div class="kpi"><div class="label">내 목표 달성률</div><div class="value">${myAvg}%</div></div>
-    <div class="kpi"><div class="label">우리 팀 이번 달 달성률</div><div class="value">${teamAvg}%</div></div>
-    <div class="kpi"><div class="label">우리 회사 이번 달 달성률</div><div class="value">${companyAvg}%</div></div>
-    <div class="kpi"><div class="label">진행중인 내 목표</div><div class="value">${myGoals.length}건</div></div>
-  `;
-
-  document.getElementById('mypage-goals').innerHTML = myGoals.map(g=>{
-    const org = DB.okrs.find(o=>o.id===g.parent);
-    const company = org ? DB.okrs.find(o=>o.id===org.parent) : null;
-    const tasks = DB.okrTasks.filter(t=>t.okrId===g.id);
-    const p = individualProgress(g);
-    return `
-    <div style="margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;margin-bottom:4px;">
-        <span>${escapeHtml(g.title)}</span><span>${p}%</span>
-      </div>
-      <div class="bar" style="margin-bottom:6px;"><i style="width:${p}%"></i></div>
-      <div style="font-size:11.5px;color:var(--sub);margin-bottom:8px;">
-        ${org?`↳ 팀 목표: ${escapeHtml(org.title)} (${orgProgress(org)}%)`:''}${company?` → 회사 목표: ${escapeHtml(company.title)} (${companyProgress(company)}%)`:''}
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
-        ${tasks.map(t=>`
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-            <input type="checkbox" ${t.done?'checked':''} onchange="toggleMyTask('${t.id}', this.checked)">
-            <span style="flex:1;${t.done?'text-decoration:line-through;color:var(--sub);':''}">${escapeHtml(t.title)}</span>
-            <button class="btn ghost sm" onclick="deleteMyTask('${t.id}')">삭제</button>
-          </label>`).join('') || '<div class="empty">할 일이 없어요</div>'}
-      </div>
-      <div style="display:flex;gap:8px;">
-        <input id="new-task-${g.id}" placeholder="할 일 추가" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;" onkeydown="if(event.key==='Enter')addMyTask('${g.id}')">
-        <button class="btn sm" onclick="addMyTask('${g.id}')">추가</button>
-      </div>
-    </div>`;
-  }).join('') || '<div class="empty">이번 달 목표가 없어요. + 목표 추가로 시작해보세요</div>';
 
   const myEvals = DB.evals.filter(e=>e.employee===me.id);
   document.getElementById('mypage-evals').innerHTML = myEvals.map(e=>{
@@ -1679,41 +1688,13 @@ function renderMyPage(){
   const myOneOnOnes = DB.oneonones.filter(o=>o.employee===me.id).map(o=>({sort:o.date, date:dayKeyOf(o.date), text:escapeHtml(o.note)}));
   renderTimelineInto('mypage-oneonones', myOneOnOnes, '아직 원온원 기록이 없어요');
 }
-function openMyGoalModal(){
-  const thisMonth = monthKeyOf(new Date());
-  const myTeamOrgs = DB.okrs.filter(o=>o.level==='조직' && o.owner===me.team && o.month===thisMonth);
-  showModal(`
-    <h3>이번 달 내 목표 추가</h3>
-    <div class="modal-sub">우리 팀의 이번 달 목표 중 하나를 골라 연결해요</div>
-    <div class="field"><label>연결할 팀 목표</label>
-      <select id="f-mygoal-parent">${myTeamOrgs.map(o=>`<option value="${o.id}">${escapeHtml(o.title)}</option>`).join('') || '<option value="">이번 달 등록된 팀 목표가 없어요</option>'}</select>
-    </div>
-    <div class="field"><label>목표 제목</label><input id="f-mygoal-title" placeholder="예: 신규 랜딩페이지 카피 작성"></div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMyGoal()">추가</button></div>
-  `);
-}
-async function saveMyGoal(){
-  const parentId = document.getElementById('f-mygoal-parent').value;
-  const title = document.getElementById('f-mygoal-title').value.trim();
-  if(!parentId) return alert('연결할 팀 목표가 없어요. 먼저 목표 페이지에서 이번 달 팀 목표를 만들어주세요');
-  if(!title) return alert('목표 제목을 입력해주세요');
-  try{ await apiPost('/my-goals', {parentId, title}); }catch(err){ return alert(err.message); }
-  await refreshDB(); closeModal(); renderMyPage();
-}
-async function addMyTask(okrId){
-  const input = document.getElementById('new-task-'+okrId);
-  const title = input.value.trim();
-  if(!title) return;
-  try{ await apiPost('/okr-tasks', {okrId, title}); }catch(err){ return alert(err.message); }
-  await refreshDB(); renderMyPage();
-}
 async function toggleMyTask(id, done){
   try{ await apiPatch('/okr-tasks/'+id, {done}); }catch(err){ alert(err.message); }
-  await refreshDB(); renderMyPage();
+  await refreshDB(); renderOkrPersonal(); renderOkrDept();
 }
 async function deleteMyTask(id){
   try{ await apiDelete('/okr-tasks/'+id); }catch(err){ alert(err.message); }
-  await refreshDB(); renderMyPage();
+  await refreshDB(); renderOkrPersonal(); renderOkrDept();
 }
 
 /* ---------- DATA MGMT ---------- */
