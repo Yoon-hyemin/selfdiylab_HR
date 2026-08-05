@@ -340,11 +340,15 @@
 
     <!-- OKR -->
     <div class="view" id="view-okr">
-      <div class="page-head">
-        <div><h1>목표</h1><p>기업 · 부서 목표를 매달 등록하세요. 개인 목표는 마이페이지에서 만들어요</p></div>
-        <button class="btn primary" onclick="openOkrModal()">+ 새 목표 추가</button>
+      <div class="page-head"><div><h1>목표</h1><p id="okr-page-desc">이번 달 목표를 관리해요</p></div></div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchOkrTab('overview')" id="okrtab-overview">전체 현황</button>
+        <button class="tab" onclick="switchOkrTab('dept')" id="okrtab-dept">부서 목표</button>
+        <button class="tab" onclick="switchOkrTab('personal')" id="okrtab-personal">개인 목표</button>
       </div>
-      <div class="section" id="okr-list"></div>
+      <div id="okr-overview"><div id="okr-overview-body"></div></div>
+      <div id="okr-dept" style="display:none;"><div id="okr-dept-body"></div></div>
+      <div id="okr-personal" style="display:none;"><div id="okr-personal-body"></div></div>
     </div>
 
     <!-- EVAL -->
@@ -498,7 +502,7 @@ function escapeHtml(s){
 // populated on first load. Use DB.roster for pickers, DB.members only inside
 // the password-gated 구성원 views.
 let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], evals:[], calibration:{}, oneonones:[] };
-let me = null; // 마이페이지 로그인 상태: {id, name, team} | null
+let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, role} | null
 
 /* 인사 영역 잠금 해제 여부. 페이지 로드마다 초기화돼요
    (localStorage/sessionStorage에 저장하지 않아요). */
@@ -1071,56 +1075,58 @@ function companyProgress(okr){
   return Math.round(children.reduce((a,o)=>a+orgProgress(o),0) / children.length);
 }
 
-/* ---------- OKR ---------- */
-function openOkrModal(){
-  showModal(`
-    <h3>새 목표 추가</h3>
-    <div class="modal-sub">개인 목표는 마이페이지에서 만들 수 있어요</div>
-    <div class="form-row">
-      <div class="field"><label>레벨</label><select id="f-olevel" onchange="onOkrLevelChange()"><option value="회사">기업</option><option value="조직" selected>부서</option></select></div>
-      <div class="field"><label>월</label><input id="f-omonth" type="month" onchange="refreshOkrParentOptions()"></div>
-    </div>
-    <div class="field"><label>목표 제목</label><input id="f-otitle" placeholder="예: 채용 리드타임 단축"></div>
-    <div class="form-row" id="f-oorg-fields">
-      <div class="field"><label>부서(팀)명</label><input id="f-oowner" placeholder="예: 세일즈팀"></div>
-      <div class="field"><label>상위 기업 목표 (같은 달)</label>
-        <select id="f-oparent"></select>
-      </div>
-    </div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOkr()">목표 생성</button></div>
-  `);
-  onOkrLevelChange();
+/* ---------- 목표 탭 공용 헬퍼 (역할별 재설계, 2026-08-04) ---------- */
+function shiftMonthKey(monthKey, delta){
+  const [y,m] = monthKey.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m-1+delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
 }
-function refreshOkrParentOptions(){
-  const month = document.getElementById('f-omonth').value;
-  const options = DB.okrs.filter(o=>o.level==='회사' && (!month || o.month===month));
-  document.getElementById('f-oparent').innerHTML = `<option value="">선택 안함</option>${options.map(o=>`<option value="${o.id}">${escapeHtml(o.title)} (${escapeHtml(o.month||'')})</option>`).join('')}`;
+function thisMonthKey(){ return monthKeyOf(new Date()); }
+function prevMonthKey(){ return shiftMonthKey(thisMonthKey(), -1); }
+function progressBarStyle(pct){
+  if(pct>=70) return 'background:linear-gradient(90deg,var(--primary),#5FDBA0);';
+  if(pct>=31) return 'background:linear-gradient(90deg,var(--amber),#F6B26B);';
+  return 'background:linear-gradient(90deg,var(--red),#F08080);';
 }
-function onOkrLevelChange(){
-  const level = document.getElementById('f-olevel').value;
-  document.getElementById('f-oorg-fields').style.display = level==='조직' ? '' : 'none';
-  if(level==='조직') refreshOkrParentOptions();
+function progressTextColor(pct){
+  if(pct>=70) return 'var(--primary-dark)';
+  if(pct>=31) return '#B9660F';
+  return 'var(--red)';
 }
-async function saveOkr(){
-  const level = document.getElementById('f-olevel').value;
-  const title = document.getElementById('f-otitle').value.trim();
-  const month = document.getElementById('f-omonth').value;
-  if(!title) return alert('목표 제목을 입력해주세요');
-  if(!month) return alert('월을 선택해주세요');
-
+const POSITION_RANK = ['대표','부장','팀장','파트장','과장','대리','주임','사원'];
+function positionRank(position){
+  const i = POSITION_RANK.indexOf(position);
+  return i===-1 ? POSITION_RANK.length : i;
+}
+function memberLoginBoxHtml(promptText){
+  return `
+    <div class="section">
+      <div class="section-head"><h3>로그인</h3><div class="desc">${escapeHtml(promptText)} (인사팀에 등록된 이메일, 비밀번호 없음)</div></div>
+      <div class="field"><label>이메일</label><input id="f-okr-login-email" placeholder="you@selfdiylab.com" onkeydown="if(event.key==='Enter')submitOkrLogin()"></div>
+      <div id="okr-login-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+      <button class="btn primary" onclick="submitOkrLogin()">로그인</button>
+    </div>`;
+}
+async function submitOkrLogin(){
+  const input = document.getElementById('f-okr-login-email');
+  const errBox = document.getElementById('okr-login-error');
+  errBox.style.display='none';
+  const email = input.value.trim();
+  if(!email){ errBox.textContent='이메일을 입력해주세요'; errBox.style.display='block'; return; }
   try{
-    if(level==='회사'){
-      await apiPost('/okrs', {level, title, month});
-    } else {
-      const parent = document.getElementById('f-oparent').value;
-      if(!parent) return alert('상위 기업 목표를 선택해주세요');
-      await apiPost('/okrs', {level, title, month, parent, owner:document.getElementById('f-oowner').value||'-'});
-    }
-  }catch(err){
-    return alert(err.message);
-  }
-  await refreshDB(); closeModal(); renderOkr();
+    await apiPost('/member-login', {email});
+    me = await apiGet('/me');
+  }catch(err){ errBox.textContent = err.message; errBox.style.display='block'; return; }
+  renderOkrDept(); renderOkrPersonal(); renderMyPage();
 }
+function switchOkrTab(tab){
+  ['overview','dept','personal'].forEach(t=>{
+    document.getElementById('okr-'+t).style.display = t===tab ? '' : 'none';
+    document.getElementById('okrtab-'+t).classList.toggle('active', t===tab);
+  });
+}
+
+/* ---------- OKR ---------- */
 
 /* ---------- EVAL / 9-GRID (역량: 공동/리드/직무 + 성과 + 커스텀) ---------- */
 function openEvalModal(){
@@ -1592,7 +1598,9 @@ function renderAll(){
   if(currentMemberId) renderMemberProfile();
   renderJobs();
   renderCandidates();
-  renderOkr();
+  renderOkrOverview();
+  renderOkrDept();
+  renderOkrPersonal();
   renderEval();
   renderCalibration();
   renderOneOnOne();
