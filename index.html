@@ -141,15 +141,15 @@
   .member-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;cursor:pointer;transition:box-shadow .15s;}
   .member-card:hover{box-shadow:0 6px 18px rgba(0,0,0,0.07);}
   .member-card .mc-top{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
-  .avatar-circle{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#B39DFF);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;}
-  .avatar-circle.lg{width:72px;height:72px;font-size:20px;border-radius:20px;}
+  .avatar-circle{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#B39DFF);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;line-height:1;flex-shrink:0;}
+  .avatar-circle.lg{width:72px;height:72px;font-size:20px;border-radius:20px;border:3px solid var(--card);box-shadow:0 2px 6px rgba(0,0,0,0.12);}
   .member-card .mc-name{font-weight:800;font-size:14.5px;}
   .member-card .mc-sub{font-size:11.5px;color:var(--sub);font-weight:600;}
   .member-card .mc-meta{font-size:11.5px;color:var(--sub);display:flex;flex-direction:column;gap:3px;}
 
   .profile-cover{height:110px;border-radius:18px 18px 0 0;background:linear-gradient(120deg,#B48CFF 0%,#5B4FE0 45%,#191A23 100%);position:relative;}
   .profile-head{background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 18px 18px;padding:0 26px 18px;margin-bottom:20px;}
-  .profile-head .avatar-wrap{margin-top:-36px;margin-bottom:10px;}
+  .profile-head .avatar-wrap{margin-top:-36px;margin-bottom:10px;position:relative;z-index:1;}
   .profile-head h2{font-size:19px;font-weight:900;}
   .profile-head .sub{font-size:12.5px;color:var(--sub);font-weight:600;margin-top:2px;}
   .profile-tabs{display:flex;gap:4px;margin-top:16px;border-top:1px solid var(--border);padding-top:12px;flex-wrap:wrap;}
@@ -163,9 +163,9 @@
   .info-section:first-child .is-head{border-top:none;}
   .info-section .is-head h4{font-size:12.5px;font-weight:800;color:var(--sub);}
   .info-section .is-head button{font-size:11.5px;font-weight:700;color:var(--primary-dark);background:none;}
-  .info-row{display:flex;flex-wrap:wrap;gap:22px;padding:6px 0 14px;}
-  .info-row .iv{font-size:13.5px;}
-  .info-row .iv .ik{font-size:11px;color:var(--sub);font-weight:600;margin-right:6px;}
+  .info-row{display:flex;align-items:center;gap:16px;padding:8px 0;}
+  .info-row .ik{flex:0 0 96px;font-size:12px;color:var(--sub);font-weight:700;}
+  .info-row .iv{font-size:13.5px;flex:1;min-width:0;}
   .info-row .iv b{font-weight:700;}
   .info-row .placeholder{color:#C7C9D6;font-size:13px;}
   .lock-icon{font-size:10px;margin-left:4px;}
@@ -173,8 +173,10 @@
 
   .side-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;}
   .side-card h5{font-size:12px;font-weight:800;color:var(--sub);margin-bottom:10px;}
-  .side-stat{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;padding:6px 0;border-bottom:1px solid var(--border);}
+  .side-stat{padding:8px 0;border-bottom:1px solid var(--border);}
   .side-stat:last-child{border-bottom:none;}
+  .side-stat .ss-label{font-size:11px;color:var(--sub);font-weight:700;margin-bottom:3px;}
+  .side-stat .ss-value{font-size:13px;font-weight:700;word-break:break-all;}
   .jump-chips{display:flex;flex-wrap:wrap;gap:6px;}
   .jump-chip{font-size:11px;font-weight:700;background:var(--bg);color:var(--sub);padding:5px 10px;border-radius:20px;}
   .jump-chip:hover{background:var(--primary-light);color:var(--primary-dark);}
@@ -265,13 +267,8 @@
           <div class="profile-tabs">
             <button class="ptab active">정보</button>
             <button class="ptab locked" title="다음 구획에서 구현 예정">목표</button>
-            <button class="ptab locked" title="다음 구획에서 구현 예정">성장</button>
             <button class="ptab locked" title="다음 구획에서 구현 예정">평가</button>
-            <button class="ptab locked" title="다음 구획에서 구현 예정">교육</button>
-            <button class="ptab locked" title="다음 구획에서 구현 예정">급여</button>
-            <button class="ptab locked" title="다음 구획에서 구현 예정">문서·증명서</button>
             <button class="ptab locked" title="다음 구획에서 구현 예정">인사노트</button>
-            <button class="ptab locked" title="다음 구획에서 구현 예정">계약서</button>
           </div>
         </div>
 
@@ -281,8 +278,8 @@
             <div class="side-card">
               <h5>프로필</h5>
               <div id="mp-intro" style="font-size:12.5px;color:var(--sub);margin-bottom:10px;"></div>
-              <div class="side-stat"><span>📞 전화</span><span id="mp-side-phone"></span></div>
-              <div class="side-stat"><span>✉️ 이메일</span><span id="mp-side-email"></span></div>
+              <div class="side-stat"><div class="ss-label">📞 전화</div><div class="ss-value" id="mp-side-phone"></div></div>
+              <div class="side-stat"><div class="ss-label">✉️ 이메일</div><div class="ss-value" id="mp-side-email"></div></div>
             </div>
             <div class="side-card">
               <h5>다음으로 이동...</h5>
@@ -700,54 +697,13 @@ function renderMemberProfile(){
 
     {key:'basic', anchor:'sec-basic', title:'기본 정보', action:['변경','openEditBasicInfo'],
       body: `
-      <div class="info-row">
-        <div class="iv"><span class="ik">이름</span>${val(m.name)}</div>
-      </div>
-      <div class="info-row">
-        <div class="iv"><span class="ik">이메일</span>이메일 ${val(m.email)} &nbsp;개인이메일 ${val(m.personalEmail)}</div>
-      </div>
-      <div class="info-row">
-        <div class="iv"><span class="ik">입사 정보</span>입사일 ${val(m.hireDate)} &nbsp;그룹입사일 ${val(m.groupHireDate)} &nbsp;입사유형 ${val(m.hireType)}</div>
-      </div>
-      <div class="info-row">
-        <div class="iv"><span class="ik">생일</span>${val(m.birthday)}</div>
-      </div>
-      <div class="info-row"><div class="iv"><span class="ik">휴대전화번호</span>${val(m.phone)}</div></div>
-      <div class="info-row"><div class="iv"><span class="ik">주소</span>${val(m.address)}</div></div>
-      `},
-
-    {key:'labor', anchor:'sec-labor', title:'근로 계약 정보', action:['추가','openEditText','laborContract','근로 계약 정보'],
-      body:`<div class="info-row"><div class="iv">${val(m.laborContract)}</div></div>`},
-    {key:'wage', anchor:'sec-wage', title:'임금 계약 정보', action:['추가','openEditText','wageContract','임금 계약 정보'],
-      body:`<div class="info-row"><div class="iv">${val(m.wageContract)}</div></div>`},
-    {key:'salary', anchor:'sec-salary', title:'급여 지급 정보 <span class="lock-icon">🔒</span>', action:['추가','openEditText','salaryPayInfo','급여 지급 정보'],
-      body:`<div class="info-row"><div class="iv">${val(m.salaryPayInfo)}</div></div>`},
-
-    {key:'work', anchor:'sec-work', title:'근무 정보', action:['변경','openEditWorkType'],
-      body:`<div class="info-row"><div class="iv">${val(m.workType.name)} ${m.workType.name? `<span class="badge green">${m.workType.fixed?'고정':'선택'}</span> ${escapeHtml(m.workType.hours||'')}`:''}</div></div>`},
-    {key:'overtime', anchor:'sec-overtime', title:'초과 근무 보상 정보 <span class="lock-icon">🔒</span>', action:['변경','openEditText','overtimePolicy','초과 근무 보상 정보'],
-      body:`<div class="info-row"><div class="iv">${val(m.overtimePolicy)}</div></div>`},
-
-    {key:'leavepolicy', anchor:'sec-leavepolicy', title:'휴가 정보', action:['변경','openEditLeavePolicy'],
-      body:`<div class="info-row"><div class="iv">${m.leavePolicy.basis? `<b>${escapeHtml(m.leavePolicy.basis)}</b> <span class="badge grey">${m.leavePolicy.halfDay}</span> <span class="badge grey">${m.leavePolicy.promotion}</span>`:'<span class="placeholder">입력하기</span>'}</div></div>`},
-    {key:'restdays', anchor:'sec-restdays', title:'쉬는 날 정보', action:['변경','openEditRestDays'],
-      body:`<div class="info-row"><div class="iv">${listChips(m.restDays, r=>r)}</div></div>`},
-
-    {key:'leavehist', anchor:'sec-leavehist', title:'휴직 이력', action:['추가','openAddLeaveHistory'],
-      body:`<div class="info-row"><div class="iv">${listChips(m.leaveHistory, h=>`${h.reason} (${h.period})`)}</div></div>`},
-    {key:'awards', anchor:'sec-awards', title:'수상', action:['추가','openAddAward'],
-      body:`<div class="info-row"><div class="iv">${listChips(m.awards, a=>`${a.title} · ${a.date}`)}</div></div>`},
-    {key:'discipline', anchor:'sec-discipline', title:'징계', action:['추가','openAddDiscipline'],
-      body:`<div class="info-row"><div class="iv">${listChips(m.discipline, d=>`${d.reason} · ${d.date}`)}</div></div>`},
-    {key:'career', anchor:'sec-career', title:'경력 정보', action:['추가','openAddCareer'],
-      body:`<div class="info-row"><div class="iv">${listChips(m.career, c=>`${c.company} · ${c.role} (${c.period})`)}</div></div>`},
-    {key:'education', anchor:'sec-education', title:'학력 정보', action:['추가','openAddEducation'],
-      body:`<div class="info-row"><div class="iv">${listChips(m.education, e=>`${e.school} · ${e.major} (${e.period})`)}</div></div>`},
-    {key:'special', anchor:'sec-special', title:'특이사항', action:['변경','openEditText','specialNotes','특이사항'],
-      body:`<div class="info-row"><div class="iv">${val(m.specialNotes)}</div></div>`},
-    {key:'family', anchor:'sec-family', title:'가족 정보', action:['추가','openAddFamily'],
-      body:`<div class="info-row"><div class="iv">${listChips(m.family, f=>`${f.name} · ${f.relation}`)}</div></div>
-            <div class="info-row" style="padding-top:0;"><div class="iv" style="font-size:12px;color:var(--sub);">총 공제대상 — 기본공제 <b>${m.deduction.basic}명</b> · 건강보험 피부양자 <b>${m.deduction.healthDependents}명</b></div></div>`}
+      <div class="info-row"><span class="ik">이름</span><div class="iv">${val(m.name)}</div></div>
+      <div class="info-row"><span class="ik">이메일</span><div class="iv">${val(m.email)}</div></div>
+      <div class="info-row"><span class="ik">입사일</span><div class="iv">${val(dateOnly(m.hireDate))}</div></div>
+      <div class="info-row"><span class="ik">입사유형</span><div class="iv">${val(m.hireType)}</div></div>
+      <div class="info-row"><span class="ik">생일</span><div class="iv">${val(dateOnly(m.birthday))}</div></div>
+      <div class="info-row"><span class="ik">휴대전화번호</span><div class="iv">${val(m.phone)}</div></div>
+      `}
   ];
 
   document.getElementById('profile-info-sections').innerHTML = sections.map(s=>`
