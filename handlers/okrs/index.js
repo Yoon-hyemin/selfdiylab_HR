@@ -23,6 +23,13 @@
  * 위한 자유 텍스트 태그로, 없으면 빈 문자열이다.
  *
  * 회사/부서 목표 모두 "이번 달 또는 지난달"만 만들 수 있다(isEditableMonth).
+ *
+ * 2026-08-06: 가중치(weight) 도입. 사용자가 정의한 성과관리 매커니즘 —
+ * 같은 레벨끼리(기업 목표는 기업 목표끼리, 한 부서의 부서 목표는 그
+ * 부서끼리) 가중치 합이 100%를 넘을 수 없다. weight는 선택 입력이라
+ * 안 주면 null("가중치 설정 중" 상태)로 저장한다. 이 시점부터 기업 목표는
+ * 평가기간(월) 기준 최대 3개로 제한한다(전에는 상한이 없었다 — 전체현황
+ * 화면 재설계 요청에서 명시적으로 다시 확인된 규칙).
  */
 import { sql } from '../_lib/db.js';
 import { getSessionMemberId } from '../_lib/memberSession.js';
@@ -33,6 +40,14 @@ function quarterFromMonth(month) {
   const [year, m] = month.split('-').map(Number);
   const q = Math.floor((m - 1) / 3) + 1;
   return `${year}-Q${q}`;
+}
+
+// { weight: number|null } 또는 { error: string }
+function parseWeight(raw) {
+  if (raw === undefined || raw === null || raw === '') return { weight: null };
+  const w = Number(raw);
+  if (!Number.isInteger(w) || w < 0 || w > 100) return { error: '가중치는 0~100 사이 정수여야 해요' };
+  return { weight: w };
 }
 
 export default async function handler(req, res) {
@@ -57,6 +72,9 @@ export default async function handler(req, res) {
     if (!me) return res.status(401).json({ error: '로그인이 필요해요' });
     const roles = me.roles || [];
 
+    const { weight, error: weightErr } = parseWeight(b.weight);
+    if (weightErr) return res.status(400).json({ error: weightErr });
+
     if (b.level === '조직') {
       if (!roles.includes('부서장')) return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
 
@@ -80,18 +98,39 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `${owner}${part ? ' · ' + part : ''} 팀은 ${b.month}에 이미 목표가 5개 있어요` });
       }
 
+      if (weight !== null) {
+        const [{ sum }] = await sql`
+          SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs
+          WHERE level = '조직' AND owner = ${owner} AND month = ${b.month} AND part = ${part} AND weight IS NOT NULL`;
+        if (sum + weight > 100) {
+          return res.status(400).json({ error: `${owner}${part ? ' · ' + part : ''} 팀의 ${b.month} 가중치 합계가 100%를 넘어요 (현재 ${sum}% + ${weight}%)` });
+        }
+      }
+
       const [row] = await sql`
-        INSERT INTO okrs (quarter, month, level, title, owner, parent_id, part, progress, unit, target)
-        VALUES (${quarterFromMonth(b.month)}, ${b.month}, '조직', ${b.title.trim()}, ${owner}, ${b.parent}, ${part}, 0, '%', 100)
+        INSERT INTO okrs (quarter, month, level, title, owner, parent_id, part, weight, progress, unit, target)
+        VALUES (${quarterFromMonth(b.month)}, ${b.month}, '조직', ${b.title.trim()}, ${owner}, ${b.parent}, ${part}, ${weight}, 0, '%', 100)
         RETURNING id`;
       return res.status(201).json({ id: row.id });
     }
 
     // 회사
     if (!roles.includes('관리자')) return res.status(403).json({ error: '회사 목표는 관리자만 만들 수 있어요' });
+
+    const [{ count: companyCount }] = await sql`SELECT count(*)::int AS count FROM okrs WHERE level = '회사' AND month = ${b.month}`;
+    if (companyCount >= 3) {
+      return res.status(400).json({ error: `${b.month}에는 이미 기업 목표가 3개 있어요 (최대 3개)` });
+    }
+    if (weight !== null) {
+      const [{ sum }] = await sql`SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs WHERE level = '회사' AND month = ${b.month} AND weight IS NOT NULL`;
+      if (sum + weight > 100) {
+        return res.status(400).json({ error: `${b.month} 기업 목표 가중치 합계가 100%를 넘어요 (현재 ${sum}% + ${weight}%)` });
+      }
+    }
+
     const [row] = await sql`
-      INSERT INTO okrs (quarter, month, level, title, owner, progress, unit, target)
-      VALUES (${quarterFromMonth(b.month)}, ${b.month}, '회사', ${b.title.trim()}, '전사', 0, '%', 100)
+      INSERT INTO okrs (quarter, month, level, title, owner, weight, progress, unit, target)
+      VALUES (${quarterFromMonth(b.month)}, ${b.month}, '회사', ${b.title.trim()}, '전사', ${weight}, 0, '%', 100)
       RETURNING id`;
     res.status(201).json({ id: row.id });
   } catch (err) {

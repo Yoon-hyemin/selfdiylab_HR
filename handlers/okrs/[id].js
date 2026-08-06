@@ -1,8 +1,8 @@
 /**
  * handlers/okrs/[id].js
  *
- * PATCH { title } -> 200 { ok: true }   회사/부서 목표 제목 수정
- * DELETE          -> 200 { ok: true }   회사/부서 목표 삭제
+ * PATCH { title?, weight? } -> 200 { ok: true }   회사/부서 목표 제목·가중치 수정
+ * DELETE                    -> 200 { ok: true }   회사/부서 목표 삭제
  *
  * 2026-08-06: 목표를 한번 만들면 고치거나 지울 방법이 없던 걸 채워 넣는다.
  * 권한은 생성 때와 동일하다 — 회사 목표는 roles에 '관리자'가 있는 사람만,
@@ -16,13 +16,26 @@
  *
  * 수정/삭제 모두 생성과 같은 "이번 달/지난달" 제한을 적용한다 — 그보다 오래된
  * 목표는 조회만 가능하다는 프로젝트 전체 규칙과 일관되게 유지하기 위해서다.
+ *
+ * weight 수정 시 handlers/okrs/index.js의 생성 검증과 같은 스코프(회사는
+ * 그 달 전체, 조직은 팀+달+파트)로 합계 100% 검증을 하되, 자기 자신의 기존
+ * weight는 합계에서 빼고 계산한다(그래야 이미 배분된 가중치를 그대로 두는
+ * PATCH가 "자기 자신과 중복 계산돼서" 부당하게 거부되지 않는다).
  */
 import { sql } from '../_lib/db.js';
 import { getSessionMemberId } from '../_lib/memberSession.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
 
+function parseWeight(raw) {
+  if (raw === undefined) return { skip: true };
+  if (raw === null || raw === '') return { weight: null };
+  const w = Number(raw);
+  if (!Number.isInteger(w) || w < 0 || w > 100) return { error: '가중치는 0~100 사이 정수여야 해요' };
+  return { weight: w };
+}
+
 async function loadOkrAndCheckPermission(id, memberId) {
-  const [okr] = await sql`SELECT id, level, owner, month FROM okrs WHERE id = ${id}`;
+  const [okr] = await sql`SELECT id, level, owner, month, part, weight FROM okrs WHERE id = ${id}`;
   if (!okr) return { error: [404, '목표를 찾을 수 없어요'] };
   if (okr.level === '개인') return { error: [400, '개인 목표는 /api/my-goals로 수정/삭제해주세요'] };
 
@@ -52,9 +65,28 @@ export default async function handler(req, res) {
     if (error) return res.status(error[0]).json({ error: error[1] });
 
     if (req.method === 'PATCH') {
-      const title = (req.body && req.body.title || '').trim();
+      const body = req.body || {};
+      const title = (body.title || '').trim();
       if (!title) return res.status(400).json({ error: 'title is required' });
-      await sql`UPDATE okrs SET title = ${title} WHERE id = ${okr.id}`;
+
+      const { weight, error: weightErr, skip: skipWeight } = parseWeight(body.weight);
+      if (weightErr) return res.status(400).json({ error: weightErr });
+
+      if (!skipWeight && weight !== null) {
+        const part = okr.part || '';
+        const [{ sum }] = okr.level === '회사'
+          ? await sql`SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs WHERE level = '회사' AND month = ${okr.month} AND weight IS NOT NULL AND id != ${okr.id}`
+          : await sql`SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs WHERE level = '조직' AND owner = ${okr.owner} AND month = ${okr.month} AND part = ${part} AND weight IS NOT NULL AND id != ${okr.id}`;
+        if (sum + weight > 100) {
+          return res.status(400).json({ error: `가중치 합계가 100%를 넘어요 (다른 목표 ${sum}% + ${weight}%)` });
+        }
+      }
+
+      if (skipWeight) {
+        await sql`UPDATE okrs SET title = ${title} WHERE id = ${okr.id}`;
+      } else {
+        await sql`UPDATE okrs SET title = ${title}, weight = ${weight} WHERE id = ${okr.id}`;
+      }
       return res.status(200).json({ ok: true });
     }
 

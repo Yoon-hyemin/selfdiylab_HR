@@ -44,6 +44,7 @@
   .btn.sm{padding:5px 10px;font-size:12px;border-radius:8px;}
   .btn.step{background:var(--bg);color:var(--sub);}
   .btn.step.active{background:var(--text);color:#fff;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
 
   .tabs{display:flex;gap:6px;margin-bottom:20px;background:var(--bg);padding:5px;border-radius:12px;width:fit-content;}
   .tab{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;color:var(--sub);background:none;}
@@ -507,7 +508,7 @@ let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, r
    thisMonthKey()로 채운다(okrOvInitDefaults). */
 let okrOvYear = null;
 let okrOvMonth = null;
-let okrOvHistLimit = 10;
+let okrOvHistLimit = 5;
 let okrOvHiddenTeams = new Set();
 
 /* 부서목표(우리 부서용) 탭 상태 -- 2026-08-06. periodType에 따라 월/분기/연도
@@ -1145,14 +1146,17 @@ function openCompanyGoalModal(){
     <h3>회사 목표 만들기</h3>
     <div class="field"><label>월</label><select id="f-cgoal-month">${monthOptionsHtml()}</select></div>
     <div class="field"><label>목표 제목</label><input id="f-cgoal-title" placeholder="예: 신뢰받는 채용 브랜드로 성장한다"></div>
+    <div class="field"><label>가중치 (%, 선택)</label><input id="f-cgoal-weight" type="number" min="0" max="100" placeholder="예: 50"></div>
+    <div class="modal-sub">같은 달 기업 목표끼리 가중치 합이 100%를 넘을 수 없어요. 비워두면 나중에 정할 수 있어요</div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCompanyGoal()">목표 생성</button></div>
   `);
 }
 async function saveCompanyGoal(){
   const month = document.getElementById('f-cgoal-month').value;
   const title = document.getElementById('f-cgoal-title').value.trim();
+  const weight = document.getElementById('f-cgoal-weight').value.trim();
   if(!title) return alert('목표 제목을 입력해주세요');
-  try{ await apiPost('/okrs', {level:'회사', title, month}); }catch(err){ return alert(err.message); }
+  try{ await apiPost('/okrs', {level:'회사', title, month, weight: weight===''?null:Number(weight)}); }catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrOverview(); renderOkrDept();
 }
 /* ---------- 전체현황(대표님용) 대시보드 계산 유틸 -----------------------
@@ -1167,8 +1171,8 @@ function okrOvInitDefaults(){
   okrOvMonth = okrOvMonth || m;
 }
 function changeOkrOvYear(v){ okrOvYear = v; renderOkrOverview(); }
-function changeOkrOvMonth(v){ okrOvMonth = v; okrOvHistLimit = 10; renderOkrOverview(); }
-function showMoreOkrOvHistory(){ okrOvHistLimit += 10; renderOkrOverview(); }
+function changeOkrOvMonth(v){ okrOvMonth = v; okrOvHistLimit = 5; renderOkrOverview(); }
+function showAllOkrOvHistory(){ okrOvHistLimit = Infinity; renderOkrOverview(); }
 function toggleOkrOvTeam(team){
   if(okrOvHiddenTeams.has(team)) okrOvHiddenTeams.delete(team); else okrOvHiddenTeams.add(team);
   renderOkrOverview();
@@ -1190,29 +1194,58 @@ function myGoalStatusBadge(status){
   if(status==='rejected') return '<span class="badge red">반려됨</span>';
   return '<span class="badge green">승인됨</span>';
 }
-function companyAvgForMonth(mk){
-  const list = DB.okrs.filter(o=>o.level==='회사' && o.month===mk);
-  if(!list.length) return null;
-  return Math.round(list.reduce((a,o)=>a+companyProgress(o),0)/list.length);
+/* ---------- 가중 성과율 계산 -----------------------------------------
+   2026-08-06: 대표님이 정의한 성과관리 매커니즘 적용 -- "같은 레벨끼리만"
+   가중치를 매긴다(기업 목표는 기업 목표끼리, 한 부서의 부서 목표는 그
+   부서끼리). 레벨을 곱하지 않는다. 기여율 = 가중치 × 달성률, 가중
+   성과율 = 그 레벨 목표들의 기여율 합. weight가 아직 없는(null) 목표는
+   가중치 배분에서 빠진다 -- "가중치 설정 중" 상태를 그대로 반영하기
+   위해서다(0으로 채우지 않는다). 이 계산은 전체현황 화면에서만 쓰고
+   부서목표/개인목표 탭은 아직 기존 단순 평균 방식을 그대로 쓴다(단계적
+   적용 — 개인 목표 가중치는 다음 단계에서 다룬다). */
+function weightedGroupScore(goals, progressFn){
+  const weighted = goals.filter(g=>g.weight!==null && g.weight!==undefined);
+  const weightSum = weighted.reduce((a,g)=>a+g.weight,0);
+  const score = weighted.length ? Math.round(weighted.reduce((a,g)=>a+(g.weight/100)*progressFn(g),0)) : null;
+  return { score, weightSum, weightedCount: weighted.length, totalCount: goals.length };
 }
-function deptAvgForMonth(mk){
-  const list = DB.okrs.filter(o=>o.level==='조직' && o.month===mk);
-  if(!list.length) return null;
-  return Math.round(list.reduce((a,o)=>a+orgProgress(o),0)/list.length);
+function companyWeightedForMonth(mk){
+  return weightedGroupScore(DB.okrs.filter(o=>o.level==='회사' && o.month===mk), companyProgress);
 }
-function overallAvgForMonth(mk){
-  const pooled = DB.okrs.filter(o=>o.level==='회사' && o.month===mk).map(companyProgress)
-    .concat(DB.okrs.filter(o=>o.level==='조직' && o.month===mk).map(orgProgress));
-  if(!pooled.length) return null;
-  return Math.round(pooled.reduce((a,v)=>a+v,0)/pooled.length);
+function teamWeightedForMonth(team, mk){
+  return weightedGroupScore(DB.okrs.filter(o=>o.level==='조직' && o.owner===team && o.month===mk), orgProgress);
+}
+function deptAvgWeightedForMonth(mk){
+  const teams = [...new Set(DB.okrs.filter(o=>o.level==='조직' && o.month===mk).map(o=>o.owner))];
+  const scores = teams.map(t=>teamWeightedForMonth(t, mk).score).filter(s=>s!==null);
+  if(!scores.length) return null;
+  return Math.round(scores.reduce((a,v)=>a+v,0)/scores.length);
+}
+function blendedWeightedForMonth(mk){
+  const vals = [companyWeightedForMonth(mk).score, deptAvgWeightedForMonth(mk)].filter(v=>v!==null);
+  if(!vals.length) return null;
+  return Math.round(vals.reduce((a,v)=>a+v,0)/vals.length);
+}
+function riskyGoalCountForMonth(mk){
+  const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===mk).filter(c=>companyProgress(c)<31);
+  const orgs = DB.okrs.filter(o=>o.level==='조직' && o.month===mk).filter(o=>orgProgress(o)<31);
+  return companies.length + orgs.length;
+}
+function weightSumBadgeHtml(g){
+  if(g.totalCount===0) return '';
+  if(g.weightSum>100) return `<span class="badge red">가중치 합계 오류 · ${g.weightSum}%</span>`;
+  if(g.weightSum===100 && g.weightedCount===g.totalCount) return `<span class="badge green">가중치 합계 100% / 100%</span>`;
+  return `<span class="badge amber">가중치 설정 중 · ${g.weightSum}%</span>`;
 }
 function okrOvHistoryRows(mk){
-  const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===mk).map(o=>({
-    month:mk, kind:'기업 목표', title:o.title, owner:o.owner||'전사', progress:companyProgress(o), id:o.id
-  }));
-  const depts = DB.okrs.filter(o=>o.level==='조직' && o.month===mk).map(o=>({
-    month:mk, kind:'부서 목표', title:o.title, owner:o.owner + (o.part?` · ${o.part}`:''), progress:orgProgress(o), id:o.id
-  }));
+  const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===mk).map(o=>{
+    const p = companyProgress(o);
+    return { level:'회사', team:null, kind:'기업 목표', title:o.title, owner:o.owner||'전사', progress:p, weight:o.weight, contribution: o.weight!=null?Math.round(o.weight/100*p):null, id:o.id };
+  });
+  const depts = DB.okrs.filter(o=>o.level==='조직' && o.month===mk).map(o=>{
+    const p = orgProgress(o);
+    return { level:'조직', team:o.owner, kind:'부서 목표', title:o.title, owner:o.owner + (o.part?` · ${o.part}`:''), progress:p, weight:o.weight, contribution: o.weight!=null?Math.round(o.weight/100*p):null, id:o.id };
+  });
   return companies.concat(depts).sort((a,b)=>b.progress-a.progress);
 }
 const OKR_CHART_COLORS = ['#12B76A','#7C4DFF','#F2994A','#2F80ED','#EB5757','#00B8A9','#B8860B','#8E44AD'];
@@ -1265,16 +1298,18 @@ async function openEditOkrTitleModal(id){
   if(!okr) return;
   window.__editOkrId = id;
   showModal(`
-    <h3>목표 제목 수정</h3>
+    <h3>목표 수정</h3>
     <div class="field"><label>제목</label><input id="f-edit-okr-title" value="${escapeHtml(okr.title)}"></div>
+    <div class="field"><label>가중치 (%, 선택)</label><input id="f-edit-okr-weight" type="number" min="0" max="100" value="${okr.weight===null||okr.weight===undefined?'':okr.weight}"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOkrTitleEdit()">저장</button></div>
   `);
 }
 async function saveOkrTitleEdit(){
   const id = window.__editOkrId;
   const title = document.getElementById('f-edit-okr-title').value.trim();
+  const weight = document.getElementById('f-edit-okr-weight').value.trim();
   if(!title) return alert('제목을 입력해주세요');
-  try{ await apiPatch('/okrs/'+id, {title}); }catch(err){ return alert(err.message); }
+  try{ await apiPatch('/okrs/'+id, {title, weight: weight===''?null:Number(weight)}); }catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrOverview(); renderOkrDept();
 }
 async function deleteOkrGoal(id){
@@ -1293,61 +1328,66 @@ function renderOkrOverview(){
   const monthBadge = `<span class="badge grey" style="margin-left:4px;">${monthNum}월 기준</span>`;
 
   const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===mk);
-  const companyAvg = companyAvgForMonth(mk);
-  const deptAvg = deptAvgForMonth(mk);
-  const overallAvg = overallAvgForMonth(mk);
-  const prevOverallAvg = overallAvgForMonth(prevMk);
+  const companyGroup = weightedGroupScore(companies, companyProgress);
+  const companyScore = companyGroup.score;
+  const deptAvgScore = deptAvgWeightedForMonth(mk);
+  const riskyCount = riskyGoalCountForMonth(mk);
+  const blended = blendedWeightedForMonth(mk);
+  const prevBlended = blendedWeightedForMonth(prevMk);
   let momHtml;
-  if(overallAvg===null || prevOverallAvg===null){
+  if(blended===null || prevBlended===null){
     momHtml = `<div class="value" style="font-size:16px;color:var(--sub);">비교 데이터 없음</div>`;
   }else{
-    const diff = overallAvg - prevOverallAvg;
+    const diff = blended - prevBlended;
     momHtml = `<div class="value" style="color:${diff>=0?'var(--primary-dark)':'var(--red)'}">${diff>=0?'+':''}${diff}%p</div>
-      <div style="font-size:11px;color:var(--sub);margin-top:4px;">${prevMk} ${prevOverallAvg}% → ${mk} ${overallAvg}%</div>`;
+      <div style="font-size:11px;color:var(--sub);margin-top:4px;">${prevMk} ${prevBlended}% → ${mk} ${blended}%</div>`;
   }
 
   const kpiHtml = `
     <div class="grid4">
-      <div class="kpi"><div class="label">회사 목표 평균 달성률${monthBadge}</div><div class="value">${companyAvg===null?'데이터 없음':companyAvg+'%'}</div></div>
-      <div class="kpi"><div class="label">부서 목표 평균 달성률${monthBadge}</div><div class="value">${deptAvg===null?'데이터 없음':deptAvg+'%'}</div></div>
-      <div class="kpi"><div class="label">전체 목표 평균 달성률${monthBadge}</div><div class="value">${overallAvg===null?'데이터 없음':overallAvg+'%'}</div></div>
+      <div class="kpi"><div class="label">회사 가중 성과율${monthBadge}</div><div class="value">${companyScore===null?'데이터 없음':companyScore+'%'}</div></div>
+      <div class="kpi"><div class="label">전 부서 평균 가중 성과율${monthBadge}</div><div class="value">${deptAvgScore===null?'데이터 없음':deptAvgScore+'%'}</div></div>
+      <div class="kpi"><div class="label">위험 목표 수${monthBadge}</div><div class="value" style="color:${riskyCount>0?'var(--red)':'var(--text)'}">${riskyCount}개</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">달성률 31% 미만인 기업·부서 목표</div></div>
       <div class="kpi"><div class="label">전월 대비 변화${monthBadge}</div>${momHtml}</div>
     </div>`;
 
+  const companyCapReached = companies.length >= 3;
   const companyCardsHtml = companies.length ? `
+    <div style="margin-bottom:10px;">${weightSumBadgeHtml(companyGroup)}</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;" class="okr-company-grid">
-      ${companies.map(c=>{
+      ${companies.map((c,idx)=>{
         const p = companyProgress(c);
+        const contribution = c.weight!=null ? Math.round(c.weight/100*p) : null;
         return `<div style="border:1px solid var(--border);border-radius:14px;padding:16px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-            <div style="font-size:13.5px;font-weight:800;line-height:1.4;">${escapeHtml(c.title)}</div>
+            <div style="font-size:11px;color:var(--sub);font-weight:800;">#${idx+1}</div>
             ${okrStatusBadge(p)}
           </div>
+          <div style="font-size:13.5px;font-weight:800;line-height:1.4;margin-bottom:6px;">${escapeHtml(c.title)}</div>
           <div style="font-size:11.5px;color:var(--sub);margin-bottom:10px;">${escapeHtml(c.month)} · ${escapeHtml(c.owner||'전사')}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:8px;">
+            <div><div style="color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;">${c.weight!=null?c.weight+'%':'미설정'}</div></div>
+            <div><div style="color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;">${contribution!=null?contribution+'%':'-'}</div></div>
+          </div>
           <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;margin-bottom:6px;"><span>달성률</span><span style="color:${progressTextColor(p)}">${p}%</span></div>
           <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
           ${isAdmin ? `<div style="display:flex;gap:6px;margin-top:10px;">
-            <button class="btn ghost sm" onclick="openEditOkrTitleModal('${c.id}')">제목 수정</button>
+            <button class="btn ghost sm" onclick="openEditOkrTitleModal('${c.id}')">수정</button>
             <button class="btn ghost sm" style="color:var(--red);" onclick="deleteOkrGoal('${c.id}')">삭제</button>
           </div>` : ''}
         </div>`;
       }).join('')}
     </div>` : `<div class="empty">${mk}에 등록된 기업 목표가 없어요${isAdmin ? ' · 위에서 추가해보세요' : ''}</div>`;
 
-  const trendValues = Array.from({length:12},(_,i)=>overallAvgForMonth(`${okrOvYear}-${String(i+1).padStart(2,'0')}`));
-  const trendChart = buildOkrLineChartSvg([{label:'전체 평균', color:'#12B76A', values:trendValues}], {highlightIndex:monthNum-1});
+  const trendValues = Array.from({length:12},(_,i)=>companyWeightedForMonth(`${okrOvYear}-${String(i+1).padStart(2,'0')}`).score);
+  const trendChart = buildOkrLineChartSvg([{label:'회사 가중 성과율', color:'#12B76A', values:trendValues}], {highlightIndex:monthNum-1});
 
   const teams = [...new Set(DB.okrs.filter(o=>o.level==='조직').map(o=>o.owner))];
   const visibleTeams = teams.filter(t=>!okrOvHiddenTeams.has(t));
-  const deptSeries = visibleTeams.map((team,i)=>({
+  const deptSeries = visibleTeams.map(team=>({
     label: team,
     color: OKR_CHART_COLORS[teams.indexOf(team) % OKR_CHART_COLORS.length],
-    values: Array.from({length:12},(_,m)=>{
-      const mk2 = `${okrOvYear}-${String(m+1).padStart(2,'0')}`;
-      const goals = DB.okrs.filter(o=>o.level==='조직' && o.owner===team && o.month===mk2);
-      if(!goals.length) return null;
-      return Math.round(goals.reduce((a,g)=>a+orgProgress(g),0)/goals.length);
-    })
+    values: Array.from({length:12},(_,m)=>teamWeightedForMonth(team, `${okrOvYear}-${String(m+1).padStart(2,'0')}`).score)
   }));
   const deptChart = teams.length
     ? `${okrDeptLegendHtml(teams)}<div style="margin-top:8px;">${buildOkrLineChartSvg(deptSeries, {highlightIndex:monthNum-1})}</div>`
@@ -1358,19 +1398,23 @@ function renderOkrOverview(){
   const historyHtml = rows.length ? `
     <div style="overflow-x:auto;">
     <table>
-      <thead><tr><th>월</th><th>목표 구분</th><th>목표명</th><th>담당</th><th>달성률</th><th>상태</th></tr></thead>
-      <tbody>${shown.map(r=>`
-        <tr>
-          <td>${escapeHtml(r.month)}</td>
+      <thead><tr><th>구분</th><th>목표명</th><th>담당</th><th>가중치</th><th>달성률</th><th>기여율</th><th>상태</th></tr></thead>
+      <tbody>${shown.map(r=>{
+        const canEditRow = r.level==='회사' ? isAdmin : (me && me.roles && me.roles.includes('부서장') && me.team===r.team);
+        return `
+        <tr class="${canEditRow?'clickable':''}" ${canEditRow?`onclick="openEditOkrTitleModal('${r.id}')"`:''}>
           <td><span class="badge ${r.kind==='기업 목표'?'green':'blue'}">${r.kind}</span></td>
           <td>${escapeHtml(r.title)}</td>
           <td>${escapeHtml(r.owner)}</td>
+          <td>${r.weight!=null?r.weight+'%':'미설정'}</td>
           <td style="font-weight:700;color:${progressTextColor(r.progress)}">${r.progress}%</td>
+          <td>${r.contribution!=null?r.contribution+'%':'-'}</td>
           <td>${okrStatusBadge(r.progress)}</td>
-        </tr>`).join('')}</tbody>
+        </tr>`;
+      }).join('')}</tbody>
     </table>
     </div>
-    ${rows.length > shown.length ? `<div style="text-align:center;margin-top:14px;"><button class="btn sm" onclick="showMoreOkrOvHistory()">더보기 (${rows.length - shown.length}건 더)</button></div>` : ''}
+    ${rows.length > shown.length ? `<div style="text-align:center;margin-top:14px;"><button class="btn sm" onclick="showAllOkrOvHistory()">전체 이력 보기 (${rows.length}건)</button></div>` : ''}
   ` : `<div class="empty">${okrOvYear}년 ${monthNum}월에 등록된 기업·부서 목표가 없어요</div>`;
 
   el.innerHTML = `
@@ -1379,26 +1423,26 @@ function renderOkrOverview(){
         <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">연도</label><select onchange="changeOkrOvYear(this.value)">${okrOvYearOptions()}</select></div>
         <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">월</label><select onchange="changeOkrOvMonth(this.value)">${okrOvMonthOptions()}</select></div>
       </div>
-      ${isAdmin ? `<button class="btn primary sm" onclick="openCompanyGoalModal()">+ 회사 목표 추가</button>` : ''}
+      ${isAdmin ? `<button class="btn primary sm" ${companyCapReached?'disabled title="기업 목표는 최대 3개까지 설정할 수 있습니다."':''} onclick="openCompanyGoalModal()">+ 회사 목표 추가</button>` : ''}
     </div>
     <div class="axis-note">연간 차트는 선택한 연도 전체를 표시하며, KPI와 목표 이력은 선택한 월을 기준으로 반영돼요.</div>
     ${kpiHtml}
     <div class="section">
-      <div class="section-head"><div><h3>이번 달 기업 목표</h3><div class="desc">${mk} 기준</div></div></div>
+      <div class="section-head"><div><h3>이번 달 기업 목표</h3><div class="desc">${mk} 기준, 최대 3개</div></div></div>
       ${companyCardsHtml}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="okr-chart-row">
       <div class="section">
-        <div class="section-head"><h3>월별 전체 목표 달성률 추이 (${okrOvYear}년)</h3></div>
+        <div class="section-head"><h3>월별 회사 목표 가중 성과율 추이 (${okrOvYear}년)</h3></div>
         ${trendChart}
       </div>
       <div class="section">
-        <div class="section-head"><h3>부서별 월별 달성률 비교 (${okrOvYear}년)</h3></div>
+        <div class="section-head"><h3>전 부서 월별 가중 성과율 비교 (${okrOvYear}년)</h3></div>
         ${deptChart}
       </div>
     </div>
     <div class="section">
-      <div class="section-head"><h3>월별 달성 이력</h3></div>
+      <div class="section-head"><h3>월별 성과 이력</h3></div>
       ${historyHtml}
     </div>
   `;
@@ -1409,7 +1453,8 @@ function openDeptGoalModal(){
     <div class="field"><label>월</label><select id="f-dept-month">${monthOptionsHtml()}</select></div>
     <div class="field"><label>파트 (선택)</label><input id="f-dept-part" placeholder="예: 인사, 회계 — 한 팀 안에서 안 나누면 비워두세요"></div>
     <div class="field"><label>목표 제목</label><input id="f-dept-title" placeholder="예: 전 직원 월간 목표 등록률 100%"></div>
-    <div class="modal-sub">파트별로 한 달에 최대 5개까지 만들 수 있어요. 상위 기업 목표는 고른 월의 회사 목표로 자동 연결돼요</div>
+    <div class="field"><label>가중치 (%, 선택)</label><input id="f-dept-weight" type="number" min="0" max="100" placeholder="예: 40"></div>
+    <div class="modal-sub">파트별로 한 달에 최대 5개까지 만들 수 있어요. 같은 팀·같은 파트 목표끼리 가중치 합이 100%를 넘을 수 없어요. 상위 기업 목표는 고른 월의 회사 목표로 자동 연결돼요</div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveDeptGoal()">목표 생성</button></div>
   `);
 }
@@ -1424,10 +1469,11 @@ async function saveDeptGoal(){
   const month = document.getElementById('f-dept-month').value;
   const title = document.getElementById('f-dept-title').value.trim();
   const part = document.getElementById('f-dept-part').value.trim();
+  const weight = document.getElementById('f-dept-weight').value.trim();
   if(!title) return alert('목표 제목을 입력해주세요');
   const company = DB.okrs.find(o=>o.level==='회사' && o.month===month);
   if(!company) return alert(month + ' 기업 목표가 아직 없어요. 관리자에게 등록을 요청해주세요');
-  try{ await apiPost('/okrs', {level:'조직', title, month, parent:company.id, owner:me.team, part}); }
+  try{ await apiPost('/okrs', {level:'조직', title, month, parent:company.id, owner:me.team, part, weight: weight===''?null:Number(weight)}); }
   catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrDept(); renderOkrOverview();
   // 부서목표 탭은 지금 보고 있는 기간(월/분기/연도)만 화면에 반영하기 때문에,
