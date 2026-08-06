@@ -11,6 +11,12 @@
  * 2026-08-04: 상위 부서 목표가 로그인한 본인의 팀 소속인지 확인하는 검증을
  * 추가했다 — 이전에는 다른 팀의 부서 목표에도 개인 목표를 붙일 수 있었다.
  * 상위 부서 목표의 월이 이번 달/지난달이 아니면 거부한다.
+ *
+ * 2026-08-06: 개인 목표는 만들 때 status='pending'으로 시작한다 — 부서장이
+ * 검토(승인/반려)할 수 있게 하기 위해서다(PATCH /api/my-goals/:id/review,
+ * handlers/my-goals/[id]/review.js). 승인 전엔 프론트에서 체크리스트를
+ * 잠가둔다. 회사/조직 레벨은 이 검토 흐름 대상이 아니라서 okrs.status
+ * 컬럼의 기본값(approved)을 그대로 쓴다.
  */
 import { sql } from '../_lib/db.js';
 import { requireMemberAuth } from '../_lib/memberSession.js';
@@ -39,8 +45,8 @@ export default async function handler(req, res) {
     }
 
     const [row] = await sql`
-      INSERT INTO okrs (quarter, month, level, title, owner, parent_id, member_id, progress, unit, target)
-      VALUES (${parent.quarter}, ${parent.month}, '개인', ${title.trim()}, '-', ${parent.id}, ${memberId}, 0, '%', 100)
+      INSERT INTO okrs (quarter, month, level, title, owner, parent_id, member_id, progress, unit, target, status)
+      VALUES (${parent.quarter}, ${parent.month}, '개인', ${title.trim()}, '-', ${parent.id}, ${memberId}, 0, '%', 100, 'pending')
       RETURNING id`;
     res.status(201).json({ id: row.id });
   } catch (err) {
