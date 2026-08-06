@@ -1,7 +1,7 @@
 /**
  * handlers/my-goals/index.js
  *
- * POST { parentId, title } -> 201 { id }
+ * POST { parentId, title, weight? } -> 201 { id }
  *
  * 개인(레벨='개인') 목표 생성 전용 엔드포인트. /api/okrs는 이 레벨을
  * 거부한다 — 개인 목표는 반드시 로그인한 본인 명의로만 만들어져야 하므로
@@ -17,19 +17,32 @@
  * handlers/my-goals/[id]/review.js). 승인 전엔 프론트에서 체크리스트를
  * 잠가둔다. 회사/조직 레벨은 이 검토 흐름 대상이 아니라서 okrs.status
  * 컬럼의 기본값(approved)을 그대로 쓴다.
+ *
+ * 2026-08-06(부서목표 화면 재설계): 가중치(weight)도 받는다. 사용자가 정의한
+ * 매커니즘상 개인 목표는 "그 사람·그 달" 단위로 가중치 합이 100%를 넘을 수
+ * 없다(회사/부서처럼 팀 단위가 아니라 개인 단위 스코프라는 점이 다르다).
  */
 import { sql } from '../_lib/db.js';
 import { requireMemberAuth } from '../_lib/memberSession.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
+
+function parseWeight(raw) {
+  if (raw === undefined || raw === null || raw === '') return { weight: null };
+  const w = Number(raw);
+  if (!Number.isInteger(w) || w < 0 || w > 100) return { error: '가중치는 0~100 사이 정수여야 해요' };
+  return { weight: w };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const memberId = requireMemberAuth(req, res);
   if (!memberId) return;
 
-  const { parentId, title } = req.body || {};
+  const { parentId, title, weight: rawWeight } = req.body || {};
   if (!parentId) return res.status(400).json({ error: '연결할 부서 목표를 선택해주세요' });
   if (!title || !title.trim()) return res.status(400).json({ error: 'title is required' });
+  const { weight, error: weightErr } = parseWeight(rawWeight);
+  if (weightErr) return res.status(400).json({ error: weightErr });
 
   try {
     const [me] = await sql`SELECT team FROM members WHERE id = ${memberId}`;
@@ -44,9 +57,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '이번 달/지난달 부서 목표에만 연결할 수 있어요' });
     }
 
+    if (weight !== null) {
+      const [{ sum }] = await sql`
+        SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs
+        WHERE level = '개인' AND member_id = ${memberId} AND month = ${parent.month} AND weight IS NOT NULL`;
+      if (sum + weight > 100) {
+        return res.status(400).json({ error: `이번 달 내 개인 목표 가중치 합계가 100%를 넘어요 (현재 ${sum}% + ${weight}%)` });
+      }
+    }
+
     const [row] = await sql`
-      INSERT INTO okrs (quarter, month, level, title, owner, parent_id, member_id, progress, unit, target, status)
-      VALUES (${parent.quarter}, ${parent.month}, '개인', ${title.trim()}, '-', ${parent.id}, ${memberId}, 0, '%', 100, 'pending')
+      INSERT INTO okrs (quarter, month, level, title, owner, parent_id, member_id, weight, progress, unit, target, status)
+      VALUES (${parent.quarter}, ${parent.month}, '개인', ${title.trim()}, '-', ${parent.id}, ${memberId}, ${weight}, 0, '%', 100, 'pending')
       RETURNING id`;
     res.status(201).json({ id: row.id });
   } catch (err) {

@@ -15,6 +15,10 @@
  * 승인/반려 모두 목표 자체를 지우거나 잠그지 않는다 -- 반려된 목표도 그대로
  * 남아있고, 팀원이 제목/체크리스트를 고친 뒤 부서장이 다시 승인할 수 있다
  * (재검토에 별도 절차가 없다: 이 엔드포인트를 다시 호출하면 그만이다).
+ *
+ * 2026-08-06(부서목표 화면 재설계): 관리자는 팀 소속과 무관하게 아무 개인
+ * 목표나 검토할 수 있다("대표·관리자: 개인 목표 승인" 요구사항). 부서장은
+ * 여전히 본인 팀 것만 가능하다.
  */
 import { sql } from '../../_lib/db.js';
 import { getSessionMemberId } from '../../_lib/memberSession.js';
@@ -46,8 +50,10 @@ export default async function handler(req, res) {
     const [me] = await sql`SELECT roles, team FROM members WHERE id = ${memberId}`;
     if (!me) return res.status(401).json({ error: '로그인이 필요해요' });
     const roles = me.roles || [];
-    if (!roles.includes('부서장')) return res.status(403).json({ error: '부서장만 검토할 수 있어요' });
-    if (me.team !== parent.owner) return res.status(403).json({ error: '본인 팀의 개인 목표만 검토할 수 있어요' });
+    if (!roles.includes('관리자')) {
+      if (!roles.includes('부서장')) return res.status(403).json({ error: '부서장만 검토할 수 있어요' });
+      if (me.team !== parent.owner) return res.status(403).json({ error: '본인 팀의 개인 목표만 검토할 수 있어요' });
+    }
 
     await sql`UPDATE okrs SET status = ${status}, review_note = ${status === 'rejected' ? reviewNote : ''} WHERE id = ${okr.id}`;
     res.status(200).json({ ok: true });

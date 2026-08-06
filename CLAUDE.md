@@ -72,8 +72,14 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - `okrs.weight`(nullable integer, `sql/009_goal_weights.sql`)로 저장. `null` = "가중치 설정 중" 상태 — 0으로 채우지 않고 가중치 배분/가중 성과율 계산에서 아예 제외한다(`index.html`의 `weightedGroupScore`).
 - 서버 검증(`handlers/okrs/index.js`, `handlers/okrs/[id].js`): 회사는 그 달 전체, 조직은 팀+달+파트 스코프로 "이미 설정된 weight 합 + 새 weight ≤ 100"을 강제한다. 수정(PATCH) 시에는 자기 자신의 기존 weight를 합계에서 빼고 계산한다.
 - **기업 목표는 이 시점부터 평가기간(월) 기준 최대 3개**로 제한한다(`handlers/okrs/index.js`) — 전에는 상한이 없었는데, 전체현황 재설계 요청에서 명시적으로 확인된 규칙이라 새로 추가했다.
-- 지금은 **전체현황 화면에서만** 가중 계산을 쓴다(`companyWeightedForMonth`/`teamWeightedForMonth`/`deptAvgWeightedForMonth`). 부서목표·개인목표 탭은 아직 기존 단순 평균 방식 그대로다 — 대표님이 "전체현황부터" 단계적으로 적용하자고 명시했고, 개인 목표 가중치·승인 상태 세분화(작성중→승인요청→진행중→완료)·월말 스냅샷 이력은 다음 단계로 남겨뒀다.
 - "위험 목표"는 아직 지연/종료일 개념이 없는 데이터 모델이라, 기존에 이미 쓰던 red 임계값(달성률 31% 미만, `progressTextColor`/`progressBarStyle`)을 그대로 재사용해서 정의했다 — 관리자 수동 지정이나 종료일 기반 판정은 아직 없다.
+- 2026-08-06(2차): 부서목표 탭도 가중 성과율로 전환했다(`renderOkrDept()`). 이때 같이 바뀐 것들:
+  - 부서 목표 월 상한을 팀·달·파트당 5개 → **10개**로 올림(`handlers/okrs/index.js`) — 화면 시안에서 명시된 값.
+  - **관리자는 부서장이 아니거나 본인 팀이 아니어도** 부서 목표 수정/삭제, 개인 목표 승인/반려가 가능하다(`handlers/okrs/[id].js`, `handlers/my-goals/[id]/review.js`). 단 **생성**은 여전히 그 팀 부서장만 — 관리자가 임의 팀을 골라 새로 만드는 UI가 없어서, 권한만 넓히면 못 쓰는 기능이 되기 때문이다.
+  - **개인 목표도 weight를 받는다**(`handlers/my-goals/index.js`/`[id].js`) — 스코프는 회사/부서와 달리 "그 사람·그 달" 단위(개인 단위지 팀 단위가 아님).
+  - **승인된 개인 목표의 제목이나 가중치를 고치면 자동으로 `status='pending'`으로 되돌아간다**(`handlers/my-goals/[id].js`) — 체크리스트 체크/추가/삭제는 이 트리거 대상이 아니다(별도 엔드포인트인 `handlers/okr-tasks/*`가 처리).
+  - `okrs.created_at`(`sql/010_okr_created_at.sql`) 추가 — 부서목표 탭의 "승인 대기" 목록에 제출일을 보여주기 위해서다. 기존 행은 백필돼서 실제 생성 시각과는 다르다.
+  - **"월 종료 시 스냅샷 고정"은 아직 구현하지 않았다** — 부서목표 탭의 "우리 부서 이력" 표는 매번 현재 데이터로 다시 계산한다(과거 목표를 나중에 고치면 그 달 이력값도 같이 바뀐다). 진짜 불변 스냅샷을 만들려면 별도 테이블과 "언제 얼릴지"(월말 크론 vs 조회 시점 lazy freeze) 결정이 필요해서 의도적으로 보류했다. 개인 목표 탭은 아직 이번 라운드에 손대지 않았다(단순 평균 그대로).
 
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 

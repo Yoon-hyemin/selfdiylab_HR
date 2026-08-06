@@ -21,6 +21,12 @@
  * 그 달 전체, 조직은 팀+달+파트)로 합계 100% 검증을 하되, 자기 자신의 기존
  * weight는 합계에서 빼고 계산한다(그래야 이미 배분된 가중치를 그대로 두는
  * PATCH가 "자기 자신과 중복 계산돼서" 부당하게 거부되지 않는다).
+ *
+ * 2026-08-06(부서목표 화면 재설계): 관리자는 부서 목표를 팀 소속과 무관하게
+ * 수정·삭제할 수 있다("대표·관리자: 모든 부서 목표 수정" 요구사항). 부서장은
+ * 여전히 본인 팀 것만 가능하다. 생성(POST /api/okrs)은 이 변경 대상이
+ * 아니다 — 관리자가 임의 팀을 골라 새로 만드는 화면이 없어서, 권한만
+ * 넓히면 쓸 수 없는 기능이 된다.
  */
 import { sql } from '../_lib/db.js';
 import { getSessionMemberId } from '../_lib/memberSession.js';
@@ -43,10 +49,11 @@ async function loadOkrAndCheckPermission(id, memberId) {
   if (!me) return { error: [401, '로그인이 필요해요'] };
   const roles = me.roles || [];
 
-  if (okr.level === '회사' && !roles.includes('관리자')) {
+  const isAdmin = roles.includes('관리자');
+  if (okr.level === '회사' && !isAdmin) {
     return { error: [403, '회사 목표는 관리자만 수정/삭제할 수 있어요'] };
   }
-  if (okr.level === '조직') {
+  if (okr.level === '조직' && !isAdmin) {
     if (!roles.includes('부서장')) return { error: [403, '부서 목표는 부서장만 수정/삭제할 수 있어요'] };
     if (okr.owner !== me.team) return { error: [403, '본인 팀 목표만 수정/삭제할 수 있어요'] };
   }

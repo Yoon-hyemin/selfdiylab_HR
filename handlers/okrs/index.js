@@ -30,6 +30,14 @@
  * 안 주면 null("가중치 설정 중" 상태)로 저장한다. 이 시점부터 기업 목표는
  * 평가기간(월) 기준 최대 3개로 제한한다(전에는 상한이 없었다 — 전체현황
  * 화면 재설계 요청에서 명시적으로 다시 확인된 규칙).
+ *
+ * 2026-08-06(부서목표 화면 재설계): 부서 목표 월 상한을 팀·달·파트당 5개 ->
+ * 10개로 올렸다(사용자가 화면 시안에서 "월 최대 10개"를 명시). 그리고
+ * 관리자는 부서장이 아니어도, 본인 팀이 아니어도 아무 부서 목표나 수정·
+ * 삭제할 수 있게 됐다(handlers/okrs/[id].js) — 다만 "생성"은 여전히 그 팀의
+ * 부서장만 할 수 있다. 관리자가 임의의 팀을 골라 새로 만드는 화면은 아직
+ * 없어서(요청받은 적 없음), 생성 권한까지 넓히면 그 UI 없이는 쓸 수 없는
+ * 반쪽짜리 기능이 되기 때문이다.
  */
 import { sql } from '../_lib/db.js';
 import { getSessionMemberId } from '../_lib/memberSession.js';
@@ -94,8 +102,8 @@ export default async function handler(req, res) {
       const [{ count }] = await sql`
         SELECT count(*)::int AS count FROM okrs
         WHERE level = '조직' AND owner = ${owner} AND month = ${b.month} AND part = ${part}`;
-      if (count >= 5) {
-        return res.status(400).json({ error: `${owner}${part ? ' · ' + part : ''} 팀은 ${b.month}에 이미 목표가 5개 있어요` });
+      if (count >= 10) {
+        return res.status(400).json({ error: `${owner}${part ? ' · ' + part : ''} 팀은 ${b.month}에 이미 목표가 10개 있어요` });
       }
 
       if (weight !== null) {

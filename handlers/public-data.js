@@ -43,7 +43,8 @@ export default async function handler(req, res) {
     const okrs_out = okrs.map(o => ({
       id: o.id, quarter: o.quarter, month: o.month, level: o.level, title: o.title, owner: o.owner,
       parent: o.parent_id, member: o.member_id, part: o.part || '', progress: o.progress, unit: o.unit, target: o.target,
-      status: o.status || 'approved', reviewNote: o.review_note || '', weight: o.weight === null || o.weight === undefined ? null : o.weight
+      status: o.status || 'approved', reviewNote: o.review_note || '', weight: o.weight === null || o.weight === undefined ? null : o.weight,
+      createdAt: o.created_at
     }));
 
     const okrTasks_out = okrTasks.map(t => ({ id: t.id, okrId: t.okr_id, title: t.title, done: t.done }));
