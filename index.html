@@ -657,11 +657,13 @@ async function saveMember(){
   const roles = [];
   if(document.getElementById('f-mrole-admin').checked) roles.push('관리자');
   if(document.getElementById('f-mrole-lead').checked) roles.push('부서장');
-  await apiPost('/members', {
-    name, team:document.getElementById('f-mteam').value||'', position:document.getElementById('f-mposition').value||'',
-    email:document.getElementById('f-memail').value||'', phone:document.getElementById('f-mphone').value||'',
-    roles
-  });
+  try{
+    await apiPost('/members', {
+      name, team:document.getElementById('f-mteam').value||'', position:document.getElementById('f-mposition').value||'',
+      email:document.getElementById('f-memail').value||'', phone:document.getElementById('f-mphone').value||'',
+      roles
+    });
+  }catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderMembers();
 }
 
@@ -717,7 +719,8 @@ function renderMemberProfile(){
 }
 
 async function saveMemberField(field, value){
-  await apiPatch('/members/'+currentMemberId, {[field]: value});
+  try{ await apiPatch('/members/'+currentMemberId, {[field]: value}); }
+  catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderMemberProfile();
 }
 
@@ -777,7 +780,8 @@ async function saveBasicInfo(){
     address: document.getElementById('f-b-addr').value,
     roles
   };
-  await apiPatch('/members/'+currentMemberId, patch);
+  try{ await apiPatch('/members/'+currentMemberId, patch); }
+  catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderMemberProfile();
 }
 function openEditWorkType(){
