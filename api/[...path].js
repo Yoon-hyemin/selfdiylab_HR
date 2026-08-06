@@ -34,7 +34,9 @@ import jobsId from '../handlers/jobs/[id].js';
 import jobsIdCandidates from '../handlers/jobs/[id]/candidates.js';
 import candidatesId from '../handlers/candidates/[id].js';
 import okrsIndex from '../handlers/okrs/index.js';
+import okrsId from '../handlers/okrs/[id].js';
 import myGoalsIndex from '../handlers/my-goals/index.js';
+import myGoalsId from '../handlers/my-goals/[id].js';
 import okrTasksIndex from '../handlers/okr-tasks/index.js';
 import okrTasksId from '../handlers/okr-tasks/[id].js';
 import evalsIndex from '../handlers/evals/index.js';
@@ -59,7 +61,9 @@ const ROUTES = [
   { pattern: ['jobs', ':id', 'candidates'], handler: jobsIdCandidates },
   { pattern: ['candidates', ':id'], handler: candidatesId },
   { pattern: ['okrs'], handler: okrsIndex },
+  { pattern: ['okrs', ':id'], handler: okrsId },
   { pattern: ['my-goals'], handler: myGoalsIndex },
+  { pattern: ['my-goals', ':id'], handler: myGoalsId },
   { pattern: ['okr-tasks'], handler: okrTasksIndex },
   { pattern: ['okr-tasks', ':id'], handler: okrTasksId },
   { pattern: ['evals'], handler: evalsIndex },
