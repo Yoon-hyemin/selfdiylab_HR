@@ -493,7 +493,7 @@ function escapeHtml(s){
 // 현황 목록도 team으로 DB.roster를 필터링해요. Use DB.roster for pickers,
 // DB.members only inside the password-gated 구성원 views.
 let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], evals:[], calibration:{}, oneonones:[] };
-let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, role} | null
+let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, roles} | null (roles는 배열, 관리자+부서장 동시 가능)
 
 /* 인사 영역 잠금 해제 여부. 페이지 로드마다 초기화돼요
    (localStorage/sessionStorage에 저장하지 않아요). */
@@ -643,11 +643,13 @@ function openMemberAddModal(){
       <div class="field"><label>소속 조직</label><input id="f-mteam" placeholder="예: 개발팀"></div>
       <div class="field"><label>직책</label><input id="f-mposition" placeholder="예: 매니저"></div>
     </div>
-    <div class="form-row">
-      <div class="field"><label>휴대전화번호</label><input id="f-mphone" placeholder="010-0000-0000"></div>
-      <div class="field"><label>목표 화면 권한</label>
-        <select id="f-mrole"><option value="팀원" selected>팀원</option><option value="부서장">부서장</option><option value="관리자">관리자</option></select>
+    <div class="field"><label>휴대전화번호</label><input id="f-mphone" placeholder="010-0000-0000"></div>
+    <div class="field"><label>목표 화면 권한</label>
+      <div style="display:flex;gap:16px;">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="f-mrole-admin"> 관리자</label>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="f-mrole-lead"> 부서장</label>
       </div>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:4px;">둘 다 체크 안 하면 팀원이에요. 관리자와 부서장은 동시에 체크할 수 있어요</div>
     </div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveMember()">추가</button></div>
   `);
@@ -655,10 +657,13 @@ function openMemberAddModal(){
 async function saveMember(){
   const name = document.getElementById('f-mname2').value.trim();
   if(!name) return alert('이름을 입력해주세요');
+  const roles = [];
+  if(document.getElementById('f-mrole-admin').checked) roles.push('관리자');
+  if(document.getElementById('f-mrole-lead').checked) roles.push('부서장');
   await apiPost('/members', {
     name, team:document.getElementById('f-mteam').value||'', position:document.getElementById('f-mposition').value||'',
     email:document.getElementById('f-memail').value||'', phone:document.getElementById('f-mphone').value||'',
-    role:document.getElementById('f-mrole').value
+    roles
   });
   await refreshDB(); closeModal(); renderMembers();
 }
@@ -791,14 +796,19 @@ function openEditBasicInfo(){
     </div>
     <div class="field"><label>주소</label><input id="f-b-addr" value="${escapeHtml(m.address||'')}"></div>
     <div class="field"><label>목표 화면 권한</label>
-      <select id="f-b-role">
-        ${['팀원','부서장','관리자'].map(r=>`<option value="${r}" ${(m.role||'팀원')===r?'selected':''}>${r}</option>`).join('')}
-      </select>
+      <div style="display:flex;gap:16px;">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="f-b-role-admin" ${(m.roles||[]).includes('관리자')?'checked':''}> 관리자</label>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="f-b-role-lead" ${(m.roles||[]).includes('부서장')?'checked':''}> 부서장</label>
+      </div>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:4px;">둘 다 체크 안 하면 팀원이에요. 관리자와 부서장은 동시에 체크할 수 있어요</div>
     </div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveBasicInfo()">저장</button></div>
   `);
 }
 async function saveBasicInfo(){
+  const roles = [];
+  if(document.getElementById('f-b-role-admin').checked) roles.push('관리자');
+  if(document.getElementById('f-b-role-lead').checked) roles.push('부서장');
   const patch = {
     name: document.getElementById('f-b-name').value,
     email: document.getElementById('f-b-email').value,
@@ -809,7 +819,7 @@ async function saveBasicInfo(){
     birthday: document.getElementById('f-b-bday').value,
     phone: document.getElementById('f-b-phone').value,
     address: document.getElementById('f-b-addr').value,
-    role: document.getElementById('f-b-role').value
+    roles
   };
   await apiPatch('/members/'+currentMemberId, patch);
   await refreshDB(); closeModal(); renderMemberProfile();
@@ -1162,7 +1172,7 @@ function renderOkrOverview(){
   const teams = [...new Set(orgs.map(o=>o.owner))];
 
   el.innerHTML = `
-    ${me && me.role==='관리자' ? `<div style="text-align:right;margin-bottom:12px;"><button class="btn primary sm" onclick="openCompanyGoalModal()">+ 회사 목표 추가</button></div>` : ''}
+    ${me && me.roles && me.roles.includes('관리자') ? `<div style="text-align:right;margin-bottom:12px;"><button class="btn primary sm" onclick="openCompanyGoalModal()">+ 회사 목표 추가</button></div>` : ''}
     <div class="section">
       <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px;"><span>📊 이번 달(${month}) 전사 달성률</span><span style="color:${progressTextColor(overallAvg)}">${overallAvg}%</span></div>
       <div class="bar"><i style="width:${overallAvg}%;${progressBarStyle(overallAvg)}"></i></div>
@@ -1230,7 +1240,7 @@ function renderOkrDept(){
   const teamOrgs = DB.okrs.filter(o=>o.level==='조직' && o.owner===myTeam && o.month===month);
   const parts = [...new Set(teamOrgs.map(o=>o.part||''))];
   const hasParts = parts.some(p=>p);
-  const canCreate = me.role === '부서장';
+  const canCreate = me.roles && me.roles.includes('부서장');
 
   const banners = (hasParts ? parts : ['']).map(part=>{
     const goals = teamOrgs.filter(o=>(o.part||'')===part);

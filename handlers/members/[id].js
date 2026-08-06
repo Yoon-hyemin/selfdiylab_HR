@@ -33,9 +33,12 @@ export default async function handler(req, res) {
       sets.push(`${column} = $${i++}`); values.push(value);
     }
   }
-  const ALLOWED_ROLES = ['관리자', '부서장', '팀원'];
-  if ('role' in body) {
-    sets.push(`role = $${i++}`); values.push(ALLOWED_ROLES.includes(body.role) ? body.role : '팀원');
+  // roles: 관리자/부서장을 동시에 가질 수 있음(2026-08-05, 복수 역할 지원).
+  // members/index.js의 INSERT와 같은 필터링 규칙.
+  if ('roles' in body) {
+    const ALLOWED_ROLES = ['관리자', '부서장', '팀원'];
+    const filtered = Array.isArray(body.roles) ? body.roles.filter(r => ALLOWED_ROLES.includes(r) && r !== '팀원') : [];
+    sets.push(`roles = $${i++}`); values.push(filtered.length ? filtered : ['팀원']);
   }
   if (body.workType) {
     sets.push(`work_type_name = $${i++}`); values.push(body.workType.name || '');

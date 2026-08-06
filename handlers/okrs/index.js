@@ -9,9 +9,13 @@
  *
  * 2026-08-04: 지금까지 이 엔드포인트는 로그인 여부와 무관하게 누구나 호출할
  * 수 있었다. 목표 탭을 역할(관리자/부서장/팀원) 기반으로 재설계하면서 실제
- * 권한 검사를 추가한다 — 회사 목표는 role='관리자'만, 부서 목표는
- * role='부서장'이면서 그 팀 소속인 사람만 만들 수 있다
+ * 권한 검사를 추가한다 — 회사 목표는 roles에 '관리자'가 있는 사람만, 부서
+ * 목표는 roles에 '부서장'이 있으면서 그 팀 소속인 사람만 만들 수 있다
  * (docs/superpowers/specs/2026-08-04-goal-tab-role-permissions-design.md 참고).
+ *
+ * 2026-08-05: role(단일 값) -> roles(배열)로 변경 — 관리자이면서 동시에 자기
+ * 팀의 부서장인 실사용 사례(예: 인사팀장)가 나와서, 한 사람이 관리자/부서장을
+ * 동시에 가질 수 있게 했다.
  *
  * 부서(조직) 목표는 반드시 "같은 달"의 기업(회사) 목표를 상위로 선택해야
  * 하고, 같은 팀(owner)·같은 달(month)·같은 파트(part)에 5개를 넘게 만들 수
@@ -49,11 +53,12 @@ export default async function handler(req, res) {
     // try 안에서 실행해 일시적인 DB 오류도 나머지 코드와 같은 500 JSON 응답으로
     // 처리되게 한다(전에는 try 시작 전에 있어서 그런 오류가 처리 안 된 예외로
     // 튀어나갔다).
-    const [me] = await sql`SELECT role, team FROM members WHERE id = ${memberId}`;
+    const [me] = await sql`SELECT roles, team FROM members WHERE id = ${memberId}`;
     if (!me) return res.status(401).json({ error: '로그인이 필요해요' });
+    const roles = me.roles || [];
 
     if (b.level === '조직') {
-      if (me.role !== '부서장') return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
+      if (!roles.includes('부서장')) return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
 
       const owner = (b.owner || '-').trim() || '-';
       if (owner !== me.team) return res.status(403).json({ error: '본인 팀 목표만 만들 수 있어요' });
@@ -83,7 +88,7 @@ export default async function handler(req, res) {
     }
 
     // 회사
-    if (me.role !== '관리자') return res.status(403).json({ error: '회사 목표는 관리자만 만들 수 있어요' });
+    if (!roles.includes('관리자')) return res.status(403).json({ error: '회사 목표는 관리자만 만들 수 있어요' });
     const [row] = await sql`
       INSERT INTO okrs (quarter, month, level, title, owner, progress, unit, target)
       VALUES (${quarterFromMonth(b.month)}, ${b.month}, '회사', ${b.title.trim()}, '전사', 0, '%', 100)
