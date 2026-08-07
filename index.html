@@ -1371,23 +1371,80 @@ function okrDeptLegendHtml(teams){
     </button>`;
   }).join('');
 }
+function updateEditGoalPeriodFields(){
+  const ptEl = document.getElementById('f-edit-cgoal-periodtype');
+  if(!ptEl) return;
+  const pt = ptEl.value;
+  const anchor = document.getElementById('f-edit-cgoal-anchor').value;
+  const autoEl = document.getElementById('f-edit-cgoal-period-auto');
+  const manualEl = document.getElementById('f-edit-cgoal-period-manual');
+  if(pt==='custom'){
+    autoEl.textContent = '';
+    manualEl.style.display = '';
+  }else if(anchor){
+    const period = computeAutoCompanyPeriod(pt, anchor);
+    autoEl.textContent = `기간: ${period.start} ~ ${period.end}`;
+    manualEl.style.display = 'none';
+  }
+}
 async function openEditOkrTitleModal(id){
   const okr = DB.okrs.find(o=>o.id===id);
   if(!okr) return;
   window.__editOkrId = id;
+  const isCompany = okr.level==='회사';
+  const anchorMonth = (okr.startDate || okr.month+'-01').slice(0,7);
+  const periodBlock = !isCompany ? '' : `
+    <div class="field"><label>기준 월 (기간 자동계산용)</label><input type="month" id="f-edit-cgoal-anchor" value="${anchorMonth}" onchange="updateEditGoalPeriodFields()"></div>
+    <div class="field"><label>목표 기간 유형</label>
+      <select id="f-edit-cgoal-periodtype" onchange="updateEditGoalPeriodFields()">
+        <option value="monthly" ${(okr.periodType||'monthly')==='monthly'?'selected':''}>월간</option>
+        <option value="quarterly" ${okr.periodType==='quarterly'?'selected':''}>분기</option>
+        <option value="half" ${okr.periodType==='half'?'selected':''}>반기</option>
+        <option value="yearly" ${okr.periodType==='yearly'?'selected':''}>연간</option>
+        <option value="custom" ${okr.periodType==='custom'?'selected':''}>직접 설정</option>
+      </select>
+    </div>
+    <div id="f-edit-cgoal-period-auto" style="font-size:12px;color:var(--sub);margin-bottom:14px;"></div>
+    <div id="f-edit-cgoal-period-manual" style="display:none;">
+      <div class="form-row">
+        <div class="field"><label>시작일</label><input type="date" id="f-edit-cgoal-start" value="${okr.startDate||''}"></div>
+        <div class="field"><label>종료일</label><input type="date" id="f-edit-cgoal-end" value="${okr.endDate||''}"></div>
+      </div>
+    </div>
+    <div class="modal-sub">기간을 바꿔도 이미 연결된 부서 목표나 월별 진행기록은 그대로 남아요. 다만 새 기간에 더는 포함되지 않는 달에서는 이 목표가 "겹치는 기업 목표 없음"으로 보일 수 있어요.</div>`;
   showModal(`
     <h3>목표 수정</h3>
     <div class="field"><label>제목</label><input id="f-edit-okr-title" value="${escapeHtml(okr.title)}"></div>
     <div class="field"><label>가중치 (%, 선택)</label><input id="f-edit-okr-weight" type="number" min="0" max="100" value="${okr.weight===null||okr.weight===undefined?'':okr.weight}"></div>
+    ${periodBlock}
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveOkrTitleEdit()">저장</button></div>
   `);
+  updateEditGoalPeriodFields();
 }
 async function saveOkrTitleEdit(){
   const id = window.__editOkrId;
+  const okr = DB.okrs.find(o=>o.id===id);
   const title = document.getElementById('f-edit-okr-title').value.trim();
   const weight = document.getElementById('f-edit-okr-weight').value.trim();
   if(!title) return alert('제목을 입력해주세요');
-  try{ await apiPatch('/okrs/'+id, {title, weight: weight===''?null:Number(weight)}); }catch(err){ return alert(err.message); }
+  const body = {title, weight: weight===''?null:Number(weight)};
+  if(okr && okr.level==='회사'){
+    const periodType = document.getElementById('f-edit-cgoal-periodtype').value;
+    let startDate, endDate;
+    if(periodType==='custom'){
+      startDate = document.getElementById('f-edit-cgoal-start').value;
+      endDate = document.getElementById('f-edit-cgoal-end').value;
+      if(!startDate || !endDate) return alert('시작일과 종료일을 입력해주세요');
+      if(startDate > endDate) return alert('종료일은 시작일보다 빠를 수 없어요');
+    }else{
+      const anchor = document.getElementById('f-edit-cgoal-anchor').value;
+      if(!anchor) return alert('기준 월을 선택해주세요');
+      const period = computeAutoCompanyPeriod(periodType, anchor);
+      startDate = period.start; endDate = period.end;
+    }
+    body.periodType = periodType; body.startDate = startDate; body.endDate = endDate;
+  }
+  try{ await apiPatch('/okrs/'+id, body); }catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrOverview(); renderOkrDept();
 }
 async function deleteOkrGoal(id){

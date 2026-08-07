@@ -40,3 +40,23 @@ export function periodsOverlap(a, b) {
 export function monthOverlapsGoal(monthKey, okr) {
   return periodsOverlap(monthRange(monthKey), deriveGoalPeriod(okr));
 }
+
+// 'YYYY-MM' -> n개월 뒤(음수면 이전)의 'YYYY-MM'
+function addMonths(monthKey, n) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// 2026-08-07(기간 수정 허용): 회사 목표는 okrs.month가 "생성 시점의 시작월"로
+// 고정돼 있어서, isEditableMonth(okr.month)를 그대로 쓰면 반기/연간처럼 여러
+// 달짜리 목표가 생성 후 2달만 지나면(이번달/지난달 규칙) 영구히 수정·삭제가
+// 잠긴다 — 정작 "기간이 긴 목표일수록 나중에 기간을 고칠 일이 많다"는 요청과
+// 정면으로 부딪힌다. 그래서 회사 목표만 "목표 기간이 아직 안 끝났거나, 끝난 지
+// 한 달 이내"면 수정 가능하게 별도 기준을 둔다(끝난 달 기준 1개월 유예는
+// 기존 이번달/지난달 여유분 관례와 동일한 폭).
+export function isCompanyGoalEditableNow(okr, nowMonthKey) {
+  const period = deriveGoalPeriod(okr);
+  const endMonth = period.end.slice(0, 7);
+  return nowMonthKey <= addMonths(endMonth, 1);
+}
