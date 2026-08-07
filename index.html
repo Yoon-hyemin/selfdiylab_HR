@@ -183,7 +183,6 @@
   .jump-chip:hover{background:var(--primary-light);color:var(--primary-dark);}
 
   @media(max-width:1279px){
-    .okr-company-grid{grid-template-columns:repeat(2,1fr)!important;}
     .okr-chart-row{grid-template-columns:1fr!important;}
     .insight-grid5{grid-template-columns:repeat(3,1fr)!important;}
   }
@@ -199,8 +198,8 @@
   }
   @media(max-width:767px){
     .grid4{grid-template-columns:1fr;}
-    .okr-company-grid{grid-template-columns:1fr!important;}
     .insight-grid5{grid-template-columns:1fr!important;}
+    .okr-company-row{flex-direction:column;align-items:stretch!important;gap:12px!important;}
   }
 </style>
 </head>
@@ -1356,24 +1355,28 @@ function renderOkrOverview(){
   const companyCapReached = companies.length >= 3;
   const companyCardsHtml = companies.length ? `
     <div style="margin-bottom:10px;">${weightSumBadgeHtml(companyGroup)}</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;" class="okr-company-grid">
+    <div style="display:flex;flex-direction:column;gap:12px;">
       ${companies.map((c,idx)=>{
         const p = companyProgress(c);
         const contribution = c.weight!=null ? Math.round(c.weight/100*p) : null;
-        return `<div style="border:1px solid var(--border);border-radius:14px;padding:16px;">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-            <div style="font-size:11px;color:var(--sub);font-weight:800;">#${idx+1}</div>
-            ${okrStatusBadge(p)}
+        return `<div class="okr-company-row" style="border:1px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+          <div style="flex:2 1 220px;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:11px;color:var(--sub);font-weight:800;">#${idx+1}</span>
+              ${okrStatusBadge(p)}
+            </div>
+            <div style="font-size:14px;font-weight:800;">${escapeHtml(c.title)}</div>
+            <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${escapeHtml(c.month)} · ${escapeHtml(c.owner||'전사')}</div>
           </div>
-          <div style="font-size:13.5px;font-weight:800;line-height:1.4;margin-bottom:6px;">${escapeHtml(c.title)}</div>
-          <div style="font-size:11.5px;color:var(--sub);margin-bottom:10px;">${escapeHtml(c.month)} · ${escapeHtml(c.owner||'전사')}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:8px;">
-            <div><div style="color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;">${c.weight!=null?c.weight+'%':'미설정'}</div></div>
-            <div><div style="color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;">${contribution!=null?contribution+'%':'-'}</div></div>
+          <div style="display:flex;gap:28px;flex:1 1 220px;">
+            <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;font-size:13px;">${c.weight!=null?c.weight+'%':'미설정'}</div></div>
+            <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;font-size:13px;">${contribution!=null?contribution+'%':'-'}</div></div>
+            <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">달성률</div><div style="font-weight:800;font-size:13px;color:${progressTextColor(p)};">${p}%</div></div>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;margin-bottom:6px;"><span>달성률</span><span style="color:${progressTextColor(p)}">${p}%</span></div>
-          <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
-          ${isAdmin ? `<div style="display:flex;gap:6px;margin-top:10px;">
+          <div style="flex:2 1 180px;min-width:120px;">
+            <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
+          </div>
+          ${isAdmin ? `<div style="display:flex;gap:6px;flex-shrink:0;">
             <button class="btn ghost sm" onclick="openEditOkrTitleModal('${c.id}')">수정</button>
             <button class="btn ghost sm" style="color:var(--red);" onclick="deleteOkrGoal('${c.id}')">삭제</button>
           </div>` : ''}
