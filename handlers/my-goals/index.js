@@ -21,6 +21,12 @@
  * 2026-08-06(부서목표 화면 재설계): 가중치(weight)도 받는다. 사용자가 정의한
  * 매커니즘상 개인 목표는 "그 사람·그 달" 단위로 가중치 합이 100%를 넘을 수
  * 없다(회사/부서처럼 팀 단위가 아니라 개인 단위 스코프라는 점이 다르다).
+ *
+ * 2026-08-06(개인목표 화면 재설계): status 기본값을 'pending'에서 'draft'로
+ * 바꿨다 — 만들자마자 바로 부서장 검토 대기열에 뜨는 대신, 본인이 가중치를
+ * 다듬은 뒤 명시적으로 "승인 요청"을 눌러야 pending으로 넘어간다
+ * (PATCH /api/my-goals/:id/submit, handlers/my-goals/[id]/submit.js). 또한
+ * 이번 달 개인 목표를 최대 10개로 제한한다(화면 시안에서 명시된 값).
  */
 import { sql } from '../_lib/db.js';
 import { requireMemberAuth } from '../_lib/memberSession.js';
@@ -57,6 +63,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '이번 달/지난달 부서 목표에만 연결할 수 있어요' });
     }
 
+    const [{ count }] = await sql`SELECT count(*)::int AS count FROM okrs WHERE level = '개인' AND member_id = ${memberId} AND month = ${parent.month}`;
+    if (count >= 10) {
+      return res.status(400).json({ error: `${parent.month}에는 이미 개인 목표가 10개 있어요 (최대 10개)` });
+    }
+
     if (weight !== null) {
       const [{ sum }] = await sql`
         SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs
@@ -68,7 +79,7 @@ export default async function handler(req, res) {
 
     const [row] = await sql`
       INSERT INTO okrs (quarter, month, level, title, owner, parent_id, member_id, weight, progress, unit, target, status)
-      VALUES (${parent.quarter}, ${parent.month}, '개인', ${title.trim()}, '-', ${parent.id}, ${memberId}, ${weight}, 0, '%', 100, 'pending')
+      VALUES (${parent.quarter}, ${parent.month}, '개인', ${title.trim()}, '-', ${parent.id}, ${memberId}, ${weight}, 0, '%', 100, 'draft')
       RETURNING id`;
     res.status(201).json({ id: row.id });
   } catch (err) {

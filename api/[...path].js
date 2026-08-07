@@ -38,6 +38,7 @@ import okrsId from '../handlers/okrs/[id].js';
 import myGoalsIndex from '../handlers/my-goals/index.js';
 import myGoalsId from '../handlers/my-goals/[id].js';
 import myGoalsIdReview from '../handlers/my-goals/[id]/review.js';
+import myGoalsIdSubmit from '../handlers/my-goals/[id]/submit.js';
 import okrTasksIndex from '../handlers/okr-tasks/index.js';
 import okrTasksId from '../handlers/okr-tasks/[id].js';
 import evalsIndex from '../handlers/evals/index.js';
@@ -66,6 +67,7 @@ const ROUTES = [
   { pattern: ['my-goals'], handler: myGoalsIndex },
   { pattern: ['my-goals', ':id'], handler: myGoalsId },
   { pattern: ['my-goals', ':id', 'review'], handler: myGoalsIdReview },
+  { pattern: ['my-goals', ':id', 'submit'], handler: myGoalsIdSubmit },
   { pattern: ['okr-tasks'], handler: okrTasksIndex },
   { pattern: ['okr-tasks', ':id'], handler: okrTasksId },
   { pattern: ['evals'], handler: evalsIndex },

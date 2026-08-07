@@ -525,7 +525,8 @@ let deptExpandedMembers = new Set();
    조회 패턴을 그대로 따른다. 팀/사람이 항상 me로 고정이라는 점만 다르다. */
 let perPeriodType = 'monthly';
 let perYear = null, perMonth = null, perQuarter = null;
-let perHistLimit = 8;
+let perHistLimit = 5;
+let perSortMode = 'weight';
 
 /* 인사 영역 잠금 해제 여부. 페이지 로드마다 초기화돼요
    (localStorage/sessionStorage에 저장하지 않아요). */
@@ -1190,6 +1191,7 @@ function okrOvMonthOptions(){
 }
 function okrStatusBadge(p){ return p>=100 ? '<span class="badge green">완료</span>' : '<span class="badge blue">진행 중</span>'; }
 function myGoalStatusBadge(status){
+  if(status==='draft') return '<span class="badge grey">작성 중</span>';
   if(status==='pending') return '<span class="badge amber">승인 대기</span>';
   if(status==='rejected') return '<span class="badge red">반려됨</span>';
   return '<span class="badge green">승인됨</span>';
@@ -1612,7 +1614,7 @@ function renderOkrDept(){
       ${canCreate ? `<button class="btn primary sm" onclick="openDeptGoalModal()">+ 부서 목표 추가</button>` : ''}
     </div>`;
 
-  const pendingGoals = DB.okrs.filter(o=>o.level==='개인' && (o.status||'approved')!=='approved' && DB.okrs.find(x=>x.id===o.parent && x.owner===myTeam));
+  const pendingGoals = DB.okrs.filter(o=>o.level==='개인' && (o.status==='pending'||o.status==='rejected') && DB.okrs.find(x=>x.id===o.parent && x.owner===myTeam));
   const pendingGoalsCount = pendingGoals.length;
 
   const insightHtml = `
@@ -1817,11 +1819,23 @@ function perInitDefaults(){
   perMonth = perMonth || m;
   perQuarter = perQuarter || String(Math.floor((Number(m)-1)/3)+1);
 }
-function changePerPeriodType(t){ perPeriodType = t; perHistLimit = 8; renderOkrPersonal(); }
+function changePerPeriodType(t){ perPeriodType = t; perHistLimit = 5; renderOkrPersonal(); }
 function changePerYear(v){ perYear = v; renderOkrPersonal(); }
 function changePerMonth(v){ perMonth = v; renderOkrPersonal(); }
 function changePerQuarter(v){ perQuarter = v; renderOkrPersonal(); }
-function showMorePerHistory(){ perHistLimit += 8; renderOkrPersonal(); }
+function showAllPerHistory(){ perHistLimit = Infinity; renderOkrPersonal(); }
+function changePerSort(v){ perSortMode = v; renderOkrPersonal(); }
+function sortedPerGoals(goals){
+  const arr = [...goals];
+  if(perSortMode==='recent') arr.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  else if(perSortMode==='progress') arr.sort((a,b)=>individualProgress(b)-individualProgress(a));
+  else arr.sort((a,b)=>(b.weight===null||b.weight===undefined?-1:b.weight)-(a.weight===null||a.weight===undefined?-1:a.weight));
+  return arr;
+}
+async function submitMyGoal(id){
+  try{ await apiPatch('/my-goals/'+id+'/submit', {}); }catch(err){ return alert(err.message); }
+  await refreshDB(); renderOkrPersonal(); renderOkrDept();
+}
 function perYearOptions(){
   const years = new Set([Number(perYear)]);
   DB.okrs.forEach(o=>{ if(o.month) years.add(Number(o.month.split('-')[0])); });
@@ -1856,10 +1870,6 @@ function perPeriodGoals(pk){
   if(perPeriodType==='quarterly') return DB.okrs.filter(o=>o.level==='개인' && o.member===me.id && o.quarter===pk);
   return DB.okrs.filter(o=>o.level==='개인' && o.member===me.id && o.month && o.month.startsWith(pk+'-'));
 }
-function perPeriodAvg(goals){
-  if(!goals.length) return null;
-  return Math.round(goals.reduce((a,g)=>a+individualProgress(g),0)/goals.length);
-}
 function perHistoryPeriods(){
   const keys = new Set([perCurrentPeriodKey()]);
   DB.okrs.forEach(o=>{
@@ -1880,7 +1890,7 @@ function openMyGoalModal(){
     </div>
     <div class="field"><label>목표 제목</label><input id="f-pgoal-title" placeholder="예: 우리 팀 목표 등록 100% 만들기"></div>
     <div class="field"><label>가중치 (%, 선택)</label><input id="f-pgoal-weight" type="number" min="0" max="100" placeholder="예: 30"></div>
-    <div class="modal-sub">이번 달 또는 지난달 부서 목표에만 연결할 수 있어요. 같은 달 내 개인 목표끼리 가중치 합이 100%를 넘을 수 없어요. 만든 목표는 부서장 승인이 필요해요</div>
+    <div class="modal-sub">이번 달 또는 지난달 부서 목표에만 연결할 수 있어요. 같은 달 내 개인 목표끼리 가중치 합이 100%를 넘을 수 없어요. 만들면 "작성 중" 상태로 시작하고, 목표 목록에서 "승인 요청"을 눌러야 부서장 검토가 시작돼요(그때 가중치 합이 정확히 100%여야 해요)</div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="savePersonalGoal()">목표 생성</button></div>
   `);
 }
@@ -1894,8 +1904,14 @@ function renderOkrPersonal(){
   const prevKey = perShiftPeriodKey(periodKey, -1);
   const myGoals = perPeriodGoals(periodKey);
   const prevGoals = perPeriodGoals(prevKey);
-  const avg = perPeriodAvg(myGoals);
-  const prevAvg = perPeriodAvg(prevGoals);
+  const approvedGoals = myGoals.filter(g=>(g.status||'approved')==='approved');
+  const prevApprovedGoals = prevGoals.filter(g=>(g.status||'approved')==='approved');
+  // 개인 가중 성과율 -- 승인된 목표끼리만 가중치 합 100%를 기준으로 기여율을
+  // 더한다. 승인 대기·반려·작성 중 목표는 계산에서 제외한다(사용자가 정의한
+  // 매커니즘). weightedGroupScore는 전체현황/부서목표 화면과 공유하는 유틸.
+  const personalGroup = weightedGroupScore(approvedGoals, individualProgress);
+  const score = personalGroup.score;
+  const prevScore = weightedGroupScore(prevApprovedGoals, individualProgress).score;
   const linkedDeptCount = new Set(myGoals.map(g=>g.parent).filter(Boolean)).size;
   const myTaskIds = myGoals.map(g=>g.id);
   const myTasks = DB.okrTasks.filter(t=>myTaskIds.includes(t.okrId));
@@ -1903,13 +1919,20 @@ function renderOkrPersonal(){
   const changeLabel = perPeriodType==='monthly' ? '전월 대비' : perPeriodType==='quarterly' ? '전분기 대비' : '전년 대비';
 
   let momHtml;
-  if(avg===null || prevAvg===null){
+  if(score===null || prevScore===null){
     momHtml = `<div class="value" style="font-size:16px;color:var(--sub);">비교 데이터 없음</div>`;
   }else{
-    const diff = avg - prevAvg;
+    const diff = score - prevScore;
     momHtml = `<div class="value" style="color:${diff===0?'var(--sub)':diff>0?'var(--primary-dark)':'var(--red)'}">${diff===0?'변화 없음':(diff>0?'+':'')+diff+'%p'}</div>
-      <div style="font-size:11px;color:var(--sub);margin-top:4px;">${perPeriodLabel(prevKey)} ${prevAvg}% → ${perPeriodLabel(periodKey)} ${avg}%</div>`;
+      <div style="font-size:11px;color:var(--sub);margin-top:4px;">${perPeriodLabel(prevKey)} ${prevScore}% → ${perPeriodLabel(periodKey)} ${score}%</div>`;
   }
+
+  // "가중치 합계" 안내는 실제 검증 스코프(그 사람·그 "달")와 맞춰 항상 이번 달
+  // 기준으로 보여준다 -- 조회 기간이 분기/연도여도 목표 생성·승인요청은
+  // 이번 달/지난달 단위이기 때문에, 분기/연도 합계를 보여주면 실제 검증
+  // 기준과 어긋나 혼란을 준다.
+  const thisMonthGoals = DB.okrs.filter(o=>o.level==='개인' && o.member===me.id && o.month===thisMonthKey());
+  const thisMonthWeightGroup = weightedGroupScore(thisMonthGoals, individualProgress);
 
   const myRosterInfo = DB.roster.find(m=>m.id===me.id);
   const headerHtml = `
@@ -1938,33 +1961,50 @@ function renderOkrPersonal(){
     <div class="section">
       <div class="section-head"><h3>한눈에 보는 개인 목표 인사이트</h3></div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;" class="insight-grid5">
-        <div class="kpi"><div class="label">개인 목표 수</div><div class="value">${myGoals.length}개</div></div>
+        <div class="kpi"><div class="label">개인 목표 수</div><div class="value">${myGoals.length} / 10</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">월 최대 10개</div></div>
         <div class="kpi"><div class="label">연결된 부서 목표 수</div><div class="value">${linkedDeptCount}개</div></div>
-        <div class="kpi"><div class="label">개인 평균 달성률</div><div class="value">${avg===null?'데이터 없음':avg+'%'}</div></div>
+        <div class="kpi"><div class="label">개인 가중 성과율</div><div class="value">${score===null?'데이터 없음':score+'%'}</div></div>
         <div class="kpi"><div class="label">${changeLabel}</div>${momHtml}</div>
         <div class="kpi"><div class="label">진행 중인 할 일</div><div class="value">${inProgressTaskCount}개</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">전체 ${myTasks.length}개 중</div></div>
       </div>
     </div>`;
 
-  const goalListHtml = myGoals.length ? myGoals.map(g=>{
+  const sortedGoals = sortedPerGoals(myGoals);
+  const goalListHtml = sortedGoals.length ? sortedGoals.map((g,idx)=>{
     const org = DB.okrs.find(o=>o.id===g.parent);
     const p = individualProgress(g);
     const tasks = DB.okrTasks.filter(t=>t.okrId===g.id);
+    const doneCount = tasks.filter(t=>t.done).length;
     const status = g.status || 'approved';
     const locked = status !== 'approved';
+    const contribution = g.weight!=null ? Math.round(g.weight/100*p) : null;
     return `
-    <div style="margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:800;margin-bottom:4px;gap:8px;">
-        <span>${escapeHtml(g.title)} ${myGoalStatusBadge(status)} ${okrStatusBadge(p)}</span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span style="color:${progressTextColor(p)}">${p}%</span>
-          <button class="btn ghost sm" onclick="openEditMyGoalModal('${g.id}')">수정</button>
-          <button class="btn ghost sm" style="color:var(--red);" onclick="deleteMyGoal('${g.id}')">삭제</button>
-        </span>
+    <div style="border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;color:var(--sub);font-weight:800;margin-bottom:2px;">#${idx+1}</div>
+          <div style="font-size:14px;font-weight:800;">${escapeHtml(g.title)} ${myGoalStatusBadge(status)}${!locked?' '+okrStatusBadge(p):''}</div>
+          <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${org?`연결 부서 목표: ${escapeHtml(org.title)} · `:''}${escapeHtml(g.month)}</div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:4px;flex-shrink:0;">
+          <div style="font-size:16px;font-weight:900;color:${progressTextColor(p)};">${p}%</div>
+          <details style="position:relative;">
+            <summary style="cursor:pointer;list-style:none;padding:2px 8px;border-radius:6px;font-weight:900;color:var(--sub);">⋯</summary>
+            <div style="position:absolute;right:0;top:26px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.1);padding:6px;z-index:5;min-width:96px;">
+              <button class="btn ghost sm" style="display:block;width:100%;text-align:left;" onclick="openEditMyGoalModal('${g.id}')">수정</button>
+              <button class="btn ghost sm" style="display:block;width:100%;text-align:left;color:var(--red);" onclick="deleteMyGoal('${g.id}')">삭제</button>
+            </div>
+          </details>
+        </div>
       </div>
-      <div style="font-size:11.5px;color:var(--sub);margin-bottom:6px;">↳ ${escapeHtml(me.team)}${org&&org.part?` (${escapeHtml(org.part)})`:''}${org?` · ${escapeHtml(org.title)}`:''} · ${escapeHtml(g.month)}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;margin:10px 0;">
+        <div><div style="color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;">${g.weight!=null?g.weight+'%':'미설정'}</div></div>
+        <div><div style="color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;">${contribution!=null?contribution+'%':'-'}</div></div>
+        <div><div style="color:var(--sub);margin-bottom:2px;">할 일</div><div style="font-weight:800;">${doneCount} / ${tasks.length} 완료</div></div>
+      </div>
+      ${(status==='draft'||status==='rejected') ? `<button class="btn primary sm" style="margin-bottom:10px;" onclick="submitMyGoal('${g.id}')">승인 요청</button>` : ''}
       ${status==='rejected' ? `<div style="font-size:12px;color:var(--red);background:var(--red-light);border-radius:8px;padding:8px 10px;margin-bottom:8px;">반려 사유: ${escapeHtml(g.reviewNote||'')}</div>` : ''}
-      ${locked ? `<div class="empty" style="padding:14px 0;">${status==='pending' ? '부서장 승인 후 체크리스트를 사용할 수 있어요' : '제목을 고친 뒤 부서장의 재승인을 기다려주세요'}</div>` : `
+      ${locked ? `<div class="empty" style="padding:14px 0;">${status==='draft' ? '승인 요청을 누르면 부서장 검토가 시작돼요' : status==='pending' ? '부서장 승인 후 체크리스트를 사용할 수 있어요' : '제목을 고친 뒤 다시 승인 요청해주세요'}</div>` : `
       <div class="bar" style="margin-bottom:8px;" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100" aria-label="달성률 ${p}%"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
         ${tasks.map(t=>`
@@ -1981,44 +2021,69 @@ function renderOkrPersonal(){
     </div>`;
   }).join('') : `<div class="empty">${perPeriodLabel(periodKey)}에 등록된 개인 목표가 없어요 · 위에서 추가해보세요</div>`;
 
+  const orgGroups = {};
+  approvedGoals.forEach(g=>{ if(g.parent) (orgGroups[g.parent] = orgGroups[g.parent] || []).push(g); });
+  const orgSummaryHtml = Object.keys(orgGroups).length ? Object.entries(orgGroups).map(([orgId, goals])=>{
+    const org = DB.okrs.find(o=>o.id===orgId);
+    const weightSum = goals.reduce((a,g)=>a+(g.weight||0),0);
+    const avgP = Math.round(goals.reduce((a,g)=>a+individualProgress(g),0)/goals.length);
+    const contribSum = goals.reduce((a,g)=>a+(g.weight!=null?Math.round(g.weight/100*individualProgress(g)):0),0);
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px;">${escapeHtml(org?org.title:'(삭제된 목표)')}</div>
+      <div style="font-size:11.5px;color:var(--sub);">개인 목표 ${goals.length}개 · 개인 가중치 합계 ${weightSum}% · 달성률 ${avgP}% · 기여율 ${contribSum}%</div>
+    </div>`;
+  }).join('') : '<div class="empty">승인된 개인 목표가 연결된 부서 목표가 없어요</div>';
+
   const histPeriods = perHistoryPeriods();
   const histShown = histPeriods.slice(0, perHistLimit);
   const histRows = histShown.map(pk=>{
     const goals = perPeriodGoals(pk);
-    const a = perPeriodAvg(goals);
-    const linked = new Set(goals.map(g=>g.parent).filter(Boolean)).size;
-    const taskIds = goals.map(g=>g.id);
-    const inProgress = DB.okrTasks.filter(t=>taskIds.includes(t.okrId) && !t.done).length;
-    return { pk, avg:a, count:goals.length, linked, inProgress, isCurrent: pk===periodKey };
+    const approved = goals.filter(g=>(g.status||'approved')==='approved');
+    const group = weightedGroupScore(approved, individualProgress);
+    return { pk, count:goals.length, weightSum:group.weightSum, score:group.score, isCurrent: pk===periodKey };
   });
   const historyHtml = histRows.length ? `
     <div style="overflow-x:auto;">
     <table>
-      <thead><tr><th>기간</th><th>개인 목표 수</th><th>평균 달성률</th><th>연결 부서 목표 수</th><th>진행 중인 할 일 수</th><th>상태</th></tr></thead>
+      <thead><tr><th>기간</th><th>개인 목표 수</th><th>가중치 합계</th><th>개인 가중 성과율</th><th>상태</th></tr></thead>
       <tbody>${histRows.map(r=>`
         <tr>
           <td>${escapeHtml(perPeriodLabel(r.pk))}</td>
           <td>${r.count}개</td>
-          <td style="font-weight:700;color:${r.avg===null?'var(--sub)':progressTextColor(r.avg)}">${r.avg===null?'데이터 없음':r.avg+'%'}</td>
-          <td>${r.linked}개</td>
-          <td>${r.inProgress}개</td>
+          <td>${r.weightSum}%</td>
+          <td style="font-weight:700;color:${r.score===null?'var(--sub)':progressTextColor(r.score)}">${r.score===null?'데이터 없음':r.score+'%'}</td>
           <td>${r.isCurrent ? '<span class="badge blue">진행 중</span>' : '<span class="badge green">완료</span>'}</td>
         </tr>`).join('')}</tbody>
     </table>
     </div>
-    ${histPeriods.length > histShown.length ? `<div style="text-align:center;margin-top:14px;"><button class="btn sm" onclick="showMorePerHistory()">더보기</button></div>` : ''}
+    ${histPeriods.length > histShown.length ? `<div style="text-align:center;margin-top:14px;"><button class="btn sm" onclick="showAllPerHistory()">전체 이력 보기 (${histPeriods.length}건)</button></div>` : ''}
   ` : '<div class="empty">이력이 없어요</div>';
 
   el.innerHTML = `
     ${headerHtml}
     ${insightHtml}
     <div class="section">
-      <div class="section-head"><h3>내 개인 목표 · ${escapeHtml(perPeriodLabel(periodKey))} 기준</h3></div>
+      <div class="section-head" style="align-items:flex-start;">
+        <div><h3>내 개인 목표 · ${escapeHtml(perPeriodLabel(periodKey))} 기준</h3><div class="desc">${weightSumBadgeHtml(thisMonthWeightGroup)} <span style="margin-left:4px;">이번 달(${thisMonthKey()}) 가중치 기준</span></div></div>
+        <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">정렬</label>
+          <select onchange="changePerSort(this.value)">
+            <option value="weight" ${perSortMode==='weight'?'selected':''}>가중치순</option>
+            <option value="recent" ${perSortMode==='recent'?'selected':''}>최신순</option>
+            <option value="progress" ${perSortMode==='progress'?'selected':''}>달성률순</option>
+          </select>
+        </div>
+      </div>
       ${goalListHtml}
     </div>
-    <div class="section">
-      <div class="section-head"><h3>${perPeriodType==='monthly'?'월별':perPeriodType==='quarterly'?'분기별':'연도별'} 개인 목표 이력</h3></div>
-      ${historyHtml}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="okr-chart-row">
+      <div class="section">
+        <div class="section-head"><h3>연결된 부서 목표 요약</h3></div>
+        ${orgSummaryHtml}
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>${perPeriodType==='monthly'?'월별':perPeriodType==='quarterly'?'분기별':'연도별'} 개인 목표 이력</h3></div>
+        ${historyHtml}
+      </div>
     </div>`;
 }
 async function savePersonalGoal(){
@@ -2044,10 +2109,16 @@ function openEditMyGoalModal(id){
 }
 async function saveMyGoalTitleEdit(){
   const id = window.__editMyGoalId;
+  const okr = DB.okrs.find(o=>o.id===id);
   const title = document.getElementById('f-edit-mygoal-title').value.trim();
-  const weight = document.getElementById('f-edit-mygoal-weight').value.trim();
+  const weightRaw = document.getElementById('f-edit-mygoal-weight').value.trim();
+  const weight = weightRaw===''?null:Number(weightRaw);
   if(!title) return alert('제목을 입력해주세요');
-  try{ await apiPatch('/my-goals/'+id, {title, weight: weight===''?null:Number(weight)}); }catch(err){ return alert(err.message); }
+  const changed = okr && (title!==okr.title || weight!==(okr.weight===null||okr.weight===undefined?null:okr.weight));
+  if(okr && (okr.status||'approved')==='approved' && changed){
+    if(!confirm('승인된 목표의 핵심 정보를 변경하면 다시 승인이 필요합니다. 계속할까요?')) return;
+  }
+  try{ await apiPatch('/my-goals/'+id, {title, weight}); }catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrPersonal(); renderOkrDept();
 }
 async function deleteMyGoal(id){
