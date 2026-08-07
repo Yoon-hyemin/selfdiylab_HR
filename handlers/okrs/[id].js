@@ -27,10 +27,17 @@
  * 여전히 본인 팀 것만 가능하다. 생성(POST /api/okrs)은 이 변경 대상이
  * 아니다 — 관리자가 임의 팀을 골라 새로 만드는 화면이 없어서, 권한만
  * 넓히면 쓸 수 없는 기능이 된다.
+ *
+ * 2026-08-07(기간형 기업 목표): 회사 목표의 weight 재검증 스코프를 "정확히
+ * 같은 달"에서 handlers/okrs/index.js와 같은 기간 겹침 기준으로 바꿨다.
+ * 이 엔드포인트에서는 기간(period_type/start_date/end_date) 자체는 고치지
+ * 못한다 — 생성 후 기간을 바꾸면 이미 쌓인 월별 진행기록과 어긋날 수 있어서
+ * 최소 수정 범위에서 일부러 뺐다(제목·가중치만 수정 가능, 기존과 동일).
  */
 import { sql } from '../_lib/db.js';
 import { getSessionMemberId } from '../_lib/memberSession.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
+import { deriveGoalPeriod, periodsOverlap } from '../_lib/goalPeriod.js';
 
 function parseWeight(raw) {
   if (raw === undefined) return { skip: true };
@@ -41,7 +48,7 @@ function parseWeight(raw) {
 }
 
 async function loadOkrAndCheckPermission(id, memberId) {
-  const [okr] = await sql`SELECT id, level, owner, month, part, weight FROM okrs WHERE id = ${id}`;
+  const [okr] = await sql`SELECT id, level, owner, month, part, weight, start_date::text AS start_date, end_date::text AS end_date FROM okrs WHERE id = ${id}`;
   if (!okr) return { error: [404, '목표를 찾을 수 없어요'] };
   if (okr.level === '개인') return { error: [400, '개인 목표는 /api/my-goals로 수정/삭제해주세요'] };
 
@@ -80,10 +87,16 @@ export default async function handler(req, res) {
       if (weightErr) return res.status(400).json({ error: weightErr });
 
       if (!skipWeight && weight !== null) {
-        const part = okr.part || '';
-        const [{ sum }] = okr.level === '회사'
-          ? await sql`SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs WHERE level = '회사' AND month = ${okr.month} AND weight IS NOT NULL AND id != ${okr.id}`
-          : await sql`SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs WHERE level = '조직' AND owner = ${okr.owner} AND month = ${okr.month} AND part = ${part} AND weight IS NOT NULL AND id != ${okr.id}`;
+        let sum;
+        if (okr.level === '회사') {
+          const others = await sql`SELECT month, start_date::text AS start_date, end_date::text AS end_date, weight FROM okrs WHERE level = '회사' AND weight IS NOT NULL AND id != ${okr.id}`;
+          const myPeriod = deriveGoalPeriod(okr);
+          sum = others.filter(o => periodsOverlap(myPeriod, deriveGoalPeriod(o))).reduce((a, o) => a + o.weight, 0);
+        } else {
+          const part = okr.part || '';
+          const [row] = await sql`SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs WHERE level = '조직' AND owner = ${okr.owner} AND month = ${okr.month} AND part = ${part} AND weight IS NOT NULL AND id != ${okr.id}`;
+          sum = row.sum;
+        }
         if (sum + weight > 100) {
           return res.status(400).json({ error: `가중치 합계가 100%를 넘어요 (다른 목표 ${sum}% + ${weight}%)` });
         }

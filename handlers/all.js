@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
   try {
     const [members, leaveHistory, awards, discipline, career, education, family,
-      holidays, jobs, candidates, candidateHistory, okrs, okrTasks, evals, calibrationCycles,
+      holidays, jobs, candidates, candidateHistory, okrs, okrTasks, okrProgress, evals, calibrationCycles,
       calibrationOverrides, oneonones] = await Promise.all([
       sql`SELECT * FROM members ORDER BY name`,
       sql`SELECT * FROM member_leave_history`,
@@ -20,8 +20,9 @@ export default async function handler(req, res) {
       sql`SELECT * FROM jobs ORDER BY created_at DESC`,
       sql`SELECT * FROM candidates ORDER BY created_at`,
       sql`SELECT * FROM candidate_history ORDER BY date`,
-      sql`SELECT * FROM okrs`,
+      sql`SELECT *, start_date::text AS start_date_txt, end_date::text AS end_date_txt FROM okrs`,
       sql`SELECT * FROM okr_tasks`,
+      sql`SELECT * FROM okr_monthly_progress`,
       sql`SELECT * FROM evals`,
       sql`SELECT * FROM calibration_cycles`,
       sql`SELECT * FROM calibration_overrides`,
@@ -82,10 +83,17 @@ export default async function handler(req, res) {
       id: o.id, quarter: o.quarter, month: o.month, level: o.level, title: o.title, owner: o.owner,
       parent: o.parent_id, member: o.member_id, part: o.part || '', progress: o.progress, unit: o.unit, target: o.target,
       status: o.status || 'approved', reviewNote: o.review_note || '', weight: o.weight === null || o.weight === undefined ? null : o.weight,
-      createdAt: o.created_at
+      createdAt: o.created_at, periodType: o.period_type || null, startDate: o.start_date_txt, endDate: o.end_date_txt
     }));
 
     const okrTasks_out = okrTasks.map(t => ({ id: t.id, okrId: t.okr_id, title: t.title, done: t.done }));
+
+    const okrProgress_out = okrProgress.map(p => ({
+      id: p.id, okrId: p.okr_id, year: p.year, month: p.month,
+      monthlyTargetValue: p.monthly_target_value === null ? null : Number(p.monthly_target_value),
+      monthlyActualValue: p.monthly_actual_value === null ? null : Number(p.monthly_actual_value),
+      status: p.status || '', note: p.note || ''
+    }));
 
     const evals_out = evals.map(e => ({
       id: e.id, quarter: e.quarter, employee: e.employee_id, employeeName: memberNameById[e.employee_id] || '(삭제된 구성원)',
@@ -117,6 +125,7 @@ export default async function handler(req, res) {
       candidates: candidates_out,
       okrs: okrs_out,
       okrTasks: okrTasks_out,
+      okrProgress: okrProgress_out,
       evals: evals_out,
       calibration: calibration_out,
       oneonones: oneonones_out

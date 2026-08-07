@@ -38,10 +38,25 @@
  * 부서장만 할 수 있다. 관리자가 임의의 팀을 골라 새로 만드는 화면은 아직
  * 없어서(요청받은 적 없음), 생성 권한까지 넓히면 그 UI 없이는 쓸 수 없는
  * 반쪽짜리 기능이 되기 때문이다.
+ *
+ * 2026-08-07(기간형 기업 목표): 회사 목표는 이제 매달 새로 만들지 않고
+ * period_type/start_date/end_date로 기간을 한 번 설정해서 여러 달에 걸쳐
+ * 같은 목표를 유지할 수 있다(POST body에 periodType/startDate/endDate가
+ * 오면 저장하고, 안 오면 기존처럼 그 달 하루짜리 목표로 취급 — 완전히
+ * 하위 호환). "최대 3개·가중치 합 100%" 검증은 이제 "정확히 같은 달"이
+ * 아니라 handlers/_lib/goalPeriod.js의 기간 겹침 기준으로 한다 — 반기
+ * 목표(7~12월)가 있으면 그 6개월 동안 다른 회사 목표를 새로 만들 때도
+ * 같은 3개/100% 예산을 나눠 써야 하기 때문이다. month는 여전히 필수로
+ * 받는다 — 그 값이 기간의 시작월이자 "이번 달/지난달에만 새로 만들 수
+ * 있다"는 기존 규칙이 적용되는 기준이 된다. 부서(조직) 목표는 이 변경의
+ * 영향을 받지 않는다 — 다만 상위 기업 목표가 이제 여러 달짜리일 수 있어서,
+ * "상위 기업 목표와 같은 달" 체크를 "상위 기업 목표 기간에 포함되는 달"
+ * 체크로 바꿨다(부서 목표 생성 방식 자체는 그대로다).
  */
 import { sql } from '../_lib/db.js';
 import { getSessionMemberId } from '../_lib/memberSession.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
+import { deriveGoalPeriod, monthRange, periodsOverlap, monthOverlapsGoal } from '../_lib/goalPeriod.js';
 
 // '2026-08' -> '2026-Q3'
 function quarterFromMonth(month) {
@@ -90,12 +105,12 @@ export default async function handler(req, res) {
       if (owner !== me.team) return res.status(403).json({ error: '본인 팀 목표만 만들 수 있어요' });
 
       if (!b.parent) return res.status(400).json({ error: '상위 기업 목표를 선택해주세요' });
-      const [parent] = await sql`SELECT id, level, month FROM okrs WHERE id = ${b.parent}`;
+      const [parent] = await sql`SELECT id, level, month, start_date::text AS start_date, end_date::text AS end_date FROM okrs WHERE id = ${b.parent}`;
       if (!parent || parent.level !== '회사') {
         return res.status(400).json({ error: '상위 목표는 기업 목표여야 해요' });
       }
-      if (parent.month !== b.month) {
-        return res.status(400).json({ error: '상위 기업 목표와 같은 달로 맞춰주세요' });
+      if (!monthOverlapsGoal(b.month, parent)) {
+        return res.status(400).json({ error: '상위 기업 목표의 목표 기간에 포함되는 달로 맞춰주세요' });
       }
 
       const part = (b.part || '').trim();
@@ -125,20 +140,36 @@ export default async function handler(req, res) {
     // 회사
     if (!roles.includes('관리자')) return res.status(403).json({ error: '회사 목표는 관리자만 만들 수 있어요' });
 
-    const [{ count: companyCount }] = await sql`SELECT count(*)::int AS count FROM okrs WHERE level = '회사' AND month = ${b.month}`;
-    if (companyCount >= 3) {
-      return res.status(400).json({ error: `${b.month}에는 이미 기업 목표가 3개 있어요 (최대 3개)` });
+    const periodType = b.periodType ? String(b.periodType).trim() : null;
+    const startDate = b.startDate || null;
+    const endDate = b.endDate || null;
+    if ((startDate && !endDate) || (!startDate && endDate)) {
+      return res.status(400).json({ error: '시작일과 종료일을 함께 입력해주세요' });
+    }
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({ error: '종료일은 시작일보다 빠를 수 없어요' });
+    }
+    const newPeriod = startDate && endDate ? { start: startDate, end: endDate } : monthRange(b.month);
+
+    const existingCompanies = await sql`SELECT id, month, start_date::text AS start_date, end_date::text AS end_date, weight FROM okrs WHERE level = '회사'`;
+    const overlapping = existingCompanies.filter(o => periodsOverlap(newPeriod, deriveGoalPeriod(o)));
+    if (overlapping.length >= 3) {
+      return res.status(400).json({ error: '같은 기간에 이미 기업 목표가 3개 있어요 (최대 3개)' });
     }
     if (weight !== null) {
-      const [{ sum }] = await sql`SELECT COALESCE(SUM(weight), 0)::int AS sum FROM okrs WHERE level = '회사' AND month = ${b.month} AND weight IS NOT NULL`;
+      const sum = overlapping.reduce((a, o) => a + (o.weight || 0), 0);
       if (sum + weight > 100) {
-        return res.status(400).json({ error: `${b.month} 기업 목표 가중치 합계가 100%를 넘어요 (현재 ${sum}% + ${weight}%)` });
+        return res.status(400).json({ error: `같은 기간의 기업 목표 가중치 합계가 100%를 넘어요 (현재 ${sum}% + ${weight}%)` });
       }
     }
 
+    const unit = (b.unit || '').trim() || '%';
+    const target = b.target === undefined || b.target === null || b.target === '' ? 100 : Number(b.target);
+    if (!Number.isInteger(target)) return res.status(400).json({ error: '최종 목표값은 정수여야 해요' });
+
     const [row] = await sql`
-      INSERT INTO okrs (quarter, month, level, title, owner, weight, progress, unit, target)
-      VALUES (${quarterFromMonth(b.month)}, ${b.month}, '회사', ${b.title.trim()}, '전사', ${weight}, 0, '%', 100)
+      INSERT INTO okrs (quarter, month, level, title, owner, weight, progress, unit, target, period_type, start_date, end_date)
+      VALUES (${quarterFromMonth(b.month)}, ${b.month}, '회사', ${b.title.trim()}, '전사', ${weight}, 0, ${unit}, ${target}, ${periodType}, ${startDate}, ${endDate})
       RETURNING id`;
     res.status(201).json({ id: row.id });
   } catch (err) {

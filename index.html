@@ -432,7 +432,7 @@ function escapeHtml(s){
 // <select> has to be populated on first load, and renderOkrDept()의 팀원별
 // 현황 목록도 team으로 DB.roster를 필터링해요. Use DB.roster for pickers,
 // DB.members only inside the password-gated 구성원 views.
-let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], evals:[], calibration:{}, oneonones:[] };
+let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], okrProgress:[], evals:[], calibration:{}, oneonones:[] };
 let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, roles} | null (roles는 배열, 관리자+부서장 동시 가능)
 
 /* 전체현황(대표님용) 대시보드 상태 -- 2026-08-06. 연도는 아래 연간 차트 2개의
@@ -442,6 +442,11 @@ let okrOvYear = null;
 let okrOvMonth = null;
 let okrOvHistLimit = 5;
 let okrOvHiddenTeams = new Set();
+let okrOvExpandedCompanies = new Set();
+function toggleOkrOvCompany(id){
+  if(okrOvExpandedCompanies.has(id)) okrOvExpandedCompanies.delete(id); else okrOvExpandedCompanies.add(id);
+  renderOkrOverview();
+}
 
 /* 부서목표(우리 부서용) 탭 상태 -- 2026-08-06. periodType에 따라 월/분기/연도
    중 하나만 실제로 쓰인다. 회사 목표는 관리자가 매달 만들어야 해서 값이 있을
@@ -471,7 +476,7 @@ let hrAuthed = false;
 async function refreshPublicData(){
   const d = await apiGet('/public-data');
   DB.roster = d.members;
-  DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+  DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.okrProgress = d.okrProgress || []; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
 /* 인사 데이터(구성원·채용): HR 비밀번호가 있어야 받아올 수 있어요. hrHeaders가
    비어 있으면 서버가 401을 돌려주므로 잠금 해제 이후에만 호출해요. */
@@ -482,7 +487,7 @@ async function refreshHrData(){
   // team/position도 같이 담아요 -- renderOkrDept()가 DB.roster를 팀으로 필터링해서
   // 팀원별 현황을 만들기 때문에 이름만 있으면 그 목록이 비어버려요.
   DB.roster = d.members.map(m => ({ id: m.id, name: m.name, team: m.team || '', position: m.position || '' }));
-  DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+  DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.okrProgress = d.okrProgress || []; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
 /* 기존 호출부 호환용. 인사 화면에서만 쓰이므로 잠금 해제 전이면 공개 데이터만 갱신해요. */
 async function refreshDB(){
@@ -1007,6 +1012,74 @@ function companyProgress(okr){
   return Math.round(children.reduce((a,o)=>a+orgProgress(o),0) / children.length);
 }
 
+/* ---------- 기간형 기업 목표 (2026-08-07) -------------------------------
+   handlers/_lib/goalPeriod.js와 같은 로직을 그대로 복제했다 -- 여기는
+   import이 안 되는 순수 <script> 태그라서, 이 프로젝트가 이미
+   handlers/_lib/monthWindow.js의 isEditableMonth()를 index.html의
+   thisMonthKey()/shiftMonthKey()로 따로 복제해서 쓰는 것과 같은 관례다.
+   로직을 바꾸면 두 곳(여기와 handlers/_lib/goalPeriod.js) 다 고쳐야 한다. */
+function okrMonthRange(monthKey){
+  const [y,m] = monthKey.split('-').map(Number);
+  const start = `${monthKey}-01`;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const end = `${monthKey}-${String(lastDay).padStart(2,'0')}`;
+  return { start, end };
+}
+function deriveGoalPeriod(okr){
+  if(okr.startDate && okr.endDate) return { start: String(okr.startDate).slice(0,10), end: String(okr.endDate).slice(0,10) };
+  return okrMonthRange(okr.month);
+}
+function periodsOverlap(a,b){ return a.start<=b.end && b.start<=a.end; }
+function monthOverlapsGoal(monthKey, okr){ return periodsOverlap(okrMonthRange(monthKey), deriveGoalPeriod(okr)); }
+function goalPeriodLabel(okr){
+  const p = deriveGoalPeriod(okr);
+  const fmt = d => { const [y,m,day] = d.split('-'); return `${y}.${m}.${day}`; };
+  return `${fmt(p.start)} ~ ${fmt(p.end)}`;
+}
+// 기업 목표의 월별 진행기록(DB.okrProgress)에서 월간/누적/최종 달성률을
+// 계산한다. 진행기록이 하나도 없으면 null을 돌려주고, 호출부는 그때
+// companyProgress()(부서 목표 평균 캐스케이드)로 폴백한다 -- "기업 목표
+// 카드의 대표 달성률은 누적 계획 달성률을 쓴다"는 요구사항을, 숫자
+// 실적을 입력한 목표만 그렇게 하고 나머지는 기존 방식을 그대로 쓰는
+// 식으로 최소하게 적용했다.
+function companyNumericProgress(okr, mk){
+  const records = DB.okrProgress.filter(p=>p.okrId===okr.id);
+  if(!records.length) return null;
+  const period = deriveGoalPeriod(okr);
+  const startMonth = period.start.slice(0,7);
+  const endMonth = period.end.slice(0,7);
+  if(mk < startMonth) return null;
+  const refMonth = mk > endMonth ? endMonth : mk;
+  let cumTarget = 0, cumActual = 0, hasAny = false;
+  let cur = startMonth;
+  let guard = 0;
+  while(cur <= refMonth && guard < 240){
+    const [y,m] = cur.split('-').map(Number);
+    const rec = records.find(r=>r.year===y && r.month===m);
+    if(rec){
+      hasAny = true;
+      if(rec.monthlyTargetValue!=null) cumTarget += rec.monthlyTargetValue;
+      if(rec.monthlyActualValue!=null) cumActual += rec.monthlyActualValue;
+    }
+    cur = shiftMonthKey(cur, 1);
+    guard++;
+  }
+  if(!hasAny) return null;
+  const [ry,rm] = refMonth.split('-').map(Number);
+  const curRec = records.find(r=>r.year===ry && r.month===rm);
+  const monthlyRate = (curRec && curRec.monthlyTargetValue) ? Math.round(curRec.monthlyActualValue/curRec.monthlyTargetValue*100) : null;
+  const cumulativeRate = cumTarget>0 ? Math.round(cumActual/cumTarget*100) : null;
+  const finalRate = okr.target ? Math.round(cumActual/okr.target*100) : null;
+  return { monthlyRate, cumulativeRate, finalRate, cumulativeActual: cumActual, cumulativeTarget: cumTarget, currentRecord: curRec||null };
+}
+// 카드/가중치 계산에 쓰는 "대표 달성률" -- 숫자 진행기록의 누적 계획
+// 달성률이 있으면 그걸 쓰고, 없으면 기존 방식(부서 목표 평균)을 쓴다.
+function companyRepresentativeProgress(okr, mk){
+  const numeric = companyNumericProgress(okr, mk);
+  if(numeric && numeric.cumulativeRate!==null) return numeric.cumulativeRate;
+  return companyProgress(okr);
+}
+
 /* ---------- 목표 탭 공용 헬퍼 (역할별 재설계, 2026-08-04) ---------- */
 function shiftMonthKey(monthKey, delta){
   const [y,m] = monthKey.split('-').map(Number);
@@ -1074,22 +1147,92 @@ function monthOptionsHtml(){
   const t = thisMonthKey(), p = prevMonthKey();
   return `<option value="${t}">${t} (이번 달)</option><option value="${p}">${p} (지난달)</option>`;
 }
+// 'YYYY-MM' -> 그 달의 { start, end } (okrMonthRange와 동일하지만 이름을
+// 다르게 쓰는 이유 없음 -- 그냥 그대로 재사용)
+function computeAutoCompanyPeriod(periodType, monthKey){
+  const [y,m] = monthKey.split('-').map(Number);
+  if(periodType==='quarterly'){
+    const q = Math.floor((m-1)/3);
+    const startMonth = q*3+1, endMonth = q*3+3;
+    return { start:`${y}-${String(startMonth).padStart(2,'0')}-01`, end: okrMonthRange(`${y}-${String(endMonth).padStart(2,'0')}`).end };
+  }
+  if(periodType==='half'){
+    const [hs,he] = m<=6 ? [1,6] : [7,12];
+    return { start:`${y}-${String(hs).padStart(2,'0')}-01`, end: okrMonthRange(`${y}-${String(he).padStart(2,'0')}`).end };
+  }
+  if(periodType==='yearly') return { start:`${y}-01-01`, end:`${y}-12-31` };
+  return okrMonthRange(monthKey); // 'monthly'
+}
+function updateCgoalPeriodFields(){
+  const pt = document.getElementById('f-cgoal-periodtype').value;
+  const month = document.getElementById('f-cgoal-month').value;
+  const autoEl = document.getElementById('f-cgoal-period-auto');
+  const manualEl = document.getElementById('f-cgoal-period-manual');
+  if(pt==='custom'){
+    autoEl.textContent = '';
+    manualEl.style.display = '';
+  }else{
+    const period = computeAutoCompanyPeriod(pt, month);
+    autoEl.textContent = `기간: ${period.start} ~ ${period.end}`;
+    manualEl.style.display = 'none';
+  }
+}
 function openCompanyGoalModal(){
   showModal(`
     <h3>회사 목표 만들기</h3>
-    <div class="field"><label>월</label><select id="f-cgoal-month">${monthOptionsHtml()}</select></div>
-    <div class="field"><label>목표 제목</label><input id="f-cgoal-title" placeholder="예: 신뢰받는 채용 브랜드로 성장한다"></div>
-    <div class="field"><label>가중치 (%, 선택)</label><input id="f-cgoal-weight" type="number" min="0" max="100" placeholder="예: 50"></div>
-    <div class="modal-sub">같은 달 기업 목표끼리 가중치 합이 100%를 넘을 수 없어요. 비워두면 나중에 정할 수 있어요</div>
+    <div class="field"><label>월 (기간 시작 기준)</label><select id="f-cgoal-month" onchange="updateCgoalPeriodFields()">${monthOptionsHtml()}</select></div>
+    <div class="field"><label>목표 기간 유형</label>
+      <select id="f-cgoal-periodtype" onchange="updateCgoalPeriodFields()">
+        <option value="monthly">월간</option>
+        <option value="quarterly">분기</option>
+        <option value="half">반기</option>
+        <option value="yearly">연간</option>
+        <option value="custom">직접 설정</option>
+      </select>
+    </div>
+    <div id="f-cgoal-period-auto" style="font-size:12px;color:var(--sub);margin-bottom:14px;"></div>
+    <div id="f-cgoal-period-manual" style="display:none;">
+      <div class="form-row">
+        <div class="field"><label>시작일</label><input type="date" id="f-cgoal-start"></div>
+        <div class="field"><label>종료일</label><input type="date" id="f-cgoal-end"></div>
+      </div>
+    </div>
+    <div class="field"><label>목표 제목</label><input id="f-cgoal-title" placeholder="예: 2026년 연매출 500억 원 달성"></div>
+    <div class="form-row">
+      <div class="field"><label>가중치 (%, 선택)</label><input id="f-cgoal-weight" type="number" min="0" max="100" placeholder="예: 50"></div>
+      <div class="field"><label>목표 단위 (선택)</label><input id="f-cgoal-unit" placeholder="예: 억원"></div>
+    </div>
+    <div class="field"><label>최종 목표값 (선택)</label><input id="f-cgoal-target" type="number" placeholder="예: 500 (억원 단위면 500억)"></div>
+    <div class="modal-sub">같은 목표 기간과 겹치는 기업 목표끼리 가중치 합이 100%를 넘을 수 없고, 최대 3개까지만 만들 수 있어요. 만든 뒤에는 선택한 기간에 포함되는 모든 달에서 같은 목표가 계속 표시돼요(매달 새로 만들 필요 없음)</div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCompanyGoal()">목표 생성</button></div>
   `);
+  updateCgoalPeriodFields();
 }
 async function saveCompanyGoal(){
   const month = document.getElementById('f-cgoal-month').value;
   const title = document.getElementById('f-cgoal-title').value.trim();
   const weight = document.getElementById('f-cgoal-weight').value.trim();
+  const unit = document.getElementById('f-cgoal-unit').value.trim();
+  const target = document.getElementById('f-cgoal-target').value.trim();
+  const periodType = document.getElementById('f-cgoal-periodtype').value;
+  let startDate, endDate;
+  if(periodType==='custom'){
+    startDate = document.getElementById('f-cgoal-start').value;
+    endDate = document.getElementById('f-cgoal-end').value;
+    if(!startDate || !endDate) return alert('시작일과 종료일을 입력해주세요');
+    if(startDate > endDate) return alert('종료일은 시작일보다 빠를 수 없어요');
+  }else{
+    const period = computeAutoCompanyPeriod(periodType, month);
+    startDate = period.start; endDate = period.end;
+  }
   if(!title) return alert('목표 제목을 입력해주세요');
-  try{ await apiPost('/okrs', {level:'회사', title, month, weight: weight===''?null:Number(weight)}); }catch(err){ return alert(err.message); }
+  try{
+    await apiPost('/okrs', {
+      level:'회사', title, month, weight: weight===''?null:Number(weight),
+      periodType, startDate, endDate,
+      unit: unit || undefined, target: target===''?undefined:Number(target)
+    });
+  }catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrOverview(); renderOkrDept();
 }
 /* ---------- 전체현황(대표님용) 대시보드 계산 유틸 -----------------------
@@ -1144,7 +1287,8 @@ function weightedGroupScore(goals, progressFn){
   return { score, weightSum, weightedCount: weighted.length, totalCount: goals.length };
 }
 function companyWeightedForMonth(mk){
-  return weightedGroupScore(DB.okrs.filter(o=>o.level==='회사' && o.month===mk), companyProgress);
+  const goals = DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(mk, o));
+  return weightedGroupScore(goals, o=>companyRepresentativeProgress(o, mk));
 }
 function teamWeightedForMonth(team, mk){
   return weightedGroupScore(DB.okrs.filter(o=>o.level==='조직' && o.owner===team && o.month===mk), orgProgress);
@@ -1161,7 +1305,7 @@ function blendedWeightedForMonth(mk){
   return Math.round(vals.reduce((a,v)=>a+v,0)/vals.length);
 }
 function riskyGoalCountForMonth(mk){
-  const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===mk).filter(c=>companyProgress(c)<31);
+  const companies = DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(mk, o)).filter(c=>companyRepresentativeProgress(c, mk)<31);
   const orgs = DB.okrs.filter(o=>o.level==='조직' && o.month===mk).filter(o=>orgProgress(o)<31);
   return companies.length + orgs.length;
 }
@@ -1172,8 +1316,8 @@ function weightSumBadgeHtml(g){
   return `<span class="badge amber">가중치 설정 중 · ${g.weightSum}%</span>`;
 }
 function okrOvHistoryRows(mk){
-  const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===mk).map(o=>{
-    const p = companyProgress(o);
+  const companies = DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(mk, o)).map(o=>{
+    const p = companyRepresentativeProgress(o, mk);
     return { level:'회사', team:null, kind:'기업 목표', title:o.title, owner:o.owner||'전사', progress:p, weight:o.weight, contribution: o.weight!=null?Math.round(o.weight/100*p):null, id:o.id };
   });
   const depts = DB.okrs.filter(o=>o.level==='조직' && o.month===mk).map(o=>{
@@ -1251,6 +1395,20 @@ async function deleteOkrGoal(id){
   try{ await apiDelete('/okrs/'+id); }catch(err){ return alert(err.message); }
   await refreshDB(); renderOkrOverview(); renderOkrDept();
 }
+async function saveCompanyMonthlyProgress(okrId, year, month){
+  const target = document.getElementById('f-cprog-target-'+okrId).value.trim();
+  const actual = document.getElementById('f-cprog-actual-'+okrId).value.trim();
+  const note = document.getElementById('f-cprog-note-'+okrId).value.trim();
+  try{
+    await apiPost('/okr-progress', {
+      okrId, year, month,
+      monthlyTargetValue: target===''?null:Number(target),
+      monthlyActualValue: actual===''?null:Number(actual),
+      note
+    });
+  }catch(err){ return alert(err.message); }
+  await refreshDB(); renderOkrOverview();
+}
 function renderOkrOverview(){
   const el = document.getElementById('okr-overview-body');
   if(!el) return;
@@ -1261,8 +1419,8 @@ function renderOkrOverview(){
   const monthNum = Number(okrOvMonth);
   const monthBadge = `<span class="badge grey" style="margin-left:4px;">${monthNum}월 기준</span>`;
 
-  const companies = DB.okrs.filter(o=>o.level==='회사' && o.month===mk);
-  const companyGroup = weightedGroupScore(companies, companyProgress);
+  const companies = DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(mk, o));
+  const companyGroup = weightedGroupScore(companies, o=>companyRepresentativeProgress(o, mk));
   const companyScore = companyGroup.score;
   const deptAvgScore = deptAvgWeightedForMonth(mk);
   const riskyCount = riskyGoalCountForMonth(mk);
@@ -1290,28 +1448,48 @@ function renderOkrOverview(){
     <div style="margin-bottom:10px;">${weightSumBadgeHtml(companyGroup)}</div>
     <div style="display:flex;flex-direction:column;gap:12px;">
       ${companies.map((c,idx)=>{
-        const p = companyProgress(c);
+        const numeric = companyNumericProgress(c, mk);
+        const p = companyRepresentativeProgress(c, mk);
         const contribution = c.weight!=null ? Math.round(c.weight/100*p) : null;
-        return `<div class="okr-company-row" style="border:1px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
-          <div style="flex:2 1 220px;min-width:0;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-              <span style="font-size:11px;color:var(--sub);font-weight:800;">#${idx+1}</span>
-              ${okrStatusBadge(p)}
+        const expanded = okrOvExpandedCompanies.has(c.id);
+        const [py,pm] = mk.split('-').map(Number);
+        const curRec = numeric && numeric.currentRecord;
+        return `<div class="okr-company-row" style="border:1px solid var(--border);border-radius:14px;padding:16px 20px;">
+          <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+            <div style="flex:2 1 220px;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                <span style="font-size:11px;color:var(--sub);font-weight:800;">#${idx+1}</span>
+                ${okrStatusBadge(p)}
+              </div>
+              <div style="font-size:14px;font-weight:800;">${escapeHtml(c.title)}</div>
+              <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${goalPeriodLabel(c)} · ${escapeHtml(c.owner||'전사')}${c.unit && c.unit!=='%' ? ` · 단위 ${escapeHtml(c.unit)}` : ''}</div>
             </div>
-            <div style="font-size:14px;font-weight:800;">${escapeHtml(c.title)}</div>
-            <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${escapeHtml(c.month)} · ${escapeHtml(c.owner||'전사')}</div>
+            <div style="display:flex;gap:28px;flex:1 1 220px;">
+              <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;font-size:13px;">${c.weight!=null?c.weight+'%':'미설정'}</div></div>
+              <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;font-size:13px;">${contribution!=null?contribution+'%':'-'}</div></div>
+              <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">누적 계획 달성률</div><div style="font-weight:800;font-size:13px;color:${progressTextColor(p)};">${p}%</div></div>
+            </div>
+            <div style="flex:2 1 180px;min-width:120px;">
+              <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button type="button" class="btn ghost sm" onclick="toggleOkrOvCompany('${c.id}')">${expanded?'실적 숨기기':'월별 실적 보기'}</button>
+              ${isAdmin ? `<button class="btn ghost sm" onclick="openEditOkrTitleModal('${c.id}')">수정</button>
+              <button class="btn ghost sm" style="color:var(--red);" onclick="deleteOkrGoal('${c.id}')">삭제</button>` : ''}
+            </div>
           </div>
-          <div style="display:flex;gap:28px;flex:1 1 220px;">
-            <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;font-size:13px;">${c.weight!=null?c.weight+'%':'미설정'}</div></div>
-            <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;font-size:13px;">${contribution!=null?contribution+'%':'-'}</div></div>
-            <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">달성률</div><div style="font-weight:800;font-size:13px;color:${progressTextColor(p)};">${p}%</div></div>
-          </div>
-          <div style="flex:2 1 180px;min-width:120px;">
-            <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
-          </div>
-          ${isAdmin ? `<div style="display:flex;gap:6px;flex-shrink:0;">
-            <button class="btn ghost sm" onclick="openEditOkrTitleModal('${c.id}')">수정</button>
-            <button class="btn ghost sm" style="color:var(--red);" onclick="deleteOkrGoal('${c.id}')">삭제</button>
+          ${expanded ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:${isAdmin?'14px':'0'};font-size:12px;">
+              <div><div style="color:var(--sub);margin-bottom:2px;">${monthNum}월 월간 달성률</div><div style="font-weight:800;font-size:13px;">${numeric && numeric.monthlyRate!==null ? numeric.monthlyRate+'%' : '데이터 없음'}</div></div>
+              <div><div style="color:var(--sub);margin-bottom:2px;">누적 계획 달성률</div><div style="font-weight:800;font-size:13px;">${numeric && numeric.cumulativeRate!==null ? numeric.cumulativeRate+'%' : '데이터 없음'}</div></div>
+              <div><div style="color:var(--sub);margin-bottom:2px;">최종 목표 진척률</div><div style="font-weight:800;font-size:13px;">${numeric && numeric.finalRate!==null ? numeric.finalRate+'%' : '데이터 없음'}</div></div>
+            </div>
+            ${isAdmin ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;">
+              <div class="field" style="margin:0;"><label>${monthNum}월 목표값${c.unit?` (${escapeHtml(c.unit)})`:''}</label><input type="number" id="f-cprog-target-${c.id}" value="${curRec&&curRec.monthlyTargetValue!=null?curRec.monthlyTargetValue:''}" placeholder="예: 80"></div>
+              <div class="field" style="margin:0;"><label>${monthNum}월 실적값${c.unit?` (${escapeHtml(c.unit)})`:''}</label><input type="number" id="f-cprog-actual-${c.id}" value="${curRec&&curRec.monthlyActualValue!=null?curRec.monthlyActualValue:''}" placeholder="예: 65"></div>
+              <div class="field" style="margin:0;"><label>메모 (선택)</label><input id="f-cprog-note-${c.id}" value="${escapeHtml(curRec&&curRec.note||'')}" placeholder="비고"></div>
+              <button class="btn primary sm" onclick="saveCompanyMonthlyProgress('${c.id}', ${py}, ${pm})">저장</button>
+            </div>` : ''}
           </div>` : ''}
         </div>`;
       }).join('')}
