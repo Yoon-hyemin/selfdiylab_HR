@@ -297,47 +297,14 @@
     </div>
 
     <!-- RECRUIT -->
+    <!-- 2026-08-07: 준비 중 — 다시 설계할 때까지 비활성화(아래 JS 함수들은
+         남겨뒀다. 재설계 시 이 뷰 마크업만 되돌리면 됨). -->
     <div class="view" id="view-recruit">
-      <div class="page-head">
-        <div><h1>채용</h1><p>후보자 · 공고 · 사이트를 한 곳에서 관리해요</p></div>
-        <button class="btn primary" onclick="openJobModal()">+ 공고 만들기</button>
-      </div>
-      <div class="tabs">
-        <button class="tab active" onclick="switchRecruitTab('jobs')" id="rtab-jobs">공고</button>
-        <button class="tab" onclick="switchRecruitTab('candidates')" id="rtab-candidates">후보자</button>
-        <button class="tab" onclick="switchRecruitTab('site')" id="rtab-site">사이트</button>
-      </div>
-
-      <div id="recruit-jobs">
-        <div class="section">
-          <div class="section-head"><h3>공고 목록</h3></div>
-          <table><thead><tr><th>공고명</th><th>팀</th><th>전형단계</th><th>마감일</th><th>지원자</th><th>상태</th><th></th></tr></thead>
-          <tbody id="jobs-table"></tbody></table>
-        </div>
-      </div>
-
-      <div id="recruit-candidates" style="display:none;">
-        <div class="section">
-          <div class="section-head">
-            <div><h3>후보자</h3><div class="desc">공고를 선택하면 해당 후보자 목록이 보여요. 전형 단계를 바꾸면 히스토리에 자동 기록돼요</div></div>
-          </div>
-          <select id="cand-job-select" class="btn sm" onchange="renderCandidates()" style="margin-bottom:14px;"></select>
-          <button class="btn primary sm" onclick="openCandidateModal()" style="margin-left:8px;margin-bottom:14px;">+ 후보자 등록하기</button>
-          <table><thead><tr><th>이름</th><th>연락처</th><th>현재 전형</th><th>최근 업데이트</th><th></th></tr></thead>
-          <tbody id="candidates-table"></tbody></table>
-        </div>
-      </div>
-
-      <div id="recruit-site" style="display:none;">
-        <div class="section">
-          <div class="section-head"><div><h3>채용사이트</h3><div class="desc">회사명 기반으로 자동 생성되는 채용 사이트 미리보기예요</div></div></div>
-          <div style="background:linear-gradient(120deg,#EAF6FF,#F7F5FF);border-radius:18px;padding:36px;text-align:center;">
-            <div style="font-size:12.5px;color:var(--sub);font-weight:700;margin-bottom:10px;">🏢 주식회사 셀디랩 채용</div>
-            <h2 style="font-size:22px;font-weight:900;margin-bottom:8px;">우리팀과 멋진 여정을 함께 하고 싶다면?</h2>
-            <p style="color:var(--sub);font-size:13px;margin-bottom:16px;">큰 꿈을 꾸고 현실로 만드는 당신을 지지합니다.</p>
-            <button class="btn primary sm" onclick="switchToApplyLanding()">채용 중인 공고 보기 →</button>
-          </div>
-        </div>
+      <div class="page-head"><div><h1>채용</h1><p>다시 준비하고 있어요</p></div></div>
+      <div class="section" style="text-align:center;padding:60px 24px;">
+        <div style="font-size:32px;margin-bottom:12px;">🛠️</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:8px;">준비 중이에요</div>
+        <div style="font-size:13px;color:var(--sub);line-height:1.6;">채용 화면을 다시 준비하고 있어요. 곧 다시 열릴 예정이에요.</div>
       </div>
     </div>
 
@@ -355,63 +322,33 @@
     </div>
 
     <!-- EVAL -->
+    <!-- 2026-08-07: 준비 중 — 아래 JS 함수는 남겨뒀다(재설계 시 마크업만 복원). -->
     <div class="view" id="view-eval">
-      <div class="page-head">
-        <div><h1>평가</h1><p>역량(공동·리드·직무) + 성과 + 커스텀 구조로 평가해요</p></div>
-        <button class="btn primary" onclick="openEvalModal()">+ 평가 만들기</button>
-      </div>
-
-      <div class="section">
-        <div class="section-head"><div><h3>9-Grid 매트릭스</h3><div class="desc">가로: 역량 평균(공동·리드·직무), 세로: 성과 (선택한 분기 기준)</div></div>
-          <select id="eval-quarter-filter" onchange="renderEval()" class="btn sm"></select>
-        </div>
-        <div class="axis-label">↑ 성과 높음</div>
-        <div class="grid9" id="grid9"></div>
-        <div class="axis-label">역량 낮음 → 역량 높음</div>
-      </div>
-
-      <div class="section">
-        <div class="section-head"><h3>AI 기반 평가 리포트 요약</h3><div class="desc">점수와 코멘트를 바탕으로 자동 생성돼요 (규칙 기반 자동 요약, 실제 AI API 호출 아님)</div></div>
-        <div id="ai-reports"></div>
-      </div>
-
-      <div class="section">
-        <div class="section-head"><h3>평가 기록</h3></div>
-        <table><thead><tr><th>구성원</th><th>분기</th><th>공동역량</th><th>리드역량</th><th>직무역량</th><th>성과</th><th>커스텀</th><th>등급</th><th></th></tr></thead>
-        <tbody id="eval-table"></tbody></table>
+      <div class="page-head"><div><h1>평가</h1><p>다시 준비하고 있어요</p></div></div>
+      <div class="section" style="text-align:center;padding:60px 24px;">
+        <div style="font-size:32px;margin-bottom:12px;">🛠️</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:8px;">준비 중이에요</div>
+        <div style="font-size:13px;color:var(--sub);line-height:1.6;">평가 화면을 다시 준비하고 있어요. 곧 다시 열릴 예정이에요.</div>
       </div>
     </div>
 
     <!-- CALIBRATION -->
     <div class="view" id="view-calibration">
-      <div class="page-head">
-        <div><h1>등급 배분 (캘리브레이션)</h1><p>평가 마법사의 마지막 단계 "등급 배분"에 해당해요 — 목표 배분율에 맞춰 등급을 조정하고 사유를 기록하세요</p></div>
-        <select id="cal-quarter-filter" onchange="renderCalibration()" class="btn sm"></select>
-      </div>
-      <div class="section">
-        <div class="section-head"><div><h3>등급 배분 현황</h3><div class="desc">목표 배분율 대비 현재 분포를 비교하세요</div></div></div>
-        <div id="cal-bars"></div>
-      </div>
-      <div class="section">
-        <div class="section-head"><h3>개별 등급 조정</h3></div>
-        <table><thead><tr><th>구성원</th><th>산출 등급</th><th>최종 등급</th><th>조정 사유</th><th></th></tr></thead>
-        <tbody id="cal-table"></tbody></table>
+      <div class="page-head"><div><h1>등급 배분 (캘리브레이션)</h1><p>다시 준비하고 있어요</p></div></div>
+      <div class="section" style="text-align:center;padding:60px 24px;">
+        <div style="font-size:32px;margin-bottom:12px;">🛠️</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:8px;">준비 중이에요</div>
+        <div style="font-size:13px;color:var(--sub);line-height:1.6;">등급 배분 화면을 다시 준비하고 있어요. 곧 다시 열릴 예정이에요.</div>
       </div>
     </div>
 
     <!-- ONE ON ONE -->
     <div class="view" id="view-oneonone">
-      <div class="page-head">
-        <div><h1>원온원</h1><p>구성원별 1:1 면담 기록을 시간순으로 관리하세요</p></div>
-        <button class="btn primary" onclick="openOneOnOneModal()">+ 원온원 보내기</button>
-      </div>
-      <div class="section">
-        <div class="section-head"><h3>구성원 선택</h3></div>
-        <div id="oneonone-people" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-      </div>
-      <div class="section">
-        <div class="section-head"><h3 id="oneonone-title">히스토리</h3></div>
-        <div class="timeline" id="oneonone-timeline"></div>
+      <div class="page-head"><div><h1>원온원</h1><p>다시 준비하고 있어요</p></div></div>
+      <div class="section" style="text-align:center;padding:60px 24px;">
+        <div style="font-size:32px;margin-bottom:12px;">🛠️</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:8px;">준비 중이에요</div>
+        <div style="font-size:13px;color:var(--sub);line-height:1.6;">원온원 화면을 다시 준비하고 있어요. 곧 다시 열릴 예정이에요.</div>
       </div>
     </div>
 
@@ -2458,14 +2395,14 @@ function renderAll(){
   renderHrDash();
   renderMembers();
   if(currentMemberId) renderMemberProfile();
-  renderJobs();
-  renderCandidates();
+  // 채용/평가/캘리브레이션/원온원은 2026-08-07부로 화면을 "준비 중"으로
+  // 바꾸면서 renderJobs()/renderCandidates()/renderEval()/renderCalibration()/
+  // renderOneOnOne() 호출을 뺐다 -- 그 함수들이 채우던 DOM 요소가 더 이상
+  // 없어서(placeholder로 교체됨) 호출하면 에러가 난다. 함수 정의 자체는
+  // 재설계 시 마크업만 복원하면 되도록 남겨뒀다.
   renderOkrOverview();
   renderOkrDept();
   renderOkrPersonal();
-  renderEval();
-  renderCalibration();
-  renderOneOnOne();
   renderMyPage();
 }
 renderAll();
