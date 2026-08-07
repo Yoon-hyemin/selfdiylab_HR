@@ -230,20 +230,16 @@
   <div class="main">
 
     <!-- 성과 대시보드 (전사 공개 · 비밀번호 없음) -->
+    <!-- 2026-08-07: 목표 탭의 "전체 현황" 서브탭이 가중 성과율 기반으로 다시
+         만들어지면서 여기 있던 KPI/기업 목표/부서별 달성률/타임라인이 그대로
+         겹치게 됐다. 나중에 관리자 전용 "월별 리뷰" 화면으로 새로 만들 예정이라
+         그 전까지는 준비 중 안내만 띄운다. -->
     <div class="view active" id="view-perfdash">
-      <div class="page-head"><div><h1>성과 대시보드</h1><p>전사 목표와 평가 현황이에요. 모든 구성원이 볼 수 있어요</p></div></div>
-      <div class="grid4" id="perfdash-kpis"></div>
-      <div class="section">
-        <div class="section-head"><h3>기업 목표 달성률</h3><div class="desc">이번 달 기업 목표별 달성률이에요</div></div>
-        <div id="perfdash-goal-cards"></div>
-      </div>
-      <div class="section">
-        <div class="section-head"><h3>부서별 달성률</h3></div>
-        <div id="perfdash-dept-bars"></div>
-      </div>
-      <div class="section">
-        <div class="section-head"><div><h3>최근 성과관리 활동</h3><div class="desc">목표 등록, 평가 작성, 원온원 기록</div></div></div>
-        <div class="timeline" id="perfdash-timeline"></div>
+      <div class="page-head"><div><h1>성과 대시보드</h1><p>월별 리뷰 화면으로 새로 준비하고 있어요</p></div></div>
+      <div class="section" style="text-align:center;padding:60px 24px;">
+        <div style="font-size:32px;margin-bottom:12px;">🛠️</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:8px;">준비 중이에요</div>
+        <div style="font-size:13px;color:var(--sub);line-height:1.6;">관리자만 볼 수 있는 월별 리뷰 화면으로 다시 만들 예정이에요.<br>지금 목표 현황은 <b>🎯목표 → 전체 현황</b> 탭에서 확인할 수 있어요.</div>
       </div>
     </div>
 
@@ -2339,47 +2335,6 @@ function renderTimelineInto(elId, events, emptyMsg){
     || `<div class="empty">${emptyMsg}</div>`;
 }
 
-/* 성과 대시보드 — 전사 공개. 개인정보(구성원·지원자)는 쓰지 않아요. */
-function renderPerfDash(){
-  const companies = DB.okrs.filter(o=>o.level==='회사');
-  const companyAvg = companies.length ? Math.round(companies.reduce((a,c)=>a+companyProgress(c),0)/companies.length) : 0;
-
-  document.getElementById('perfdash-kpis').innerHTML = `
-    <div class="kpi"><div class="label">기업 목표 평균 달성률</div><div class="value">${companyAvg}%</div></div>
-    <div class="kpi"><div class="label">진행중인 기업 목표</div><div class="value">${companies.length}건</div></div>
-    <div class="kpi"><div class="label">등록된 평가</div><div class="value">${DB.evals.length}건</div></div>
-    <div class="kpi"><div class="label">원온원 기록</div><div class="value">${DB.oneonones.length}건</div></div>
-  `;
-
-  document.getElementById('perfdash-goal-cards').innerHTML = companies.map(c=>{
-    const p = companyProgress(c);
-    return `
-    <div style="margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:8px;">
-        <span>${escapeHtml(c.title)} <span class="badge grey">${escapeHtml(c.month||'')}</span></span><span>${p}%</span>
-      </div>
-      <div class="bar"><i style="width:${p}%"></i></div>
-    </div>`;
-  }).join('') || '<div class="empty">등록된 기업 목표가 없어요</div>';
-
-  const teams = [...new Set(DB.okrs.filter(o=>o.level==='조직').map(o=>o.owner))];
-  document.getElementById('perfdash-dept-bars').innerHTML = teams.map(team=>{
-    const orgs = DB.okrs.filter(o=>o.level==='조직' && o.owner===team);
-    const avg = orgs.length ? Math.round(orgs.reduce((a,o)=>a+orgProgress(o),0)/orgs.length) : 0;
-    return `<div class="cal-row">
-      <div class="name">${escapeHtml(team)}</div>
-      <div class="barwrap"><div class="bar"><i style="width:${avg}%"></i></div></div>
-      <div class="pct">${avg}%</div>
-    </div>`;
-  }).join('') || '<div class="empty">등록된 부서 목표가 없어요</div>';
-
-  const events = [];
-  DB.oneonones.forEach(m=>events.push({sort:m.date, date:dayKeyOf(m.date), text:`[원온원] ${escapeHtml(m.employeeName)} 님과 면담 기록`}));
-  DB.evals.forEach(e=>events.push({sort:e.quarter, date:escapeHtml(e.quarter), text:`[평가] ${escapeHtml(e.employeeName)} 님 ${escapeHtml(e.quarter)} 평가 등록`}));
-  DB.okrs.filter(o=>o.level!=='개인').forEach(o=>events.push({sort:o.month||o.quarter, date:escapeHtml(o.month||o.quarter), text:`[목표] ${escapeHtml(o.level)} 목표 「${escapeHtml(o.title)}」 등록`}));
-  renderTimelineInto('perfdash-timeline', events, '아직 성과관리 기록이 없어요');
-}
-
 /* 인사 대시보드 — 비밀번호 필요. 채용 관련 지표만 보여줘요. */
 function renderHrDash(){
   const inProgress = DB.jobs.filter(j=>j.status==='진행중').length;
@@ -2500,7 +2455,6 @@ function resetData(){ alert('실제 데이터베이스로 전환된 이후에는
 
 /* ---------- INIT ---------- */
 function renderAll(){
-  renderPerfDash();
   renderHrDash();
   renderMembers();
   if(currentMemberId) renderMemberProfile();
