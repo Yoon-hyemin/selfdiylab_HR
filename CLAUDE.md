@@ -13,14 +13,15 @@
 - **작업 방식(사용자가 명시적으로 요구한 4단계 사이클)**: ① **구획화 개발** — 기능을 통째로 만들지 않고 검증 가능한 단위로 쪼개서 그 단위만 만든다 → ② **실제 인물로 확인** — 더미 데이터가 아니라 실제 구성원 데이터/이름으로 검증한다 → ③ **배포** — `master`에 push해서 Vercel에 실제로 띄운다 → ④ **수정** — 실사용에서 나온 피드백으로 고친다. "로컬에서 통과"가 아니라 "실제 배포된 사이트에서 실데이터로 동작"이 완료 기준이다. 여러 기능을 한 번에 묶어 제안하지 않는다.
 
 - 배포: Vercel 프로젝트 `selfdiylab-hr` (https://selfdiylab-hr.vercel.app), GitHub `Yoon-hyemin/selfdiylab_HR`의 `master` 브랜치를 push하면 자동 배포됨
-- DB: Neon Postgres (Vercel 프로젝트 Settings → Environments → Production → Environment Variables에 `DATABASE_URL`, `HR_PASSWORD`, `SESSION_SECRET`이 Sensitive로 등록돼 있음 — 값은 대시보드에서 다시 조회 불가, 필요하면 Neon 콘솔에서 새로 복사)
+- DB: Neon Postgres (Vercel 프로젝트 Settings → Environments → Production → Environment Variables에 `DATABASE_URL`·`SESSION_SECRET`이 Sensitive로 등록돼 있음 — 값은 대시보드에서 다시 조회 불가, 필요하면 Neon 콘솔에서 새로 복사). `HR_PASSWORD`는 2026-08-11 로그인 시스템 교체로 더 이상 어떤 코드에서도 읽지 않는다 — 지워도 무방하지만 남겨둬도 해가 없다.
 
 ## 로컬에서 실행하기
 
-1. `.env.local.example`을 복사해 `.env.local` 생성, `DATABASE_URL`(Neon 콘솔에서 복사)·`HR_PASSWORD`·`SESSION_SECRET`(아무 임의 문자열) 채우기
+1. `.env.local.example`을 복사해 `.env.local` 생성, `DATABASE_URL`(Neon 콘솔에서 복사)·`SESSION_SECRET`(아무 임의 문자열) 채우기
 2. `npm install`
 3. 스키마 변경이 있었다면 `node scripts/run-sql.js sql/00X_*.sql`로 마이그레이션 적용 (한 번만)
-4. `node scripts/dev-server.js` → `http://localhost:3000` (Vercel 라우팅을 흉내내는 로컬 전용 서버. `vercel dev`는 대화형 로그인이 필요해 이 환경에서 못 씀)
+4. 계정이 하나도 없는 새 DB라면 `INITIAL_ADMIN_EMAIL=...` `INITIAL_ADMIN_TEMP_PASSWORD=...` 환경변수를 셸에 export하고 `node scripts/bootstrap-admin.js`로 최초 관리자 계정 생성 (멱등 -- 이미 있으면 아무것도 안 함)
+5. `node scripts/dev-server.js` → `http://localhost:3000` (Vercel 라우팅을 흉내내는 로컬 전용 서버. `vercel dev`는 대화형 로그인이 필요해 이 환경에서 못 씀)
 
 Claude Code에서는 `.claude/launch.json`에 `hr-dev-server` 설정이 있어서, preview 도구로 이름만 지정하면 서버가 자동으로 켜지고 브라우저가 열린다.
 
@@ -28,10 +29,11 @@ Claude Code에서는 `.claude/launch.json`에 `hr-dev-server` 설정이 있어�
 
 ```
 index.html (정적 SPA, 전체 UI)
-  ├─ 인사(구성원/채용) — HR_PASSWORD 공유 비밀번호로 잠김
-  ├─ 성과관리(목표/평가/캘리브레이션/원온원) — 로그인 없이 전사 공개
-  └─ 마이페이지 — 구성원 개인 이메일 로그인(비밀번호 없음), 본인 평가/원온원만 (개인 목표는 🎯목표 탭으로 이동)
-        │ fetch
+  └─ 전체가 개인 계정 로그인 뒤에 있다(2026-08-11부터). 로그인 전에는
+     사이드바를 포함해 아무 화면도 안 보이고 로그인 화면만 뜬다. 로그인 후
+     보이는 메뉴는 시스템 권한(ADMIN/DEPARTMENT_HEAD/EMPLOYEE)에 따라
+     다르다 — 아래 "로그인·권한 시스템" 절 참고.
+        │ fetch (같은 오리진 쿠키 자동 포함)
         ▼
 api/[...path].js  (Vercel 서버리스 함수 1개 — Hobby 플랜 12개 제한 때문에
                     실제 핸들러는 전부 handlers/*.js에 있고 이 파일이 정적
@@ -42,6 +44,22 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 ```
 
 **핵심 패턴**: 프론트가 `/api/public-data`(또는 `/api/all`)로 전체 데이터를 한 번에 받아 `DB` 전역 객체에 저장하고, 모든 화면(대시보드 KPI, 9-그리드, 목표 달성률 등)은 그 객체를 클라이언트에서 매 렌더마다 계산한다. 서버는 원본 row만 내려주고 집계는 안 한다 — 이 프로젝트 규모(수십 명)에서는 이게 트리거/배치보다 훨씬 단순하고 충분하다. 새 화면 만들 때도 이 패턴을 따를 것.
+
+## 로그인·권한 시스템 — 2026-08-11 전면 개편
+
+기존 방식(구성원/채용은 공용 비밀번호 `HR_PASSWORD`, 목표/마이페이지는 이메일만 입력하면 그 사람으로 인정)은 "본인인지" 검증이 아예 없었다. 이걸 개인 계정(비밀번호 있음) + 3단계 시스템 권한으로 완전히 대체했다 — 회원가입 기능은 없고, 관리자가 기존 구성원 중 계정 없는 사람을 골라 계정을 만들어주는 방식이다.
+
+- **`accounts` 테이블**(`sql/012_accounts_and_audit.sql`): `employee_id`(members.id, 1:1)·`email`(로그인 아이디, 소문자 정규화)·`password_hash`(bcryptjs, cost 12)·`system_role`(`ADMIN`/`DEPARTMENT_HEAD`/`EMPLOYEE`, 단일값)·`department_id`(members.team 값을 그대로 복사, 새 부서 테이블은 안 만듦)·`account_status`(`ACTIVE`/`INACTIVE`)·`must_change_password`·`failed_login_count`·`locked_until`·`last_login_at`·`session_version` 등을 담는다.
+- **`members.roles`(관리자/부서장/팀원 배열, sql/007)는 그대로 남아있지만 더 이상 권한 판정에 쓰이지 않는다** — `accounts.system_role`이 유일한 권한 소스다. 직책(`members.position`, 예: '팀장')과도 별개다. 한 사람이 여러 role을 가질 수 있던 옛 모델과 달리 이제는 단일값이라, "관리자이면서 부서장"이던 사람(예: 인사팀장)은 그냥 `ADMIN`으로 두면 된다 — ADMIN은 부서장 전용 기능(부서 목표 조회/수정/승인 등)에도 이미 접근 가능하게 만들어져 있다(단, 부서 목표 **생성**만은 여전히 그 팀 DEPARTMENT_HEAD 전용 — 관리자가 임의 팀을 골라 새로 만드는 화면이 없어서).
+- **세션**: `handlers/_lib/accountAuth.js`가 `memberSession.js`(삭제됨)와 같은 "서명된 토큰을 직접 만드는" 패턴을 그대로 쓰되(새 JWT 라이브러리 없음), `session_version`을 토큰에 넣어서 매 요청마다 DB 값과 비교한다 — 비밀번호 초기화/계정 비활성화/권한 변경 시 이 값을 올려서 기존 세션을 원격으로 즉시 무효화한다. 쿠키는 `hr_auth`, httpOnly, `x-forwarded-proto: https`일 때만 Secure, 12시간 만료.
+- **잠금 정책**: 5회 연속 로그인 실패 시 15분 잠금(`failed_login_count`/`locked_until`). 실패 메시지는 이메일 존재 여부를 구분하지 않는 통일된 문구를 쓰되, 잠금 상태는 예외적으로 알려준다(본인이 스스로 만든 상태라 정보가 새는 게 아니라서).
+- **최초 관리자**: 코드에 하드코딩하지 않고 `scripts/bootstrap-admin.js`를 `INITIAL_ADMIN_EMAIL`/`INITIAL_ADMIN_TEMP_PASSWORD` 환경변수로 1회 실행해서 만든다. 이미 계정이 있으면 아무것도 안 하는 멱등 스크립트라 여러 번 실행해도 안전하다.
+- **계정 및 권한 관리 화면**(사이드바 "🔑 계정 및 권한 관리", ADMIN 전용, `handlers/accounts/*`): 계정 생성(임시 비밀번호를 딱 한 번만 화면에 보여주고 DB에는 해시만 저장), 권한 변경, 비밀번호 초기화(기존 세션 즉시 종료), 잠금 해제, 비활성화/재활성화. **마지막 남은 활성 ADMIN은 강등·비활성화할 수 없다**(`activeAdminCountExcluding`). 계정은 삭제하지 않고 비활성화만 한다 — 그 사람의 기존 목표·평가·원온원 기록을 보존하기 위해서다.
+- **감사 로그**(`audit_log` 테이블, 같은 화면 하단): 로그인 성공/실패, 계정 생성, 권한/부서 변경, 비밀번호 초기화, 잠금 해제, 활성화 상태 변경을 기록한다. 비밀번호·세션 토큰 값은 절대 기록하지 않는다.
+- **데이터 접근 범위**(`handlers/_lib/scope.js`, `handlers/public-data.js`): 기업/부서(조직) 레벨 목표는 로그인한 사람 누구나 조회 가능하게 그대로 뒀다 — 전체현황/부서목표 탭의 "전 부서 비교" 차트가 이 전제로 만들어져 있어서, 이걸 부서별로 막으면 기존에 여러 라운드에 걸쳐 만든 기능이 깨진다. **개인 목표·평가·원온원 같은 개인 식별 데이터만** 본인 것 또는(부서장이면) 같은 팀 것으로 좁혔다 — `evals`/`oneonones`는 이번에 처음으로 로그인 없이 아무나 만들 수 있던 상태에서 벗어났다.
+- **`/api/public-data`는 이름과 달리 더 이상 공개 엔드포인트가 아니다** — 로그인은 필요하지만 역할별로 응답 내용이 걸러진다(URL은 프론트 호출부를 덜 고치려고 그대로 뒀다). ADMIN은 이 대신 `/api/all`(전체, 무필터)을 쓴다.
+
+**비개발자 운영 메모**: 새 구성원이 로그인하려면 관리자가 "계정 및 권한 관리" 화면에서 그 사람 이름을 골라 계정을 만들어줘야 한다(자동 가입 없음). 만들면 임시 비밀번호가 딱 한 번 화면에 뜨는데, 그 자리에서 캡처하거나 안전한 방법으로 본인에게 전달해야 한다 — 창을 닫으면 관리자도 다시 볼 수 없다. 그 사람은 처음 로그인하면 바로 비밀번호를 새로 정해야 다음 화면으로 넘어갈 수 있다. 비밀번호를 잊었다고 연락이 오면 같은 화면에서 "비밀번호 초기화"를 누르면 된다(관리자도 기존 비밀번호는 알 수 없다 — 새로 발급만 가능).
 
 ## 목표(OKR) 계층 — 2026-08 재설계
 

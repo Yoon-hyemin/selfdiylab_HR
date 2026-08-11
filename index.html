@@ -29,6 +29,13 @@
   .nav-item:hover{background:var(--bg);}
   .nav-item.active{background:var(--primary-light);color:var(--primary-dark);font-weight:800;}
   .nav-sep{font-size:11px;color:#B4B6C4;font-weight:800;margin:18px 10px 8px;letter-spacing:.5px;}
+  .sidebar-user{margin-top:24px;padding-top:16px;border-top:1px solid var(--border);}
+  .sidebar-user .name{font-size:13px;font-weight:800;padding:0 6px;}
+  .sidebar-user .meta{font-size:11px;color:var(--sub);padding:2px 6px 10px;}
+  .auth-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:500;padding:20px;}
+  .auth-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;width:100%;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.06);}
+  .auth-card .logo{justify-content:center;margin-bottom:18px;}
+  .auth-card h3{font-size:16px;margin-bottom:6px;text-align:center;}
 
   .main{padding:26px 34px 80px;max-width:1180px;}
   .view{display:none;}
@@ -205,6 +212,13 @@
 </head>
 <body>
 
+<!-- 2026-08-11: 로그인 화면. 이 앱은 별도 URL 라우터가 없는 단일 페이지라
+     (탭 전환도 URL이 안 바뀜), "/login"은 실제 별도 페이지가 아니라 이
+     화면을 보여주는 클라이언트 상태다. 로그인 전에는 #app-root 전체를
+     감춰서 사이드바를 포함해 내부 화면이 전혀 보이지 않게 한다. -->
+<div class="auth-screen" id="auth-screen"></div>
+
+<div id="app-root" style="display:none;">
 <div class="trialbar">SelfDIYLab 자체 HR 시스템</div>
 
 <div class="app">
@@ -224,7 +238,9 @@
     <div class="nav-sep">마이페이지</div>
     <button class="nav-item" data-view="mypage">🙋 마이페이지</button>
     <div class="nav-sep">시스템</div>
+    <button class="nav-item" data-view="accounts">🔑 계정 및 권한 관리</button>
     <button class="nav-item" data-view="data">🗂 데이터 관리</button>
+    <div class="sidebar-user" id="sidebar-user"></div>
   </div>
 
   <div class="main">
@@ -354,30 +370,41 @@
 
     <!-- MYPAGE -->
     <div class="view" id="view-mypage">
-      <div class="page-head"><div><h1>마이페이지</h1><p>내 평가·원온원 기록을 한 곳에서 확인해요</p></div></div>
-
-      <div id="mypage-login">
-        <div class="section">
-          <div class="section-head"><h3>로그인</h3><div class="desc">인사팀에 등록된 이메일을 입력하면 내 화면이 열려요 (비밀번호 없음)</div></div>
-          <div class="field"><label>이메일</label><input id="f-my-email" placeholder="you@selfdiylab.com" onkeydown="if(event.key==='Enter')submitMyLogin()"></div>
-          <div id="mypage-login-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
-          <button class="btn primary" onclick="submitMyLogin()">로그인</button>
-        </div>
+      <div class="page-head">
+        <div><h1 id="mypage-hello" style="font-size:20px;"></h1><p>최근 평가·원온원 기록이에요</p></div>
+        <button class="btn ghost" onclick="openChangePasswordModal()">비밀번호 변경</button>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>내 평가 기록</h3></div>
+        <div id="mypage-evals"></div>
       </div>
 
-      <div id="mypage-home" style="display:none;">
-        <div class="page-head">
-          <div><h1 id="mypage-hello" style="font-size:20px;"></h1><p>최근 평가·원온원 기록이에요</p></div>
-          <button class="btn ghost" onclick="submitMyLogout()">로그아웃</button>
-        </div>
-        <div class="section">
-          <div class="section-head"><h3>내 평가 기록</h3></div>
-          <div id="mypage-evals"></div>
-        </div>
+      <div class="section">
+        <div class="section-head"><h3>내 원온원 기록</h3></div>
+        <div class="timeline" id="mypage-oneonones"></div>
+      </div>
+    </div>
 
-        <div class="section">
-          <div class="section-head"><h3>내 원온원 기록</h3></div>
-          <div class="timeline" id="mypage-oneonones"></div>
+    <!-- ACCOUNTS (계정 및 권한 관리, ADMIN 전용) -->
+    <div class="view" id="view-accounts">
+      <div class="page-head"><div><h1>계정 및 권한 관리</h1><p>구성원 계정 생성, 권한 변경, 비밀번호 초기화, 잠금 해제, 활성화 상태를 관리해요</p></div></div>
+      <div class="section">
+        <div class="section-head"><div><h3>계정 목록</h3><div class="desc">계정이 없는 구성원은 아래에서 새로 만들 수 있어요</div></div></div>
+        <button class="btn primary sm" style="margin-bottom:14px;" onclick="openCreateAccountModal()">+ 계정 만들기</button>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>이름</th><th>부서</th><th>이메일</th><th>권한</th><th>상태</th><th>최근 로그인</th><th></th></tr></thead>
+            <tbody id="accounts-table"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h3>감사 로그</h3><div class="desc">계정 관련 변경 이력 (최근 200건)</div></div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>일시</th><th>처리자</th><th>대상</th><th>동작</th></tr></thead>
+            <tbody id="audit-log-table"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -402,19 +429,20 @@
 <!-- MODALS -->
 <div class="overlay" id="overlay"><div class="modal" id="modal-content"></div></div>
 
+</div><!-- /#app-root -->
+
 <script>
 /* ---------- API client ---------- */
 const API = '/api';
-// Populated with {'X-HR-Password': ...} once the user unlocks the 인사 area
-// (see unlockHr()); merged into every request below so 인사 endpoints -- which
-// check the same header server-side -- accept them. Stays empty for the
-// company-wide 성과관리 endpoints, which need no auth.
-let hrHeaders = {};
-async function apiGet(path){ const r = await fetch(API+path, {headers:{...hrHeaders}}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('GET '+path+' failed')); return data; }
-async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('POST '+path+' failed')); return data; }
-async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PATCH '+path+' failed')); return data; }
-async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json', ...hrHeaders}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PUT '+path+' failed')); return data; }
-async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE', headers:{...hrHeaders}}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('DELETE '+path+' failed')); return data; }
+// 2026-08-11: 이전엔 인사 영역 공용 비밀번호를 X-HR-Password 헤더로 실어
+// 보냈다(hrHeaders). 개인 계정 로그인 도입으로 인증은 이제 서버가 발급하는
+// httpOnly 세션 쿠키(hr_auth) 하나로 통일됐고, 같은 오리진 fetch는 쿠키를
+// 자동으로 실어 보내므로 클라이언트가 헤더를 직접 다룰 필요가 없다.
+async function apiGet(path){ const r = await fetch(API+path); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('GET '+path+' failed')); return data; }
+async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('POST '+path+' failed')); return data; }
+async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PATCH '+path+' failed')); return data; }
+async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PUT '+path+' failed')); return data; }
+async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE'}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('DELETE '+path+' failed')); return data; }
 
 function today(){ return new Date().toISOString().slice(0,10); }
 // The API returns date columns (hireDate, groupHireDate, birthday) as full ISO
@@ -432,7 +460,7 @@ function escapeHtml(s){
 // <select> has to be populated on first load, and renderOkrDept()의 팀원별
 // 현황 목록도 team으로 DB.roster를 필터링해요. Use DB.roster for pickers,
 // DB.members only inside the password-gated 구성원 views.
-let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], okrProgress:[], evals:[], calibration:{}, oneonones:[] };
+let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], okrProgress:[], evals:[], calibration:{}, oneonones:[], accounts:[], auditLog:[] };
 let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, roles} | null (roles는 배열, 관리자+부서장 동시 가능)
 
 /* 전체현황(대표님용) 대시보드 상태 -- 2026-08-06. 연도는 아래 연간 차트 2개의
@@ -465,44 +493,147 @@ let perYear = null, perMonth = null, perQuarter = null;
 let perHistLimit = 5;
 let perSortMode = 'weight';
 
-/* 인사 영역 잠금 해제 여부. 페이지 로드마다 초기화돼요
-   (localStorage/sessionStorage에 저장하지 않아요). */
-let hrAuthed = false;
-
-/* 성과관리 데이터: 전사 공개. 비밀번호 없이 매 페이지 로드마다 받아와요.
-   d.members는 {id, name, team, position}만 담긴 명단이에요(이름/팀/직책은
-   이미 evals/oneonones의 employeeName이나 목표 탭의 팀원별 현황으로 공개돼
-   있어요). 나머지 구성원 정보는 /all에만 있어요. */
+/* 2026-08-11: 개인 계정 로그인 도입 이전에는 "인사 영역 공용 비밀번호를
+   입력했는가"(hrAuthed)로 /api/all(구성원 전체 정보 포함) vs
+   /api/public-data(공개 요약)를 갈랐다. 이제는 그 구분이 로그인한 계정의
+   system_role 자체다 -- ADMIN이면 /api/all, 그 외에는 /api/public-data(둘
+   다 이제 로그인 필요, 서버가 역할에 맞게 내용을 걸러서 내려준다). */
 async function refreshPublicData(){
   const d = await apiGet('/public-data');
   DB.roster = d.members;
   DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.okrProgress = d.okrProgress || []; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
-/* 인사 데이터(구성원·채용): HR 비밀번호가 있어야 받아올 수 있어요. hrHeaders가
-   비어 있으면 서버가 401을 돌려주므로 잠금 해제 이후에만 호출해요. */
 async function refreshHrData(){
   const d = await apiGet('/all');
   DB.members = d.members; DB.jobs = d.jobs; DB.candidates = d.candidates;
-  // 잠금 해제 뒤 새로 추가한 구성원도 선택 목록에 바로 보이도록 명단을 갱신해요.
-  // team/position도 같이 담아요 -- renderOkrDept()가 DB.roster를 팀으로 필터링해서
-  // 팀원별 현황을 만들기 때문에 이름만 있으면 그 목록이 비어버려요.
   DB.roster = d.members.map(m => ({ id: m.id, name: m.name, team: m.team || '', position: m.position || '' }));
   DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.okrProgress = d.okrProgress || []; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
 }
-/* 기존 호출부 호환용. 인사 화면에서만 쓰이므로 잠금 해제 전이면 공개 데이터만 갱신해요. */
 async function refreshDB(){
-  if(hrAuthed) await refreshHrData();
+  if(me && me.systemRole==='ADMIN') await refreshHrData();
   else await refreshPublicData();
 }
+
+/* ---------- 로그인 게이트 ---------- */
+// 역할별로 보이는 사이드바 메뉴. data-view 값 기준. ADMIN은 부서장/팀원
+// 화면도 전부 볼 수 있다는 기존 규칙(관리자는 모든 부서 목표 조회/수정
+// 가능 등)과 맞춰 가장 넓은 목록을 준다.
+const ROLE_VIEWS = {
+  ADMIN: ['hrdash','members','recruit','perfdash','okr','eval','calibration','oneonone','mypage','accounts','data'],
+  DEPARTMENT_HEAD: ['okr','eval','calibration','oneonone','mypage'],
+  EMPLOYEE: ['okr','eval','oneonone','mypage']
+};
+const ROLE_LABELS = { ADMIN:'관리자', DEPARTMENT_HEAD:'부서장', EMPLOYEE:'팀원' };
+const ROLE_HOME = { ADMIN:'perfdash', DEPARTMENT_HEAD:'okr', EMPLOYEE:'okr' };
+
 async function initApp(){
-  await refreshPublicData();
-  try { me = await apiGet('/me'); } catch { me = null; }
-  renderAll();
+  let account = null;
+  try{ account = await apiGet('/me'); }catch{ account = null; }
+  if(!account){ me = null; showLoginScreen(); return; }
+  me = account;
+  if(me.mustChangePassword){ showForcePasswordScreen(); return; }
+  await enterApp();
 }
 initApp();
 
-/* ---------- 인사 영역 비밀번호 잠금 ---------- */
-const HR_VIEWS = ['members','recruit','hrdash'];
+async function enterApp(){
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-root').style.display = '';
+  try{ await refreshDB(); }catch(err){ /* 일시적 오류 -- 화면 조작 시 다시 시도돼요 */ }
+  applySidebarForRole();
+  renderSidebarUser();
+  const landing = ROLE_HOME[me.systemRole] || 'okr';
+  activateView(landing);
+  if(landing==='okr'){
+    switchOkrTab(me.systemRole==='DEPARTMENT_HEAD' ? 'dept' : me.systemRole==='EMPLOYEE' ? 'personal' : 'overview');
+  }
+}
+
+function applySidebarForRole(){
+  const allowed = ROLE_VIEWS[me.systemRole] || [];
+  document.querySelectorAll('.nav-item').forEach(btn=>{
+    btn.style.display = allowed.includes(btn.dataset.view) ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-sep').forEach(sep=>{
+    let sib = sep.nextElementSibling, anyVisible = false;
+    while(sib && sib.classList && !sib.classList.contains('nav-sep')){
+      if(sib.style.display !== 'none') anyVisible = true;
+      sib = sib.nextElementSibling;
+    }
+    sep.style.display = anyVisible ? '' : 'none';
+  });
+}
+function renderSidebarUser(){
+  const el = document.getElementById('sidebar-user');
+  if(!el || !me) return;
+  el.innerHTML = `
+    <div class="name">${escapeHtml(me.name)}</div>
+    <div class="meta">${escapeHtml(me.team||'-')} · ${ROLE_LABELS[me.systemRole]||me.systemRole}</div>
+    <button class="btn ghost sm" style="width:100%;" onclick="doLogout()">로그아웃</button>`;
+}
+
+function showLoginScreen(){
+  document.getElementById('app-root').style.display = 'none';
+  const el = document.getElementById('auth-screen');
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <div class="auth-card">
+      <div class="logo"><span class="logo-mark"></span>SELFDIYLAB HR</div>
+      <h3>로그인</h3>
+      <div class="field"><label>이메일</label><input id="f-login-email" type="email" placeholder="you@selfdiylab.com" onkeydown="if(event.key==='Enter')document.getElementById('f-login-password').focus()"></div>
+      <div class="field"><label>비밀번호</label><input id="f-login-password" type="password" onkeydown="if(event.key==='Enter')submitLogin()"></div>
+      <div id="login-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+      <button class="btn primary" style="width:100%;" onclick="submitLogin()">로그인</button>
+    </div>`;
+  const input = document.getElementById('f-login-email');
+  if(input) input.focus();
+}
+function showAuthError(boxId, msg){
+  const box = document.getElementById(boxId);
+  if(box){ box.textContent = msg; box.style.display = 'block'; }
+}
+async function submitLogin(){
+  const email = document.getElementById('f-login-email').value.trim();
+  const password = document.getElementById('f-login-password').value;
+  if(!email || !password) return showAuthError('login-error', '이메일과 비밀번호를 입력해주세요');
+  let res;
+  try{ res = await apiPost('/auth/login', {email, password}); }
+  catch(err){ return showAuthError('login-error', err.message); }
+  me = res.account;
+  if(me.mustChangePassword){ showForcePasswordScreen(); return; }
+  await enterApp();
+}
+
+function showForcePasswordScreen(){
+  document.getElementById('app-root').style.display = 'none';
+  const el = document.getElementById('auth-screen');
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <div class="auth-card">
+      <div class="logo"><span class="logo-mark"></span>SELFDIYLAB HR</div>
+      <h3>비밀번호 변경이 필요해요</h3>
+      <div class="modal-sub" style="text-align:center;">${me?escapeHtml(me.name)+'님, ':''}처음 로그인했거나 비밀번호가 초기화됐어요. 계속하려면 새 비밀번호를 설정해주세요.</div>
+      <div class="field"><label>현재 비밀번호(임시 비밀번호)</label><input id="f-fpw-current" type="password"></div>
+      <div class="field"><label>새 비밀번호</label><input id="f-fpw-new" type="password" placeholder="영문+숫자 포함 8자 이상"></div>
+      <div class="field"><label>새 비밀번호 확인</label><input id="f-fpw-confirm" type="password" onkeydown="if(event.key==='Enter')submitForcePasswordChange()"></div>
+      <div id="fpw-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+      <button class="btn primary" style="width:100%;margin-bottom:8px;" onclick="submitForcePasswordChange()">비밀번호 변경</button>
+      <button class="btn" style="width:100%;" onclick="doLogout()">로그아웃</button>
+    </div>`;
+}
+async function submitForcePasswordChange(){
+  const currentPassword = document.getElementById('f-fpw-current').value;
+  const newPassword = document.getElementById('f-fpw-new').value;
+  const confirmPassword = document.getElementById('f-fpw-confirm').value;
+  try{ await apiPost('/auth/change-password', {currentPassword, newPassword, confirmPassword}); }
+  catch(err){ return showAuthError('fpw-error', err.message); }
+  me.mustChangePassword = false;
+  await enterApp();
+}
+async function doLogout(){
+  try{ await apiPost('/auth/logout', {}); }catch{ /* 쿠키가 이미 없어도 그냥 진행 */ }
+  location.reload();
+}
 
 function activateView(view){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
@@ -512,68 +643,17 @@ function activateView(view){
   const el = document.getElementById('view-'+view);
   if(el) el.classList.add('active');
   renderAll();
-}
-
-function openHrAuthModal(targetView){
-  showModal(`
-    <h3>인사 영역 잠금 해제</h3>
-    <div class="modal-sub">구성원·채용 정보에는 개인정보가 있어서 공용 비밀번호가 필요해요</div>
-    <div class="field"><label>비밀번호</label><input id="f-hrpw" type="password" placeholder="비밀번호를 입력해주세요" onkeydown="if(event.key==='Enter')submitHrAuth('${targetView}')"></div>
-    <div id="hrpw-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="submitHrAuth('${targetView}')">잠금 해제</button></div>
-  `);
-  const input = document.getElementById('f-hrpw');
-  if(input) input.focus();
-}
-
-function showHrAuthError(msg){
-  const box = document.getElementById('hrpw-error');
-  if(box){ box.textContent = msg; box.style.display = 'block'; }
-  const input = document.getElementById('f-hrpw');
-  if(input){ input.value = ''; input.focus(); }
-}
-
-async function submitHrAuth(targetView){
-  const input = document.getElementById('f-hrpw');
-  if(!input) return;
-  const pw = input.value;
-  if(!pw){ return showHrAuthError('비밀번호를 입력해주세요'); }
-
-  let res;
-  try{
-    res = await fetch(API+'/hr-auth', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})});
-  }catch(err){
-    return showHrAuthError('서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요');
-  }
-
-  let data = null;
-  try{ data = await res.json(); }catch{ /* 본문이 없을 수도 있어요 */ }
-
-  if(!res.ok || !data || !data.ok){
-    return showHrAuthError((data && data.error) || '비밀번호가 올바르지 않아요');
-  }
-
-  hrHeaders = {'X-HR-Password': pw};
-  hrAuthed = true;
-  try{
-    await refreshHrData();
-  }catch(err){
-    hrHeaders = {}; hrAuthed = false;
-    return showHrAuthError('인사 데이터를 불러오지 못했어요. 다시 시도해주세요');
-  }
-  closeModal();
-  activateView(targetView);
+  // 계정 목록/감사 로그는 다른 화면의 DB 블롭에 안 들어있는 별도 ADMIN 전용
+  // 엔드포인트라, 다른 데이터처럼 refreshDB()에서 미리 받아두지 않고 이
+  // 화면에 들어올 때만 필요해서 받아온다.
+  if(view==='accounts' && me && me.systemRole==='ADMIN') loadAndRenderAccounts();
 }
 
 /* ---------- Nav ---------- */
 document.querySelectorAll('.nav-item').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    const view = btn.dataset.view;
-    if(HR_VIEWS.includes(view) && !hrAuthed) return openHrAuthModal(view);
-    activateView(view);
-  });
+  btn.addEventListener('click', ()=> activateView(btn.dataset.view));
 });
-function goHome(){ activateView('perfdash'); }
+function goHome(){ activateView(ROLE_HOME[me && me.systemRole] || 'perfdash'); }
 function switchToApplyLanding(){ switchRecruitTab('jobs'); }
 function switchRecruitTab(tab){
   ['jobs','candidates','site'].forEach(t=>{
@@ -1109,32 +1189,6 @@ function positionRank(position){
   const i = POSITION_RANK.indexOf(position);
   return i===-1 ? POSITION_RANK.length : i;
 }
-function memberLoginBoxHtml(promptText, scope){
-  // scope로 id를 구분해요: 부서목표/개인목표 두 서브탭이 동시에 DOM에 존재하다 보니(로그인 전엔 둘 다
-  // 이 로그인 박스를 렌더링) id를 고정값으로 두면 문서에 중복 id가 생겨 getElementById가 화면에
-  // 보이지 않는 쪽 input을 집어 로그인이 조용히 실패하는 버그가 있었음(Task 12에서 발견).
-  const s = scope || 'default';
-  return `
-    <div class="section">
-      <div class="section-head"><h3>로그인</h3><div class="desc">${escapeHtml(promptText)} (인사팀에 등록된 이메일, 비밀번호 없음)</div></div>
-      <div class="field"><label>이메일</label><input id="f-okr-login-email-${s}" placeholder="you@selfdiylab.com" onkeydown="if(event.key==='Enter')submitOkrLogin('${s}')"></div>
-      <div id="okr-login-error-${s}" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
-      <button class="btn primary" onclick="submitOkrLogin('${s}')">로그인</button>
-    </div>`;
-}
-async function submitOkrLogin(scope){
-  const s = scope || 'default';
-  const input = document.getElementById('f-okr-login-email-'+s);
-  const errBox = document.getElementById('okr-login-error-'+s);
-  errBox.style.display='none';
-  const email = input.value.trim();
-  if(!email){ errBox.textContent='이메일을 입력해주세요'; errBox.style.display='block'; return; }
-  try{
-    await apiPost('/member-login', {email});
-    me = await apiGet('/me');
-  }catch(err){ errBox.textContent = err.message; errBox.style.display='block'; return; }
-  renderOkrDept(); renderOkrPersonal(); renderMyPage(); renderOkrOverview();
-}
 function switchOkrTab(tab){
   ['overview','dept','personal'].forEach(t=>{
     document.getElementById('okr-'+t).style.display = t===tab ? '' : 'none';
@@ -1472,7 +1526,7 @@ function renderOkrOverview(){
   okrOvInitDefaults();
   const mk = `${okrOvYear}-${okrOvMonth}`;
   const prevMk = shiftMonthKey(mk, -1);
-  const isAdmin = me && me.roles && me.roles.includes('관리자');
+  const isAdmin = me && me.systemRole==='ADMIN';
   const monthNum = Number(okrOvMonth);
   const monthBadge = `<span class="badge grey" style="margin-left:4px;">${monthNum}월 기준</span>`;
 
@@ -1573,7 +1627,7 @@ function renderOkrOverview(){
     <table>
       <thead><tr><th>구분</th><th>목표명</th><th>담당</th><th>가중치</th><th>달성률</th><th>기여율</th><th>상태</th></tr></thead>
       <tbody>${shown.map(r=>{
-        const canEditRow = r.level==='회사' ? isAdmin : (me && me.roles && me.roles.includes('부서장') && me.team===r.team);
+        const canEditRow = r.level==='회사' ? isAdmin : (isAdmin || (me && me.systemRole==='DEPARTMENT_HEAD' && me.team===r.team));
         return `
         <tr class="${canEditRow?'clickable':''}" ${canEditRow?`onclick="openEditOkrTitleModal('${r.id}')"`:''}>
           <td><span class="badge ${r.kind==='기업 목표'?'green':'blue'}">${r.kind}</span></td>
@@ -1731,11 +1785,18 @@ function deptHistoryPeriods(team){
 function renderOkrDept(){
   const el = document.getElementById('okr-dept-body');
   if(!el) return;
-  if(!me){ el.innerHTML = memberLoginBoxHtml('내 팀 목표 화면을 보려면 로그인해주세요', 'dept'); return; }
   deptInitDefaults();
 
   const myTeam = me.team;
-  const canCreate = me.roles && me.roles.includes('부서장');
+  // 생성은 그 팀 부서장만(관리자가 임의 팀을 골라 새로 만드는 화면이 없어서
+  // 기존과 동일하게 유지) -- 승인/수정/삭제는 관리자도 팀 소속과 무관하게
+  // 할 수 있다는 백엔드 규칙(handlers/okrs/[id].js, handlers/my-goals/[id]/review.js)과
+  // 맞춰 두 권한을 분리했다. 예전엔 members.roles가 배열이라 인사팀장처럼
+  // 관리자+부서장을 동시에 가진 사람만 실사용했었는데, system_role이
+  // 단일값으로 바뀌면서 "관리자이지만 부서장은 아닌" 계정이 실제로 생길 수
+  // 있어 이 구분이 이제부터 실제로 의미가 있다.
+  const canCreate = me.systemRole==='DEPARTMENT_HEAD';
+  const canManage = me.systemRole==='ADMIN' || me.systemRole==='DEPARTMENT_HEAD';
   const periodKey = deptCurrentPeriodKey();
   const prevKey = deptShiftPeriodKey(periodKey, -1);
 
@@ -1800,7 +1861,7 @@ function renderOkrDept(){
       </div>
     </div>`;
 
-  const reviewSection = canCreate ? `
+  const reviewSection = canManage ? `
     <div class="section">
       <div class="section-head"><div><h3>승인 대기 개인 목표</h3><div class="desc">팀원이 제출한 개인 목표를 승인하거나 반려하세요 (조회 기간과 무관하게 전부 표시)</div></div></div>
       ${pendingGoals.length ? pendingGoals.map(g=>{
@@ -1875,7 +1936,7 @@ function renderOkrDept(){
           </div>
           <div style="display:flex;align-items:flex-start;gap:4px;flex-shrink:0;">
             <div style="font-size:16px;font-weight:900;color:${progressTextColor(p)};">${p}%</div>
-            ${canCreate ? `<details style="position:relative;">
+            ${canManage ? `<details style="position:relative;">
               <summary style="cursor:pointer;list-style:none;padding:2px 8px;border-radius:6px;font-weight:900;color:var(--sub);">⋯</summary>
               <div style="position:absolute;right:0;top:26px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.1);padding:6px;z-index:5;min-width:96px;">
                 <button class="btn ghost sm" style="display:block;width:100%;text-align:left;" onclick="openEditOkrTitleModal('${g.id}')">수정</button>
@@ -2068,7 +2129,6 @@ function openMyGoalModal(){
 function renderOkrPersonal(){
   const el = document.getElementById('okr-personal-body');
   if(!el) return;
-  if(!me){ el.innerHTML = memberLoginBoxHtml('개인 목표를 만들려면 로그인해주세요', 'personal'); return; }
   perInitDefaults();
 
   const periodKey = perCurrentPeriodKey();
@@ -2563,32 +2623,34 @@ function renderCandidates(){
   `).join('') || `<tr><td colspan="5" class="empty">지원자가 없어요</td></tr>`;
 }
 
-/* ---------- 마이페이지 ---------- */
-async function submitMyLogin(){
-  const input = document.getElementById('f-my-email');
-  const errBox = document.getElementById('mypage-login-error');
-  errBox.style.display = 'none';
-  const email = input.value.trim();
-  if(!email){ errBox.textContent = '이메일을 입력해주세요'; errBox.style.display = 'block'; return; }
-
+/* ---------- 비밀번호 변경 (자발적, 마이페이지에서) ---------- */
+function openChangePasswordModal(){
+  showModal(`
+    <h3>비밀번호 변경</h3>
+    <div class="field"><label>현재 비밀번호</label><input id="f-cpw-current" type="password"></div>
+    <div class="field"><label>새 비밀번호</label><input id="f-cpw-new" type="password" placeholder="영문+숫자 포함 8자 이상"></div>
+    <div class="field"><label>새 비밀번호 확인</label><input id="f-cpw-confirm" type="password" onkeydown="if(event.key==='Enter')saveChangePassword()"></div>
+    <div id="cpw-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveChangePassword()">변경</button></div>
+  `);
+}
+async function saveChangePassword(){
+  const currentPassword = document.getElementById('f-cpw-current').value;
+  const newPassword = document.getElementById('f-cpw-new').value;
+  const confirmPassword = document.getElementById('f-cpw-confirm').value;
   try{
-    await apiPost('/member-login', {email});
-    me = await apiGet('/me');
-    renderMyPage(); renderOkrDept(); renderOkrPersonal(); renderOkrOverview();
+    await apiPost('/auth/change-password', {currentPassword, newPassword, confirmPassword});
   }catch(err){
-    errBox.textContent = err.message; errBox.style.display = 'block';
+    const box = document.getElementById('cpw-error');
+    box.textContent = err.message; box.style.display='block';
+    return;
   }
+  closeModal();
+  alert('비밀번호가 변경됐어요');
 }
-async function submitMyLogout(){
-  await apiPost('/member-logout', {});
-  me = null;
-  renderMyPage(); renderOkrDept(); renderOkrPersonal(); renderOkrOverview();
-}
+
+/* ---------- 마이페이지 ---------- */
 function renderMyPage(){
-  const loginBox = document.getElementById('mypage-login');
-  const homeBox = document.getElementById('mypage-home');
-  if(!me){ loginBox.style.display=''; homeBox.style.display='none'; return; }
-  loginBox.style.display='none'; homeBox.style.display='';
   document.getElementById('mypage-hello').textContent = `${me.name}님, 안녕하세요`;
 
   const myEvals = DB.evals.filter(e=>e.employee===me.id);
@@ -2612,6 +2674,134 @@ async function toggleMyTask(id, done){
 async function deleteMyTask(id){
   try{ await apiDelete('/okr-tasks/'+id); }catch(err){ alert(err.message); }
   await refreshDB(); renderOkrPersonal(); renderOkrDept(); renderOkrOverview();
+}
+
+/* ---------- 계정 및 권한 관리 (ADMIN 전용) ---------- */
+const AUDIT_ACTION_LABELS = {
+  LOGIN_SUCCESS:'로그인 성공', LOGIN_FAILURE:'로그인 실패',
+  PASSWORD_CHANGE_SELF:'비밀번호 변경(본인)', PASSWORD_RESET_BY_ADMIN:'비밀번호 초기화(관리자)',
+  ACCOUNT_CREATED:'계정 생성', ROLE_CHANGE:'권한 변경', DEPARTMENT_CHANGE:'부서 변경',
+  ACCOUNT_UNLOCKED:'잠금 해제', ACCOUNT_DEACTIVATED:'비활성화', ACCOUNT_REACTIVATED:'재활성화'
+};
+const ROLE_OPTION_LABELS = { ADMIN:'관리자', DEPARTMENT_HEAD:'부서장', EMPLOYEE:'팀원' };
+
+async function loadAndRenderAccounts(){
+  try{
+    const [accounts, auditLog] = await Promise.all([apiGet('/accounts'), apiGet('/audit-log')]);
+    DB.accounts = accounts; DB.auditLog = auditLog;
+  }catch(err){ alert(err.message); return; }
+  renderAccounts();
+}
+function renderAccounts(){
+  const tbody = document.getElementById('accounts-table');
+  if(!tbody) return;
+  tbody.innerHTML = (DB.accounts||[]).map(a=>{
+    const statusBadge = a.accountStatus!=='ACTIVE' ? '<span class="badge grey">비활성</span>'
+      : a.isLocked ? '<span class="badge amber">잠김</span>' : '<span class="badge green">활성</span>';
+    return `<tr>
+      <td>${escapeHtml(a.employeeName)}</td>
+      <td>${escapeHtml(a.employeeTeam||'-')}</td>
+      <td>${escapeHtml(a.email)}</td>
+      <td><select onchange="changeAccountRole('${a.id}', this.value)">${Object.keys(ROLE_OPTION_LABELS).map(r=>`<option value="${r}" ${a.systemRole===r?'selected':''}>${ROLE_OPTION_LABELS[r]}</option>`).join('')}</select></td>
+      <td>${statusBadge}${a.mustChangePassword?' <span class="badge grey">비번변경대기</span>':''}</td>
+      <td>${a.lastLoginAt ? new Date(a.lastLoginAt).toLocaleString('ko-KR') : '-'}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn ghost sm" onclick='openResetPasswordConfirm(${JSON.stringify(a.id)},${JSON.stringify(a.employeeName)},${JSON.stringify(a.email)})'>비밀번호 초기화</button>
+        ${a.isLocked?`<button class="btn ghost sm" onclick="doUnlockAccount('${a.id}')">잠금 해제</button>`:''}
+        <button class="btn ghost sm" onclick='openToggleStatusConfirm(${JSON.stringify(a.id)},${JSON.stringify(a.employeeName)},${JSON.stringify(a.accountStatus)})'>${a.accountStatus==='ACTIVE'?'비활성화':'재활성화'}</button>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="empty">생성된 계정이 없어요</td></tr>';
+
+  const auditTbody = document.getElementById('audit-log-table');
+  if(auditTbody){
+    auditTbody.innerHTML = (DB.auditLog||[]).map(l=>`
+      <tr>
+        <td style="white-space:nowrap;">${new Date(l.createdAt).toLocaleString('ko-KR')}</td>
+        <td>${escapeHtml(l.actorName)}</td>
+        <td>${escapeHtml(l.targetName)}</td>
+        <td>${escapeHtml(AUDIT_ACTION_LABELS[l.action]||l.action)}</td>
+      </tr>`).join('') || '<tr><td colspan="4" class="empty">기록이 없어요</td></tr>';
+  }
+}
+function openCreateAccountModal(){
+  const existingIds = new Set((DB.accounts||[]).map(a=>a.employeeId));
+  const candidates = (DB.members||[]).filter(m=>!existingIds.has(m.id));
+  showModal(`
+    <h3>계정 만들기</h3>
+    <div class="modal-sub">회원가입은 없어요 -- 이미 등록된 구성원 중 계정이 없는 사람만 고를 수 있어요.</div>
+    <div class="field"><label>구성원</label>
+      <select id="f-acct-employee">${candidates.length ? candidates.map(m=>`<option value="${m.id}">${escapeHtml(m.name)} · ${escapeHtml(m.team||'-')}</option>`).join('') : '<option value="">계정을 만들 수 있는 구성원이 없어요</option>'}</select>
+    </div>
+    <div class="field"><label>권한</label>
+      <select id="f-acct-role">
+        <option value="EMPLOYEE">팀원</option>
+        <option value="DEPARTMENT_HEAD">부서장</option>
+        <option value="ADMIN">관리자</option>
+      </select>
+    </div>
+    <div id="acct-create-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCreateAccount()">계정 생성</button></div>
+  `);
+}
+async function saveCreateAccount(){
+  const employeeId = document.getElementById('f-acct-employee').value;
+  const systemRole = document.getElementById('f-acct-role').value;
+  if(!employeeId) return;
+  let res;
+  try{ res = await apiPost('/accounts', {employeeId, systemRole}); }
+  catch(err){
+    const box = document.getElementById('acct-create-error');
+    box.textContent = err.message; box.style.display = 'block';
+    return;
+  }
+  showModal(`
+    <h3>계정이 생성됐어요</h3>
+    <div class="modal-sub">${escapeHtml(res.account.employeeName)}님(${escapeHtml(res.account.email)})의 임시 비밀번호예요. 이 창을 닫으면 다시 볼 수 없으니, 지금 바로 안전한 방법으로 본인에게 전달해주세요. 처음 로그인하면 비밀번호를 새로 설정하게 돼요.</div>
+    <div class="field"><input value="${escapeHtml(res.tempPassword)}" readonly onclick="this.select()" style="font-weight:800;font-size:15px;text-align:center;"></div>
+    <div class="modal-actions"><button class="btn primary" onclick="closeModal(); loadAndRenderAccounts();">확인</button></div>
+  `);
+}
+function openResetPasswordConfirm(id, name, email){
+  showModal(`
+    <h3>비밀번호 초기화</h3>
+    <div class="modal-sub">${escapeHtml(name)}님(${escapeHtml(email)})의 비밀번호를 초기화할까요? 기존 로그인 세션이 즉시 종료되고, 다음 로그인부터 새 임시 비밀번호를 써야 해요.</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn danger" onclick='doResetPassword(${JSON.stringify(id)},${JSON.stringify(name)},${JSON.stringify(email)})'>초기화</button></div>
+  `);
+}
+async function doResetPassword(id, name, email){
+  let res;
+  try{ res = await apiPost('/accounts/'+id+'/reset-password', {}); }
+  catch(err){ alert(err.message); return; }
+  showModal(`
+    <h3>임시 비밀번호가 발급됐어요</h3>
+    <div class="modal-sub">${escapeHtml(name)}님(${escapeHtml(email)})에게 아래 임시 비밀번호를 전달해주세요. 이 창을 닫으면 다시 볼 수 없어요.</div>
+    <div class="field"><input value="${escapeHtml(res.tempPassword)}" readonly onclick="this.select()" style="font-weight:800;font-size:15px;text-align:center;"></div>
+    <div class="modal-actions"><button class="btn primary" onclick="closeModal(); loadAndRenderAccounts();">확인</button></div>
+  `);
+}
+async function doUnlockAccount(id){
+  try{ await apiPost('/accounts/'+id+'/unlock', {}); }catch(err){ alert(err.message); return; }
+  await loadAndRenderAccounts();
+}
+function openToggleStatusConfirm(id, name, currentStatus){
+  const toInactive = currentStatus==='ACTIVE';
+  showModal(`
+    <h3>${toInactive?'계정 비활성화':'계정 재활성화'}</h3>
+    <div class="modal-sub">${escapeHtml(name)}님의 계정을 ${toInactive?'비활성화':'다시 활성화'}할까요?${toInactive?' 비활성화하는 즉시 로그인할 수 없게 되고 기존 세션도 종료돼요. 이 사람의 기존 목표·평가·원온원 기록은 지워지지 않고 그대로 남아요.':''}</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn ${toInactive?'danger':'primary'}" onclick="doToggleStatus('${id}','${toInactive?'INACTIVE':'ACTIVE'}')">${toInactive?'비활성화':'재활성화'}</button></div>
+  `);
+}
+async function doToggleStatus(id, status){
+  try{ await apiPatch('/accounts/'+id+'/status', {status}); }
+  catch(err){ alert(err.message); return; }
+  closeModal();
+  await loadAndRenderAccounts();
+}
+async function changeAccountRole(id, systemRole){
+  try{ await apiPatch('/accounts/'+id, {systemRole}); }
+  catch(err){ alert(err.message); }
+  await loadAndRenderAccounts();
 }
 
 /* ---------- DATA MGMT ---------- */
@@ -2640,7 +2830,11 @@ function renderAll(){
   renderOkrPersonal();
   renderMyPage();
 }
-renderAll();
+// 2026-08-11: 예전엔 로그인 여부와 무관하게 페이지 로드 즉시 한 번 그려서
+// "로그인 전" 상태의 빈 화면을 보여줬다(각 render 함수가 me===null을 직접
+// 처리했음). 이제는 initApp()/enterApp()이 로그인 게이트를 통과한 뒤에만
+// renderAll()을 호출하므로, 여기서 즉시 호출하면 me가 아직 null인 채로
+// render 함수들이 실행돼 에러가 난다. 그래서 이 무조건 호출은 제거했다.
 </script>
 </body>
 </html>

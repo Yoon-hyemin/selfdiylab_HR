@@ -17,6 +17,17 @@
  * 팀의 부서장인 실사용 사례(예: 인사팀장)가 나와서, 한 사람이 관리자/부서장을
  * 동시에 가질 수 있게 했다.
  *
+ * 2026-08-11(개인 계정 로그인 도입): 권한 판정 소스를 members.roles(배열,
+ * 관리자/부서장/팀원 동시 보유 가능)에서 accounts.system_role(단일값,
+ * ADMIN/DEPARTMENT_HEAD/EMPLOYEE)로 바꿨다 — 이제 로그인 자체가 비밀번호
+ * 있는 개인 계정이라, "이 계정이 무슨 권한인지"는 accounts 테이블 하나로
+ * 판단한다. 인사팀장처럼 관리자+부서장을 겸하던 실사용 사례는 그 사람의
+ * system_role을 ADMIN으로 두고(더 넓은 권한이 우선), ADMIN이 부서장 전용
+ * 화면도 볼 수 있게 하는 기존 규칙(관리자는 모든 부서 목표 조회/수정 가능)을
+ * 그대로 유지해서 흡수한다 — 다만 부서 목표 "생성"만은 여전히 그 팀
+ * DEPARTMENT_HEAD 전용이다(관리자가 임의 팀을 골라 새로 만드는 화면이
+ * 없어서, 기존과 동일).
+ *
  * 부서(조직) 목표는 반드시 "같은 달"의 기업(회사) 목표를 상위로 선택해야
  * 하고, 같은 팀(owner)·같은 달(month)·같은 파트(part)에 5개를 넘게 만들 수
  * 없다. part는 한 팀 안에 기능이 나뉘는 경우(예: 인사회계팀의 인사/회계)를
@@ -54,7 +65,7 @@
  * 체크로 바꿨다(부서 목표 생성 방식 자체는 그대로다).
  */
 import { sql } from '../_lib/db.js';
-import { getSessionMemberId } from '../_lib/memberSession.js';
+import { requireAuth } from '../_lib/accountAuth.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
 import { deriveGoalPeriod, monthRange, periodsOverlap, monthOverlapsGoal } from '../_lib/goalPeriod.js';
 
@@ -76,8 +87,8 @@ function parseWeight(raw) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const memberId = getSessionMemberId(req);
-  if (!memberId) return res.status(401).json({ error: '로그인이 필요해요' });
+  const account = await requireAuth(req, res);
+  if (!account) return;
 
   const b = req.body || {};
   if (!b.title || !b.title.trim()) return res.status(400).json({ error: 'title is required' });
@@ -87,22 +98,14 @@ export default async function handler(req, res) {
   if (!isEditableMonth(b.month)) return res.status(400).json({ error: '이번 달/지난달 목표만 만들 수 있어요' });
 
   try {
-    // 세션 검사(getSessionMemberId)는 DB에 접근하지 않지만, 이 조회는 접근하므로
-    // try 안에서 실행해 일시적인 DB 오류도 나머지 코드와 같은 500 JSON 응답으로
-    // 처리되게 한다(전에는 try 시작 전에 있어서 그런 오류가 처리 안 된 예외로
-    // 튀어나갔다).
-    const [me] = await sql`SELECT roles, team FROM members WHERE id = ${memberId}`;
-    if (!me) return res.status(401).json({ error: '로그인이 필요해요' });
-    const roles = me.roles || [];
-
     const { weight, error: weightErr } = parseWeight(b.weight);
     if (weightErr) return res.status(400).json({ error: weightErr });
 
     if (b.level === '조직') {
-      if (!roles.includes('부서장')) return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
+      if (account.system_role !== 'DEPARTMENT_HEAD') return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
 
       const owner = (b.owner || '-').trim() || '-';
-      if (owner !== me.team) return res.status(403).json({ error: '본인 팀 목표만 만들 수 있어요' });
+      if (owner !== account.department_id) return res.status(403).json({ error: '본인 팀 목표만 만들 수 있어요' });
 
       if (!b.parent) return res.status(400).json({ error: '상위 기업 목표를 선택해주세요' });
       const [parent] = await sql`SELECT id, level, month, start_date::text AS start_date, end_date::text AS end_date FROM okrs WHERE id = ${b.parent}`;
@@ -138,7 +141,7 @@ export default async function handler(req, res) {
     }
 
     // 회사
-    if (!roles.includes('관리자')) return res.status(403).json({ error: '회사 목표는 관리자만 만들 수 있어요' });
+    if (account.system_role !== 'ADMIN') return res.status(403).json({ error: '회사 목표는 관리자만 만들 수 있어요' });
 
     const periodType = b.periodType ? String(b.periodType).trim() : null;
     const startDate = b.startDate || null;

@@ -21,10 +21,10 @@
 import allHandler from '../handlers/all.js';
 import publicJobsHandler from '../handlers/public-jobs.js';
 import publicDataHandler from '../handlers/public-data.js';
-import hrAuthHandler from '../handlers/hr-auth.js';
-import memberLoginHandler from '../handlers/member-login.js';
-import memberLogoutHandler from '../handlers/member-logout.js';
 import meHandler from '../handlers/me.js';
+import authLoginHandler from '../handlers/auth/login.js';
+import authLogoutHandler from '../handlers/auth/logout.js';
+import authChangePasswordHandler from '../handlers/auth/change-password.js';
 import membersIndex from '../handlers/members/index.js';
 import membersId from '../handlers/members/[id].js';
 import membersIdLists from '../handlers/members/[id]/lists.js';
@@ -46,15 +46,21 @@ import evalsIndex from '../handlers/evals/index.js';
 import evalsId from '../handlers/evals/[id].js';
 import calibrationOverrides from '../handlers/calibration/[quarter]/overrides.js';
 import oneononesIndex from '../handlers/oneonones/index.js';
+import accountsIndex from '../handlers/accounts/index.js';
+import accountsId from '../handlers/accounts/[id].js';
+import accountsIdResetPassword from '../handlers/accounts/[id]/reset-password.js';
+import accountsIdUnlock from '../handlers/accounts/[id]/unlock.js';
+import accountsIdStatus from '../handlers/accounts/[id]/status.js';
+import auditLogIndex from '../handlers/audit-log/index.js';
 
 const ROUTES = [
   { pattern: ['all'], handler: allHandler },
   { pattern: ['public-jobs'], handler: publicJobsHandler },
   { pattern: ['public-data'], handler: publicDataHandler },
-  { pattern: ['hr-auth'], handler: hrAuthHandler },
-  { pattern: ['member-login'], handler: memberLoginHandler },
-  { pattern: ['member-logout'], handler: memberLogoutHandler },
   { pattern: ['me'], handler: meHandler },
+  { pattern: ['auth', 'login'], handler: authLoginHandler },
+  { pattern: ['auth', 'logout'], handler: authLogoutHandler },
+  { pattern: ['auth', 'change-password'], handler: authChangePasswordHandler },
   { pattern: ['members'], handler: membersIndex },
   { pattern: ['members', ':id'], handler: membersId },
   { pattern: ['members', ':id', 'lists'], handler: membersIdLists },
@@ -76,6 +82,12 @@ const ROUTES = [
   { pattern: ['evals', ':id'], handler: evalsId },
   { pattern: ['calibration', ':quarter', 'overrides'], handler: calibrationOverrides },
   { pattern: ['oneonones'], handler: oneononesIndex },
+  { pattern: ['accounts'], handler: accountsIndex },
+  { pattern: ['accounts', ':id'], handler: accountsId },
+  { pattern: ['accounts', ':id', 'reset-password'], handler: accountsIdResetPassword },
+  { pattern: ['accounts', ':id', 'unlock'], handler: accountsIdUnlock },
+  { pattern: ['accounts', ':id', 'status'], handler: accountsIdStatus },
+  { pattern: ['audit-log'], handler: auditLogIndex },
 ];
 
 function matchRoute(segments) {

@@ -2,6 +2,7 @@
   "type": "module",
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^3.0.3",
     "jsdom": "^30.0.0"
   }
 }

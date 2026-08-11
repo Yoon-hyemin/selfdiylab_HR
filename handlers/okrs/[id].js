@@ -53,7 +53,7 @@
  * 구조라 isEditableMonth(okr.month) 그대로 유지한다.
  */
 import { sql } from '../_lib/db.js';
-import { getSessionMemberId } from '../_lib/memberSession.js';
+import { requireAuth } from '../_lib/accountAuth.js';
 import { isEditableMonth, currentMonthKey } from '../_lib/monthWindow.js';
 import { deriveGoalPeriod, periodsOverlap, monthRange, isCompanyGoalEditableNow } from '../_lib/goalPeriod.js';
 
@@ -65,22 +65,18 @@ function parseWeight(raw) {
   return { weight: w };
 }
 
-async function loadOkrAndCheckPermission(id, memberId) {
+async function loadOkrAndCheckPermission(id, account) {
   const [okr] = await sql`SELECT id, level, owner, month, part, weight, period_type, start_date::text AS start_date, end_date::text AS end_date FROM okrs WHERE id = ${id}`;
   if (!okr) return { error: [404, '목표를 찾을 수 없어요'] };
   if (okr.level === '개인') return { error: [400, '개인 목표는 /api/my-goals로 수정/삭제해주세요'] };
 
-  const [me] = await sql`SELECT roles, team FROM members WHERE id = ${memberId}`;
-  if (!me) return { error: [401, '로그인이 필요해요'] };
-  const roles = me.roles || [];
-
-  const isAdmin = roles.includes('관리자');
+  const isAdmin = account.system_role === 'ADMIN';
   if (okr.level === '회사' && !isAdmin) {
     return { error: [403, '회사 목표는 관리자만 수정/삭제할 수 있어요'] };
   }
   if (okr.level === '조직' && !isAdmin) {
-    if (!roles.includes('부서장')) return { error: [403, '부서 목표는 부서장만 수정/삭제할 수 있어요'] };
-    if (okr.owner !== me.team) return { error: [403, '본인 팀 목표만 수정/삭제할 수 있어요'] };
+    if (account.system_role !== 'DEPARTMENT_HEAD') return { error: [403, '부서 목표는 부서장만 수정/삭제할 수 있어요'] };
+    if (okr.owner !== account.department_id) return { error: [403, '본인 팀 목표만 수정/삭제할 수 있어요'] };
   }
 
   if (okr.level === '회사') {
@@ -96,11 +92,11 @@ async function loadOkrAndCheckPermission(id, memberId) {
 
 export default async function handler(req, res) {
   const { id } = req.query;
-  const memberId = getSessionMemberId(req);
-  if (!memberId) return res.status(401).json({ error: '로그인이 필요해요' });
+  const account = await requireAuth(req, res);
+  if (!account) return;
 
   try {
-    const { okr, error } = await loadOkrAndCheckPermission(id, memberId);
+    const { okr, error } = await loadOkrAndCheckPermission(id, account);
     if (error) return res.status(error[0]).json({ error: error[1] });
 
     if (req.method === 'PATCH') {

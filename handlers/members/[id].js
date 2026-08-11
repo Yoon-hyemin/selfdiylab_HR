@@ -1,5 +1,5 @@
 import { sql } from '../_lib/db.js';
-import { requireHrAuth } from '../_lib/hrAuth.js';
+import { requireRole } from '../_lib/accountAuth.js';
 
 const FIELD_MAP = {
   name: 'name', nickname: 'nickname', team: 'team', position: 'position',
@@ -19,7 +19,8 @@ const DATE_FIELDS = new Set(['hireDate', 'groupHireDate', 'birthday']);
 export default async function handler(req, res) {
   const { id } = req.query;
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
-  if (!requireHrAuth(req, res)) return;
+  const admin = await requireRole(req, res, ['ADMIN']);
+  if (!admin) return;
 
   const body = req.body || {};
   const sets = [];
@@ -63,6 +64,19 @@ export default async function handler(req, res) {
   try {
     const rows = await sql(`UPDATE members SET ${sets.join(', ')} WHERE id = $${i} RETURNING id`, values);
     if (!rows.length) return res.status(404).json({ error: 'Member not found' });
+
+    // 이 구성원한테 이미 계정이 있고 팀(부서)이 바뀌었다면, 계정의
+    // department_id도 같이 맞춰준다 -- 안 그러면 부서 이동 후에도 예전
+    // 부서 기준으로 권한 범위가 계산되는 어긋난 상태가 생긴다.
+    if ('team' in body) {
+      const [account] = await sql`SELECT id, department_id FROM accounts WHERE employee_id = ${id}`;
+      if (account && account.department_id !== (body.team || '')) {
+        await sql`UPDATE accounts SET department_id = ${body.team || ''}, updated_at = now() WHERE id = ${account.id}`;
+        await sql`INSERT INTO audit_log (actor_user_id, target_user_id, action, metadata)
+          VALUES (${admin.id}, ${account.id}, 'DEPARTMENT_CHANGE', ${JSON.stringify({ from: account.department_id, to: body.team || '' })}::jsonb)`;
+      }
+    }
+
     res.status(200).json({ id: rows[0].id });
   } catch (err) {
     console.error(err);

@@ -21,13 +21,13 @@
  * 여전히 본인 팀 것만 가능하다.
  */
 import { sql } from '../../_lib/db.js';
-import { getSessionMemberId } from '../../_lib/memberSession.js';
+import { requireAuth } from '../../_lib/accountAuth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
 
-  const memberId = getSessionMemberId(req);
-  if (!memberId) return res.status(401).json({ error: '로그인이 필요해요' });
+  const account = await requireAuth(req, res);
+  if (!account) return;
 
   const { id } = req.query;
   const status = req.body && req.body.status;
@@ -47,12 +47,9 @@ export default async function handler(req, res) {
     const [parent] = await sql`SELECT owner FROM okrs WHERE id = ${okr.parent_id}`;
     if (!parent) return res.status(400).json({ error: '연결된 부서 목표를 찾을 수 없어요' });
 
-    const [me] = await sql`SELECT roles, team FROM members WHERE id = ${memberId}`;
-    if (!me) return res.status(401).json({ error: '로그인이 필요해요' });
-    const roles = me.roles || [];
-    if (!roles.includes('관리자')) {
-      if (!roles.includes('부서장')) return res.status(403).json({ error: '부서장만 검토할 수 있어요' });
-      if (me.team !== parent.owner) return res.status(403).json({ error: '본인 팀의 개인 목표만 검토할 수 있어요' });
+    if (account.system_role !== 'ADMIN') {
+      if (account.system_role !== 'DEPARTMENT_HEAD') return res.status(403).json({ error: '부서장만 검토할 수 있어요' });
+      if (account.department_id !== parent.owner) return res.status(403).json({ error: '본인 팀의 개인 목표만 검토할 수 있어요' });
     }
 
     await sql`UPDATE okrs SET status = ${status}, review_note = ${status === 'rejected' ? reviewNote : ''} WHERE id = ${okr.id}`;

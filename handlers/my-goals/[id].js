@@ -18,7 +18,7 @@
  * 처리하므로 재승인 트리거 대상이 아니다(의도된 분리).
  */
 import { sql } from '../_lib/db.js';
-import { requireMemberAuth } from '../_lib/memberSession.js';
+import { requireEmployeeAuth } from '../_lib/accountAuth.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
 
 function parseWeight(raw) {
@@ -29,7 +29,7 @@ function parseWeight(raw) {
 }
 
 export default async function handler(req, res) {
-  const memberId = requireMemberAuth(req, res);
+  const memberId = await requireEmployeeAuth(req, res);
   if (!memberId) return;
 
   const { id } = req.query;

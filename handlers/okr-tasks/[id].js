@@ -8,7 +8,7 @@
  * 허용한다. 2026-08-04: 그 목표의 월이 이번 달/지난달이 아니면 거부한다.
  */
 import { sql } from '../_lib/db.js';
-import { requireMemberAuth } from '../_lib/memberSession.js';
+import { requireEmployeeAuth } from '../_lib/accountAuth.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
 
 async function loadOwnedTask(id, memberId) {
@@ -20,7 +20,7 @@ async function loadOwnedTask(id, memberId) {
 }
 
 export default async function handler(req, res) {
-  const memberId = requireMemberAuth(req, res);
+  const memberId = await requireEmployeeAuth(req, res);
   if (!memberId) return;
   const { id } = req.query;
 

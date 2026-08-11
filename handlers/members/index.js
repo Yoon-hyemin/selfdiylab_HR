@@ -1,5 +1,5 @@
 import { sql } from '../_lib/db.js';
-import { requireHrAuth } from '../_lib/hrAuth.js';
+import { requireRole } from '../_lib/accountAuth.js';
 
 const ALLOWED_ROLES = ['관리자', '부서장', '팀원'];
 
@@ -12,7 +12,7 @@ function normalizeRoles(roles) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!requireHrAuth(req, res)) return;
+  if (!(await requireRole(req, res, ['ADMIN']))) return;
   const b = req.body || {};
   if (!b.name || !b.name.trim()) return res.status(400).json({ error: 'name is required' });
   const roles = normalizeRoles(b.roles);

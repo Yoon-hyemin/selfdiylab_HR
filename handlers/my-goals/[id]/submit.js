@@ -15,12 +15,12 @@
  * null(미설정)이면 정확히 100%를 맞출 수 없으므로 함께 거부한다.
  */
 import { sql } from '../../_lib/db.js';
-import { requireMemberAuth } from '../../_lib/memberSession.js';
+import { requireEmployeeAuth } from '../../_lib/accountAuth.js';
 import { isEditableMonth } from '../../_lib/monthWindow.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
-  const memberId = requireMemberAuth(req, res);
+  const memberId = await requireEmployeeAuth(req, res);
   if (!memberId) return;
 
   const { id } = req.query;

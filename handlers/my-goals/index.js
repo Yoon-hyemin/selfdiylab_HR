@@ -29,7 +29,7 @@
  * 이번 달 개인 목표를 최대 10개로 제한한다(화면 시안에서 명시된 값).
  */
 import { sql } from '../_lib/db.js';
-import { requireMemberAuth } from '../_lib/memberSession.js';
+import { requireEmployeeAuth } from '../_lib/accountAuth.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
 
 function parseWeight(raw) {
@@ -41,7 +41,7 @@ function parseWeight(raw) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const memberId = requireMemberAuth(req, res);
+  const memberId = await requireEmployeeAuth(req, res);
   if (!memberId) return;
 
   const { parentId, title, weight: rawWeight } = req.body || {};
