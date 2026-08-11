@@ -1788,14 +1788,13 @@ function renderOkrDept(){
   deptInitDefaults();
 
   const myTeam = me.team;
-  // 생성은 그 팀 부서장만(관리자가 임의 팀을 골라 새로 만드는 화면이 없어서
-  // 기존과 동일하게 유지) -- 승인/수정/삭제는 관리자도 팀 소속과 무관하게
-  // 할 수 있다는 백엔드 규칙(handlers/okrs/[id].js, handlers/my-goals/[id]/review.js)과
-  // 맞춰 두 권한을 분리했다. 예전엔 members.roles가 배열이라 인사팀장처럼
-  // 관리자+부서장을 동시에 가진 사람만 실사용했었는데, system_role이
-  // 단일값으로 바뀌면서 "관리자이지만 부서장은 아닌" 계정이 실제로 생길 수
-  // 있어 이 구분이 이제부터 실제로 의미가 있다.
-  const canCreate = me.systemRole==='DEPARTMENT_HEAD';
+  // 2026-08-11: 처음엔 "생성은 그 팀 부서장만"으로 ADMIN을 뺐었는데, 인사팀장
+  // 실사용 계정이 ADMIN으로 설정되면서 정작 본인 팀(인사회계팀) 부서 목표를
+  // 하나도 못 만드는 문제가 나왔다 -- 예전 members.roles 배열 시절엔
+  // 관리자+부서장을 동시에 가질 수 있어서 안 걸리던 문제다. 백엔드도 같이
+  // 고쳤다(handlers/okrs/index.js) -- ADMIN도 "본인 팀(department_id)" 몫은
+  // 만들 수 있고, 다른 팀은 여전히 못 만든다(팀 선택 UI 자체가 없음).
+  const canCreate = me.systemRole==='DEPARTMENT_HEAD' || me.systemRole==='ADMIN';
   const canManage = me.systemRole==='ADMIN' || me.systemRole==='DEPARTMENT_HEAD';
   const periodKey = deptCurrentPeriodKey();
   const prevKey = deptShiftPeriodKey(periodKey, -1);

@@ -102,7 +102,17 @@ export default async function handler(req, res) {
     if (weightErr) return res.status(400).json({ error: weightErr });
 
     if (b.level === '조직') {
-      if (account.system_role !== 'DEPARTMENT_HEAD') return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
+      // 2026-08-11: ADMIN도 본인 팀(department_id) 몫은 만들 수 있게 열었다 --
+      // 실사용에서 인사팀장처럼 ADMIN 계정을 쓰는 사람이 정작 자기 팀
+      // 부서 목표를 하나도 못 만드는 문제가 나왔다(예전 members.roles
+      // 배열 시절엔 관리자+부서장을 동시에 가질 수 있어서 이 문제가 없었지만,
+      // system_role이 단일값이 되면서 ADMIN을 고르면 부서장 자격을 잃는
+      // 구조가 됐었다). 그래도 "본인 팀만" 제약(바로 아래 owner 체크)은
+      // 그대로라 관리자가 임의의 다른 팀을 골라 새로 만들 수는 없다 --
+      // 팀 선택 UI가 없는 것도 그대로다.
+      if (account.system_role !== 'DEPARTMENT_HEAD' && account.system_role !== 'ADMIN') {
+        return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
+      }
 
       const owner = (b.owner || '-').trim() || '-';
       if (owner !== account.department_id) return res.status(403).json({ error: '본인 팀 목표만 만들 수 있어요' });
