@@ -2740,6 +2740,8 @@ function openCreateAccountModal(){
         <option value="ADMIN">관리자</option>
       </select>
     </div>
+    <div class="field"><label>임시 비밀번호 (선택)</label><input id="f-acct-temppw" placeholder="비워두면 자동으로 안전한 값이 만들어져요"></div>
+    <div class="modal-sub">영문+숫자 포함 8자 이상이면 원하는 값을 직접 정할 수 있어요. 처음 로그인하면 본인 비밀번호로 다시 바꾸게 되니, 여러 사람에게 같은 값을 써도 괜찮아요 — 다만 그 사람이 로그인해서 바꾸기 전까지는 그 값으로 대신 로그인할 수 있다는 점만 기억해주세요.</div>
     <div id="acct-create-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCreateAccount()">계정 생성</button></div>
   `);
@@ -2747,9 +2749,10 @@ function openCreateAccountModal(){
 async function saveCreateAccount(){
   const employeeId = document.getElementById('f-acct-employee').value;
   const systemRole = document.getElementById('f-acct-role').value;
+  const tempPassword = document.getElementById('f-acct-temppw').value.trim();
   if(!employeeId) return;
   let res;
-  try{ res = await apiPost('/accounts', {employeeId, systemRole}); }
+  try{ res = await apiPost('/accounts', {employeeId, systemRole, tempPassword: tempPassword || undefined}); }
   catch(err){
     const box = document.getElementById('acct-create-error');
     box.textContent = err.message; box.style.display = 'block';
@@ -2766,12 +2769,14 @@ function openResetPasswordConfirm(id, name, email){
   showModal(`
     <h3>비밀번호 초기화</h3>
     <div class="modal-sub">${escapeHtml(name)}님(${escapeHtml(email)})의 비밀번호를 초기화할까요? 기존 로그인 세션이 즉시 종료되고, 다음 로그인부터 새 임시 비밀번호를 써야 해요.</div>
+    <div class="field"><label>임시 비밀번호 (선택)</label><input id="f-reset-temppw" placeholder="비워두면 자동으로 안전한 값이 만들어져요"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn danger" onclick='doResetPassword(${JSON.stringify(id)},${JSON.stringify(name)},${JSON.stringify(email)})'>초기화</button></div>
   `);
 }
 async function doResetPassword(id, name, email){
+  const tempPassword = document.getElementById('f-reset-temppw').value.trim();
   let res;
-  try{ res = await apiPost('/accounts/'+id+'/reset-password', {}); }
+  try{ res = await apiPost('/accounts/'+id+'/reset-password', {tempPassword: tempPassword || undefined}); }
   catch(err){ alert(err.message); return; }
   showModal(`
     <h3>임시 비밀번호가 발급됐어요</h3>
