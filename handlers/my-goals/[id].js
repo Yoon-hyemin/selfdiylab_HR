@@ -35,7 +35,7 @@ export default async function handler(req, res) {
   const { id } = req.query;
 
   try {
-    const [okr] = await sql`SELECT id, level, member_id, month, title, weight, status FROM okrs WHERE id = ${id}`;
+    const [okr] = await sql`SELECT id, level, member_id, parent_id, month, title, weight, status FROM okrs WHERE id = ${id}`;
     if (!okr) return res.status(404).json({ error: '목표를 찾을 수 없어요' });
     if (okr.level !== '개인') return res.status(400).json({ error: '개인 목표가 아니에요' });
     if (okr.member_id !== memberId) return res.status(403).json({ error: '본인이 만든 목표만 수정/삭제할 수 있어요' });
@@ -57,11 +57,29 @@ export default async function handler(req, res) {
         }
       }
 
+      // 2026-08-11: 상위 부서 목표를 (다시) 연결하는 기능 -- 생성 시 항상
+      // 필수였어서 지금 있는 데이터엔 필요 없지만, 부서 목표를 지울 때
+      // "연결 해제"를 고른 경우 등을 위해 본인이 직접 다시 연결할 수 있게
+      // 열어둔다. 본인 소속 팀의 부서 목표로만 연결 가능하다.
+      let newParentId = okr.parent_id;
+      if (body.parentId !== undefined) {
+        if (body.parentId === null || body.parentId === '') {
+          newParentId = null;
+        } else {
+          const [me] = await sql`SELECT team FROM members WHERE id = ${memberId}`;
+          const [newParent] = await sql`SELECT id, level, owner, month FROM okrs WHERE id = ${body.parentId}`;
+          if (!newParent || newParent.level !== '조직') return res.status(400).json({ error: '상위 목표는 부서 목표여야 해요' });
+          if (!me || newParent.owner !== me.team) return res.status(403).json({ error: '본인 팀의 부서 목표에만 연결할 수 있어요' });
+          if (newParent.month !== okr.month) return res.status(400).json({ error: '같은 달의 부서 목표에만 연결할 수 있어요' });
+          newParentId = newParent.id;
+        }
+      }
+
       const needsReapproval = okr.status === 'approved' && (title !== okr.title || weight !== okr.weight);
       if (needsReapproval) {
-        await sql`UPDATE okrs SET title = ${title}, weight = ${weight}, status = 'pending', review_note = '' WHERE id = ${okr.id}`;
+        await sql`UPDATE okrs SET title = ${title}, weight = ${weight}, parent_id = ${newParentId}, status = 'pending', review_note = '' WHERE id = ${okr.id}`;
       } else {
-        await sql`UPDATE okrs SET title = ${title}, weight = ${weight} WHERE id = ${okr.id}`;
+        await sql`UPDATE okrs SET title = ${title}, weight = ${weight}, parent_id = ${newParentId} WHERE id = ${okr.id}`;
       }
       return res.status(200).json({ ok: true });
     }

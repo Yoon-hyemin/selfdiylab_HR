@@ -102,20 +102,27 @@ export default async function handler(req, res) {
     if (weightErr) return res.status(400).json({ error: weightErr });
 
     if (b.level === '조직') {
-      // 2026-08-11: ADMIN도 본인 팀(department_id) 몫은 만들 수 있게 열었다 --
-      // 실사용에서 인사팀장처럼 ADMIN 계정을 쓰는 사람이 정작 자기 팀
-      // 부서 목표를 하나도 못 만드는 문제가 나왔다(예전 members.roles
-      // 배열 시절엔 관리자+부서장을 동시에 가질 수 있어서 이 문제가 없었지만,
-      // system_role이 단일값이 되면서 ADMIN을 고르면 부서장 자격을 잃는
-      // 구조가 됐었다). 그래도 "본인 팀만" 제약(바로 아래 owner 체크)은
-      // 그대로라 관리자가 임의의 다른 팀을 골라 새로 만들 수는 없다 --
-      // 팀 선택 UI가 없는 것도 그대로다.
+      // 2026-08-11(2차): ADMIN은 "모든 부서"에 만들 수 있어야 한다는 요구사항이
+      // 명시적으로 확인돼서, ADMIN에 한해 body의 owner를 신뢰한다(단, 실제
+      // 존재하는 팀인지는 서버가 members 테이블로 검증한다 -- 하드코딩된
+      // 팀 목록을 쓰지 않는다는 기존 원칙 그대로). DEPARTMENT_HEAD는 클라이언트가
+      // 뭘 보내든 신경 쓰지 않고 항상 본인 계정의 department_id로 강제한다 --
+      // "무시하거나 403으로 차단"이라는 요구사항 중, 조작 시도를 에러로
+      // 알리는 대신 조용히 서버가 정한 값으로 덮어써서 정상적인 부서장
+      // 사용자가 실수로 잘못된 값을 보내는 경우까지 막지 않게 했다.
       if (account.system_role !== 'DEPARTMENT_HEAD' && account.system_role !== 'ADMIN') {
         return res.status(403).json({ error: '부서 목표는 부서장만 만들 수 있어요' });
       }
 
-      const owner = (b.owner || '-').trim() || '-';
-      if (owner !== account.department_id) return res.status(403).json({ error: '본인 팀 목표만 만들 수 있어요' });
+      let owner;
+      if (account.system_role === 'ADMIN') {
+        owner = (b.owner || '').trim();
+        if (!owner) return res.status(400).json({ error: '담당 부서를 선택해주세요' });
+        const [validTeam] = await sql`SELECT 1 FROM members WHERE team = ${owner} LIMIT 1`;
+        if (!validTeam) return res.status(400).json({ error: '존재하지 않는 부서예요' });
+      } else {
+        owner = account.department_id;
+      }
 
       if (!b.parent) return res.status(400).json({ error: '상위 기업 목표를 선택해주세요' });
       const [parent] = await sql`SELECT id, level, month, start_date::text AS start_date, end_date::text AS end_date FROM okrs WHERE id = ${b.parent}`;

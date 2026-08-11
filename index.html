@@ -390,6 +390,7 @@
       <div class="page-head"><div><h1>계정 및 권한 관리</h1><p>구성원 계정 생성, 권한 변경, 비밀번호 초기화, 잠금 해제, 활성화 상태를 관리해요</p></div></div>
       <div class="section">
         <div class="section-head"><div><h3>계정 목록</h3><div class="desc">계정이 없는 구성원은 아래에서 새로 만들 수 있어요</div></div></div>
+        <div class="modal-sub" style="margin-bottom:10px;"><b>부서 목표 관리 권한(부서장)</b> — 권한이 부여된 사용자는 본인 소속 부서의 목표를 생성하고 관리할 수 있습니다. 팀장·부장·파트장 같은 직책이 있어도 이 권한이 없으면 부서 목표를 등록할 수 없어요 — 직책과 이 권한은 서로 다른 값이에요. <b>관리자</b>는 모든 부서의 목표를 조회·관리할 수 있고, <b>팀원</b>은 조회만 가능해요.</div>
         <button class="btn primary sm" style="margin-bottom:14px;" onclick="openCreateAccountModal()">+ 계정 만들기</button>
         <div style="overflow-x:auto;">
           <table>
@@ -438,11 +439,15 @@ const API = '/api';
 // 보냈다(hrHeaders). 개인 계정 로그인 도입으로 인증은 이제 서버가 발급하는
 // httpOnly 세션 쿠키(hr_auth) 하나로 통일됐고, 같은 오리진 fetch는 쿠키를
 // 자동으로 실어 보내므로 클라이언트가 헤더를 직접 다룰 필요가 없다.
-async function apiGet(path){ const r = await fetch(API+path); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('GET '+path+' failed')); return data; }
-async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('POST '+path+' failed')); return data; }
-async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PATCH '+path+' failed')); return data; }
-async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('PUT '+path+' failed')); return data; }
-async function apiDelete(path){ const r = await fetch(API+path, {method:'DELETE'}); const data = await r.json().catch(()=>null); if(!r.ok) throw new Error((data&&data.error)||('DELETE '+path+' failed')); return data; }
+// 서버가 에러와 함께 부가 정보를 실어 보낼 때(예: 409 + childCount) 호출부가
+// err.message뿐 아니라 err.data로 그 정보를 볼 수 있게 붙여둔다. 기존 catch
+// 블록들은 err.message만 읽으므로 이 추가는 기존 동작에 영향 없다.
+function apiError(data, fallbackMsg){ const err = new Error((data&&data.error)||fallbackMsg); err.data = data; return err; }
+async function apiGet(path){ const r = await fetch(API+path); const data = await r.json().catch(()=>null); if(!r.ok) throw apiError(data, 'GET '+path+' failed'); return data; }
+async function apiPost(path, body){ const r = await fetch(API+path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw apiError(data, 'POST '+path+' failed'); return data; }
+async function apiPatch(path, body){ const r = await fetch(API+path, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw apiError(data, 'PATCH '+path+' failed'); return data; }
+async function apiPut(path, body){ const r = await fetch(API+path, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if(!r.ok) throw apiError(data, 'PUT '+path+' failed'); return data; }
+async function apiDelete(path, body){ const r = await fetch(API+path, {method:'DELETE', headers:{'Content-Type':'application/json'}, body:body?JSON.stringify(body):undefined}); const data = await r.json().catch(()=>null); if(!r.ok) throw apiError(data, 'DELETE '+path+' failed'); return data; }
 
 function today(){ return new Date().toISOString().slice(0,10); }
 // The API returns date columns (hireDate, groupHireDate, birthday) as full ISO
@@ -807,20 +812,32 @@ function openEditBasicInfo(){
       <div class="field"><label>휴대전화번호</label><input id="f-b-phone" value="${escapeHtml(m.phone||'')}"></div>
     </div>
     <div class="field"><label>주소</label><input id="f-b-addr" value="${escapeHtml(m.address||'')}"></div>
-    <div class="field"><label>목표 화면 권한</label>
-      <div style="display:flex;gap:16px;">
-        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="f-b-role-admin" ${(m.roles||[]).includes('관리자')?'checked':''}> 관리자</label>
-        <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input type="checkbox" id="f-b-role-lead" ${(m.roles||[]).includes('부서장')?'checked':''}> 부서장</label>
-      </div>
-      <div style="font-size:11.5px;color:var(--sub);margin-top:4px;">둘 다 체크 안 하면 팀원이에요. 관리자와 부서장은 동시에 체크할 수 있어요</div>
+    <div class="field"><label>부서 목표 관리 권한</label>
+      <div id="f-b-role-status" style="font-size:12.5px;color:var(--sub);">불러오는 중...</div>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:4px;">권한이 부여된 사용자는 본인 소속 부서의 목표를 생성하고 관리할 수 있습니다. 관리자·부서장 권한은 여기서 바로 안 바뀌고 "계정 및 권한 관리" 화면에서 바꿔요 — 이 화면은 인사정보(직책 등)만 다루고, 실제 시스템 권한은 그쪽 한 곳에서만 관리해요.</div>
     </div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveBasicInfo()">저장</button></div>
   `);
+  loadMemberRoleStatus(m.id);
+}
+// 2026-08-11: 예전엔 이 화면에서 members.roles(배열)를 직접 체크박스로
+// 편집했는데, 개인 계정 로그인 도입 이후로는 그 필드가 실제 권한에 아무
+// 영향도 안 준다(accounts.system_role이 유일한 권한 소스). 체크해도 아무
+// 일도 안 일어나는 죽은 UI를 그대로 두면 오해를 사기 때문에, 여기서는
+// 현재 상태만 읽기 전용으로 보여주고 실제 변경은 "계정 및 권한 관리"
+// 화면 하나로만 몰아준다(동일한 의미의 필드를 두 곳에서 따로 관리하지
+// 않기 위해).
+async function loadMemberRoleStatus(memberId){
+  const box = document.getElementById('f-b-role-status');
+  if(!box) return;
+  try{
+    const accounts = await apiGet('/accounts');
+    const acct = accounts.find(a=>a.employeeId===memberId);
+    if(!acct){ box.innerHTML = '계정이 없어요 · "계정 및 권한 관리"에서 먼저 계정을 만들어주세요'; return; }
+    box.innerHTML = `현재: <b>${ROLE_OPTION_LABELS[acct.systemRole]||acct.systemRole}</b> <button class="btn ghost sm" onclick="closeModal(); activateView('accounts');">계정 및 권한 관리로 이동</button>`;
+  }catch(err){ box.textContent = '권한 정보를 불러오지 못했어요'; }
 }
 async function saveBasicInfo(){
-  const roles = [];
-  if(document.getElementById('f-b-role-admin').checked) roles.push('관리자');
-  if(document.getElementById('f-b-role-lead').checked) roles.push('부서장');
   const patch = {
     name: document.getElementById('f-b-name').value,
     email: document.getElementById('f-b-email').value,
@@ -830,8 +847,7 @@ async function saveBasicInfo(){
     hireType: document.getElementById('f-b-htype').value,
     birthday: document.getElementById('f-b-bday').value,
     phone: document.getElementById('f-b-phone').value,
-    address: document.getElementById('f-b-addr').value,
-    roles
+    address: document.getElementById('f-b-addr').value
   };
   try{ await apiPatch('/members/'+currentMemberId, patch); }
   catch(err){ return alert(err.message); }
@@ -1090,6 +1106,18 @@ function companyProgress(okr){
   const children = DB.okrs.filter(o=>o.level==='조직' && o.parent===okr.id);
   if(!children.length) return 0;
   return Math.round(children.reduce((a,o)=>a+orgProgress(o),0) / children.length);
+}
+// 2026-08-11: "기업 KPI 결과 달성률"(companyRepresentativeProgress -- 숫자
+// 실적/목표 기반, 없으면 companyProgress 단순평균 폴백)과는 별개로 "연결
+// 목표 실행 진척도"를 따로 보여달라는 요청 -- 이 기업 목표에 달린 부서
+// 목표들을 그 부서 목표 자신의 weight로 가중 평균한 값이다(요청한
+// 공식 그대로: Σ(하위 목표 달성률 × 가중치)). weightedGroupScore를 그대로
+// 재사용하고 companyProgress()는 다른 곳(폴백)에서 계속 쓰이므로 손대지
+// 않았다 -- 서로 다른 두 지표를 나란히 보여주는 것이지, 기존 계산을 바꾸는
+// 게 아니다.
+function companyLinkedExecutionProgress(companyOkr){
+  const children = DB.okrs.filter(o=>o.level==='조직' && o.parent===companyOkr.id);
+  return weightedGroupScore(children, orgProgress);
 }
 
 /* ---------- 기간형 기업 목표 (2026-08-07) -------------------------------
@@ -1501,9 +1529,74 @@ async function saveOkrTitleEdit(){
   try{ await apiPatch('/okrs/'+id, body); }catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrOverview(); renderOkrDept();
 }
+// 2026-08-11: "상위 목표 미연결" 상태인 목표(현재 실데이터엔 없지만, 상위
+// 목표 삭제 시 "연결 해제"를 고르면 생길 수 있다)를 관리자/부서장 또는
+// 본인이 직접 다시 연결할 수 있게 하는 최소 UI. level==='조직'이면 회사
+// 목표 후보를, level==='개인'이면 본인 팀의 부서 목표 후보를 보여준다.
+function openReconnectParentModal(id, level){
+  const g = DB.okrs.find(o=>o.id===id);
+  if(!g) return;
+  const candidates = level==='조직'
+    ? DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(g.month, o))
+    : DB.okrs.filter(o=>o.level==='조직' && o.owner===me.team && o.month===g.month);
+  showModal(`
+    <h3>상위 목표 연결</h3>
+    <div class="field"><label>${level==='조직'?'상위 기업 목표':'상위 부서 목표'}</label>
+      <select id="f-reconnect-parent">${candidates.length ? candidates.map(o=>`<option value="${o.id}">${escapeHtml(o.title)}${level==='조직'?' · '+goalPeriodLabel(o):''}</option>`).join('') : '<option value="">연결할 수 있는 목표가 없어요</option>'}</select>
+    </div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveReconnectParent('${id}','${level}')">연결</button></div>
+  `);
+}
+async function saveReconnectParent(id, level){
+  const parentId = document.getElementById('f-reconnect-parent').value;
+  if(!parentId) return;
+  const g = DB.okrs.find(o=>o.id===id);
+  try{
+    if(level==='조직') await apiPatch('/okrs/'+id, {title:g.title, weight:g.weight, parentId});
+    else await apiPatch('/my-goals/'+id, {title:g.title, weight:g.weight, parentId});
+  }catch(err){ return alert(err.message); }
+  closeModal(); await refreshDB(); renderOkrDept(); renderOkrPersonal(); renderOkrOverview();
+}
 async function deleteOkrGoal(id){
   if(!confirm('이 목표를 삭제할까요? 되돌릴 수 없어요.')) return;
-  try{ await apiDelete('/okrs/'+id); }catch(err){ return alert(err.message); }
+  try{
+    await apiDelete('/okrs/'+id);
+  }catch(err){
+    if(err.data && err.data.childCount) return openDeleteWithChildrenModal(id, err.data.childCount);
+    return alert(err.message);
+  }
+  await refreshDB(); renderOkrOverview(); renderOkrDept();
+}
+// 2026-08-11: 하위 목표(회사→부서 또는 부서→개인)가 연결된 목표를 지우려고
+//하면 서버가 409+childCount로 막는다 -- 그 즉시 사용자에게 "다른 상위
+// 목표로 이동" 또는 "연결 해제"를 고르게 한다(요구사항의 세 번째 선택지인
+// "취소"는 이 모달을 그냥 닫는 것).
+function openDeleteWithChildrenModal(id, childCount){
+  const okr = DB.okrs.find(o=>o.id===id);
+  if(!okr) return;
+  const alternatives = DB.okrs.filter(o=>o.level===okr.level && o.id!==id);
+  showModal(`
+    <h3>연결된 하위 목표가 ${childCount}개 있어요</h3>
+    <div class="modal-sub">삭제하기 전에 하위 목표를 어떻게 할지 정해주세요.</div>
+    <div class="field"><label>다른 상위 목표로 이동 (선택)</label>
+      <select id="f-del-reassign">
+        <option value="">선택 안 함 — 연결만 해제하고 삭제</option>
+        ${alternatives.map(o=>`<option value="${o.id}">${escapeHtml(o.title)}${o.level==='회사'?' · '+goalPeriodLabel(o):' · '+escapeHtml(o.month)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-sub">이동할 목표를 고르지 않으면 하위 목표는 지워지지 않고 상위 연결만 끊긴 채 남아요.</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">취소</button>
+      <button class="btn danger" onclick="confirmDeleteWithChildren('${id}')">삭제 진행</button>
+    </div>
+  `);
+}
+async function confirmDeleteWithChildren(id){
+  const newParentId = document.getElementById('f-del-reassign').value;
+  const body = newParentId ? {onChildren:'reassign', newParentId} : {onChildren:'unlink'};
+  try{ await apiDelete('/okrs/'+id, body); }
+  catch(err){ return alert(err.message); }
+  closeModal();
   await refreshDB(); renderOkrOverview(); renderOkrDept();
 }
 async function saveCompanyMonthlyProgress(okrId, year, month){
@@ -1562,6 +1655,7 @@ function renderOkrOverview(){
         const numeric = companyNumericProgress(c, mk);
         const p = companyRepresentativeProgress(c, mk);
         const contribution = c.weight!=null ? Math.round(c.weight/100*p) : null;
+        const linkedExec = companyLinkedExecutionProgress(c);
         const expanded = okrOvExpandedCompanies.has(c.id);
         const [py,pm] = mk.split('-').map(Number);
         const curRec = numeric && numeric.currentRecord;
@@ -1575,10 +1669,11 @@ function renderOkrOverview(){
               <div style="font-size:14px;font-weight:800;">${escapeHtml(c.title)}</div>
               <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${goalPeriodLabel(c)} · ${escapeHtml(c.owner||'전사')}${c.unit && c.unit!=='%' ? ` · 단위 ${escapeHtml(c.unit)}` : ''}</div>
             </div>
-            <div style="display:flex;gap:28px;flex:1 1 220px;">
+            <div style="display:flex;gap:28px;flex:1 1 220px;flex-wrap:wrap;">
               <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;font-size:13px;">${c.weight!=null?c.weight+'%':'미설정'}</div></div>
               <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;font-size:13px;">${contribution!=null?contribution+'%':'-'}</div></div>
-              <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">누적 계획 달성률</div><div style="font-weight:800;font-size:13px;color:${progressTextColor(p)};">${p}%</div></div>
+              <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">기업 KPI 결과 달성률</div><div style="font-weight:800;font-size:13px;color:${progressTextColor(p)};">${p}%</div></div>
+              <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">연결 목표 실행 진척도</div><div style="font-weight:800;font-size:13px;">${linkedExec.score===null?'데이터 없음':linkedExec.score+'%'}</div>${weightSumBadgeHtml(linkedExec)}</div>
             </div>
             <div style="flex:2 1 180px;min-width:120px;">
               <div class="bar"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
@@ -1674,16 +1769,55 @@ function renderOkrOverview(){
     </div>
   `;
 }
+// 2026-08-11: 예전엔 그 달의 회사 목표를 .find()로 아무거나 하나 집어서
+// 자동 연결했다 -- 기간형 기업 목표 도입 이후 한 달에 최대 3개까지 겹칠 수
+// 있게 됐는데도 그대로 남아있던 버그다(사용자가 고를 방법이 없어서 어떤
+// 목표에 연결될지 예측할 수 없었다). 이제 그 달과 기간이 겹치는 회사 목표를
+// 전부 드롭다운으로 보여주고 명시적으로 고르게 한다 -- monthOverlapsGoal은
+// handlers/_lib/goalPeriod.js와 같은 로직을 그대로 복제한 것(이 프로젝트의
+// 기존 관례).
+function deptGoalParentCandidates(month){
+  return DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(month, o));
+}
+function updateDeptGoalParentOptions(){
+  const month = document.getElementById('f-dept-month').value;
+  const candidates = deptGoalParentCandidates(month);
+  const sel = document.getElementById('f-dept-parent');
+  const saveBtn = document.getElementById('f-dept-save-btn');
+  const emptyMsg = document.getElementById('f-dept-parent-empty');
+  if(candidates.length){
+    sel.innerHTML = candidates.map(c=>`<option value="${c.id}">${escapeHtml(c.title)} · ${goalPeriodLabel(c)}${c.target?` · 목표 ${c.target}${escapeHtml(c.unit||'')}`:''}</option>`).join('');
+    sel.style.display = ''; sel.disabled = false;
+    emptyMsg.style.display = 'none';
+    saveBtn.disabled = false;
+  }else{
+    sel.innerHTML = '';
+    sel.style.display = 'none';
+    emptyMsg.style.display = '';
+    saveBtn.disabled = true;
+  }
+}
 function openDeptGoalModal(){
+  const isAdmin = me.systemRole==='ADMIN';
+  const teams = [...new Set((DB.roster||[]).map(m=>m.team).filter(Boolean))].sort();
+  const ownerField = isAdmin
+    ? `<div class="field"><label>담당 부서</label><select id="f-dept-owner">${teams.map(t=>`<option value="${escapeHtml(t)}" ${t===me.team?'selected':''}>${escapeHtml(t)}</option>`).join('')}</select></div>`
+    : `<div class="field"><label>담당 부서</label><input value="${escapeHtml(me.team)}" readonly style="background:var(--bg);color:var(--sub);"></div>`;
   showModal(`
-    <h3>${escapeHtml(me.team)} 목표 만들기</h3>
-    <div class="field"><label>월</label><select id="f-dept-month">${monthOptionsHtml()}</select></div>
+    <h3>부서 목표 만들기</h3>
+    ${ownerField}
+    <div class="field"><label>월</label><select id="f-dept-month" onchange="updateDeptGoalParentOptions()">${monthOptionsHtml()}</select></div>
+    <div class="field"><label>상위 기업 목표 선택 *</label>
+      <select id="f-dept-parent"></select>
+      <div id="f-dept-parent-empty" class="modal-sub" style="display:none;color:var(--red);">해당 기간에 연결할 수 있는 기업 목표가 없습니다</div>
+    </div>
     <div class="field"><label>파트 (선택)</label><input id="f-dept-part" placeholder="예: 인사, 회계 — 한 팀 안에서 안 나누면 비워두세요"></div>
     <div class="field"><label>목표 제목</label><input id="f-dept-title" placeholder="예: 전 직원 월간 목표 등록률 100%"></div>
     <div class="field"><label>가중치 (%, 선택)</label><input id="f-dept-weight" type="number" min="0" max="100" placeholder="예: 40"></div>
-    <div class="modal-sub">파트별로 한 달에 최대 10개까지 만들 수 있어요. 같은 팀·같은 파트 목표끼리 가중치 합이 100%를 넘을 수 없어요. 상위 기업 목표는 고른 월의 회사 목표로 자동 연결돼요</div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveDeptGoal()">목표 생성</button></div>
+    <div class="modal-sub">파트별로 한 달에 최대 10개까지 만들 수 있어요. 같은 팀·같은 파트 목표끼리 가중치 합이 100%를 넘을 수 없어요.</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" id="f-dept-save-btn" onclick="saveDeptGoal()">목표 생성</button></div>
   `);
+  updateDeptGoalParentOptions();
 }
 function duplicateDeptGoal(id){
   const g = DB.okrs.find(o=>o.id===id);
@@ -1693,21 +1827,24 @@ function duplicateDeptGoal(id){
   document.getElementById('f-dept-part').value = g.part || '';
 }
 async function saveDeptGoal(){
+  const owner = me.systemRole==='ADMIN' ? document.getElementById('f-dept-owner').value : me.team;
   const month = document.getElementById('f-dept-month').value;
+  const parent = document.getElementById('f-dept-parent').value;
   const title = document.getElementById('f-dept-title').value.trim();
   const part = document.getElementById('f-dept-part').value.trim();
   const weight = document.getElementById('f-dept-weight').value.trim();
   if(!title) return alert('목표 제목을 입력해주세요');
-  const company = DB.okrs.find(o=>o.level==='회사' && o.month===month);
-  if(!company) return alert(month + ' 기업 목표가 아직 없어요. 관리자에게 등록을 요청해주세요');
-  try{ await apiPost('/okrs', {level:'조직', title, month, parent:company.id, owner:me.team, part, weight: weight===''?null:Number(weight)}); }
+  if(!parent) return alert('상위 기업 목표를 선택해주세요');
+  try{ await apiPost('/okrs', {level:'조직', title, month, parent, owner, part, weight: weight===''?null:Number(weight)}); }
   catch(err){ return alert(err.message); }
   await refreshDB(); closeModal(); renderOkrDept(); renderOkrOverview();
-  // 부서목표 탭은 지금 보고 있는 기간(월/분기/연도)만 화면에 반영하기 때문에,
-  // 지금 보는 달과 다른 달로 등록하면 화면에 변화가 없어서 실패한 것처럼
-  // 보일 수 있어요. 그래서 등록은 됐다는 걸 짧게 알려줘요.
-  if(deptPeriodType==='monthly' && month !== `${deptYear}-${deptMonth}`){
-    alert(`${month} 목표로 등록됐어요. 지금 보고 있는 ${deptYear}년 ${Number(deptMonth)}월 화면에는 안 보여요.`);
+  // 부서목표 탭은 지금 보고 있는 기간(월/분기/연도)·부서만 화면에 반영하기
+  // 때문에, 지금 보는 것과 다르게 등록하면 화면에 변화가 없어서 실패한 것처럼
+  // 보일 수 있어요. 그래서 그 경우엔 등록은 됐다는 걸 명시적으로 알려줘요.
+  if((deptPeriodType==='monthly' && month !== `${deptYear}-${deptMonth}`) || owner !== me.team){
+    alert(`${owner} · ${month} 목표로 등록됐어요. 지금 보고 있는 화면에는 안 보일 수 있어요.`);
+  }else{
+    alert('부서 목표가 등록됐어요');
   }
 }
 
@@ -1894,6 +2031,12 @@ function renderOkrDept(){
     const contribution = g.weight!=null ? Math.round(g.weight/100*p) : null;
     const parentCompany = DB.okrs.find(o=>o.id===g.parent);
     const children = approvedPersonalGoals.filter(c=>c.parent===g.id);
+    // 2026-08-11: 부서 목표 자체엔 회사 목표처럼 "직접 입력하는 숫자 KPI"
+    // 개념이 없어서(unit/target이 항상 '%'/100으로 고정 생성됨), "부서 목표
+    // 자체 KPI"와 "연결 목표 실행 진척도"가 서로 다른 데이터가 아니다 --
+    // 다만 "연결된 개인 목표를 개인 목표 자신의 가중치로 가중 평균"한 값은
+    // 기존 orgProgress()(단순 평균)와 별개로 새로 보여줄 수 있어서 추가한다.
+    const linkedExec = weightedGroupScore(children, individualProgress);
     const expanded = deptExpandedGoals.has(g.id);
     const byMember = {};
     children.forEach(c=>{ (byMember[c.member] = byMember[c.member] || []).push(c); });
@@ -1931,7 +2074,8 @@ function renderOkrDept(){
           <div style="flex:1;min-width:0;">
             <div style="font-size:11px;color:var(--sub);font-weight:800;margin-bottom:2px;">#${idx+1}${g.part?` · ${escapeHtml(g.part)}`:''}</div>
             <div style="font-size:14px;font-weight:800;">${escapeHtml(g.title)}</div>
-            <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${parentCompany?`연결 기업 목표: ${escapeHtml(parentCompany.title)} · `:''}${escapeHtml(g.month)} · ${okrStatusBadge(p)}</div>
+            <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${parentCompany?`연결 기업 목표: ${escapeHtml(parentCompany.title)}` : `<span class="badge amber">상위 목표 미연결</span>${canManage?` <button class="btn ghost sm" style="padding:1px 8px;" onclick="openReconnectParentModal('${g.id}','조직')">연결하기</button>`:''}`} · ${escapeHtml(g.month)} · ${okrStatusBadge(p)}</div>
+            <div style="font-size:11px;color:var(--sub);margin-top:4px;">연결 개인목표 가중 실행 진척도: ${linkedExec.score===null?'데이터 없음':linkedExec.score+'%'}</div>
           </div>
           <div style="display:flex;align-items:flex-start;gap:4px;flex-shrink:0;">
             <div style="font-size:16px;font-weight:900;color:${progressTextColor(p)};">${p}%</div>
@@ -2214,7 +2358,7 @@ function renderOkrPersonal(){
         <div style="flex:1;min-width:0;">
           <div style="font-size:11px;color:var(--sub);font-weight:800;margin-bottom:2px;">#${idx+1}</div>
           <div style="font-size:14px;font-weight:800;">${escapeHtml(g.title)} ${myGoalStatusBadge(status)}${!locked?' '+okrStatusBadge(p):''}</div>
-          <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${org?`연결 부서 목표: ${escapeHtml(org.title)} · `:''}${escapeHtml(g.month)}</div>
+          <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${org?`연결 부서 목표: ${escapeHtml(org.title)}` : `<span class="badge amber">상위 목표 미연결</span> <button class="btn ghost sm" style="padding:1px 8px;" onclick="openReconnectParentModal('${g.id}','개인')">연결하기</button>`} · ${escapeHtml(g.month)}</div>
         </div>
         <div style="display:flex;align-items:flex-start;gap:4px;flex-shrink:0;">
           <div style="font-size:16px;font-weight:900;color:${progressTextColor(p)};">${p}%</div>

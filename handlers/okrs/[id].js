@@ -55,7 +55,7 @@
 import { sql } from '../_lib/db.js';
 import { requireAuth } from '../_lib/accountAuth.js';
 import { isEditableMonth, currentMonthKey } from '../_lib/monthWindow.js';
-import { deriveGoalPeriod, periodsOverlap, monthRange, isCompanyGoalEditableNow } from '../_lib/goalPeriod.js';
+import { deriveGoalPeriod, periodsOverlap, monthRange, isCompanyGoalEditableNow, monthOverlapsGoal } from '../_lib/goalPeriod.js';
 
 function parseWeight(raw) {
   if (raw === undefined) return { skip: true };
@@ -66,7 +66,7 @@ function parseWeight(raw) {
 }
 
 async function loadOkrAndCheckPermission(id, account) {
-  const [okr] = await sql`SELECT id, level, owner, month, part, weight, period_type, start_date::text AS start_date, end_date::text AS end_date FROM okrs WHERE id = ${id}`;
+  const [okr] = await sql`SELECT id, level, owner, month, part, weight, parent_id, period_type, start_date::text AS start_date, end_date::text AS end_date FROM okrs WHERE id = ${id}`;
   if (!okr) return { error: [404, '목표를 찾을 수 없어요'] };
   if (okr.level === '개인') return { error: [400, '개인 목표는 /api/my-goals로 수정/삭제해주세요'] };
 
@@ -143,12 +143,61 @@ export default async function handler(req, res) {
         }
       }
 
+      // 2026-08-11: 부서 목표에 상위 기업 목표를 (다시) 연결하는 기능 --
+      // 기존 목표는 생성 시 항상 parent가 필수였어서 지금 이걸 쓸 데이터는
+      // 없지만, "상위 목표를 다른 것으로 이동" 삭제 절차나, 혹시 모를
+      // 미연결 상태를 관리자가 직접 고칠 수 있어야 한다는 요구사항 때문에
+      // 넣었다. 회사 목표에는 상위 개념이 없어서 조직 레벨에서만 받는다.
+      let newParentId = okr.parent_id;
+      if (okr.level === '조직' && body.parentId !== undefined) {
+        if (body.parentId === null || body.parentId === '') {
+          newParentId = null;
+        } else {
+          const [newParent] = await sql`SELECT id, level, start_date::text AS start_date, end_date::text AS end_date, month FROM okrs WHERE id = ${body.parentId}`;
+          if (!newParent || newParent.level !== '회사') {
+            return res.status(400).json({ error: '상위 목표는 기업 목표여야 해요' });
+          }
+          if (!monthOverlapsGoal(okr.month, newParent)) {
+            return res.status(400).json({ error: '상위 기업 목표의 목표 기간에 포함되는 달이어야 해요' });
+          }
+          newParentId = newParent.id;
+        }
+      }
+
       const newWeight = skipWeight ? okr.weight : weight;
-      await sql`UPDATE okrs SET title = ${title}, weight = ${newWeight}, period_type = ${periodType}, start_date = ${startDate}, end_date = ${endDate} WHERE id = ${okr.id}`;
+      await sql`UPDATE okrs SET title = ${title}, weight = ${newWeight}, parent_id = ${newParentId}, period_type = ${periodType}, start_date = ${startDate}, end_date = ${endDate} WHERE id = ${okr.id}`;
       return res.status(200).json({ ok: true });
     }
 
     if (req.method === 'DELETE') {
+      // 2026-08-11: 하위 목표(회사 목표라면 부서 목표, 부서 목표라면 개인
+      // 목표)가 연결돼 있으면 그냥 지우지 않는다 -- 예전엔 parent_id가
+      // ON DELETE SET NULL이라 조용히 연결만 끊고 삭제됐는데, 사용자가
+      // 지우기 전에 명시적으로 "이동/연결 해제/취소"를 고르게 해달라고
+      // 요청해서 그 앞단에 확인 절차를 추가했다.
+      const children = await sql`SELECT id FROM okrs WHERE parent_id = ${okr.id}`;
+      const body = req.body || {};
+      const onChildren = body.onChildren; // 'unlink' | 'reassign' | undefined
+
+      if (children.length > 0 && onChildren !== 'unlink' && onChildren !== 'reassign') {
+        return res.status(409).json({
+          error: `연결된 하위 목표가 ${children.length}개 있어요. 이동하거나 연결을 해제한 뒤 삭제해주세요`,
+          childCount: children.length
+        });
+      }
+
+      if (children.length > 0 && onChildren === 'reassign') {
+        const newParentId = body.newParentId;
+        if (!newParentId) return res.status(400).json({ error: '이동할 상위 목표를 선택해주세요' });
+        const [newParent] = await sql`SELECT id, level FROM okrs WHERE id = ${newParentId}`;
+        if (!newParent || newParent.level !== okr.level) {
+          return res.status(400).json({ error: '올바르지 않은 이동 대상이에요' });
+        }
+        await sql`UPDATE okrs SET parent_id = ${newParentId} WHERE parent_id = ${okr.id}`;
+      }
+      // onChildren === 'unlink'(또는 애초에 하위 목표가 없던 경우)는 그대로
+      // 진행 -- ON DELETE SET NULL이 하위 목표의 parent_id를 알아서 비운다.
+
       await sql`DELETE FROM okrs WHERE id = ${okr.id}`;
       return res.status(200).json({ ok: true });
     }
