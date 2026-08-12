@@ -3213,6 +3213,26 @@ function computeRevenueSummaryLive(year){
   }
   return computeRevenueSummaryFrom(target, monthly);
 }
+// 위 computeRevenueSummaryLive와 같은 이유(서버 응답을 기다리지 않고 화면에
+// 즉시 반영) -- 다만 상단 요약이 아니라 "목표 대비 차이"/"월 달성률" 두 칼럼만
+// 입력칸의 현재 값 기준으로 갱신한다. 이 두 칼럼은 원래 renderRevenue()가
+// 표를 처음 그릴 때 DB.revenueMonthly 값으로만 계산해서 박아뒀는데, 입력을
+// 지우거나 바꿔도 표 전체를 다시 그리지 않는 한(포커스/다른 칸 입력값이
+// 날아가서 의도적으로 안 그림) 이 두 칸이 갱신될 방법이 없어서 "지웠는데도
+// 차이가 그대로 남아있다"는 버그가 났었다.
+function updateRevenueRowLive(month){
+  const targetEl = document.getElementById(`f-rev-target-${month}`);
+  const actualEl = document.getElementById(`f-rev-actual-${month}`);
+  const diffEl = document.getElementById(`f-rev-diff-${month}`);
+  const rateEl = document.getElementById(`f-rev-rate-${month}`);
+  if(!targetEl || !actualEl || !diffEl || !rateEl) return;
+  const monthlyTarget = targetEl.value.trim()===''?null:Number(targetEl.value)*1e8;
+  const monthlyActual = actualEl.value.trim()===''?null:Number(actualEl.value)*1e8;
+  const diff = (monthlyTarget!=null && monthlyActual!=null) ? (monthlyActual - monthlyTarget) : null;
+  const monthlyRate = (monthlyTarget && monthlyActual!=null) ? (monthlyActual/monthlyTarget*100) : null;
+  diffEl.textContent = diff===null?'-':(diff>=0?'+':'')+formatEok(diff);
+  rateEl.textContent = monthlyRate!=null ? monthlyRate.toFixed(1)+'%' : '데이터 없음';
+}
 function renderRevenueSummaryOnly(){
   const el = document.getElementById('revenue-summary-block');
   if(!el) return;
@@ -3309,6 +3329,7 @@ function handleRevenuePaste(e, field, startMonth){
     }
     months.push(m);
   });
+  months.forEach(m=>updateRevenueRowLive(m));
   renderRevenueSummaryOnly();
   months.forEach(m=>doRevenueSave(revenueYear, m));
 }
@@ -3374,13 +3395,13 @@ function renderRevenue(){
     return `<tr>
       <td>${m}월</td>
       <td>${isAdmin ? `<input type="number" id="f-rev-target-${m}" value="${monthlyTarget!=null?(monthlyTarget/1e8):''}" style="width:80px;" placeholder="억원"
-             oninput="scheduleRevenueSave(${t.year},${m})" onblur="doRevenueSave(${t.year},${m})"
+             oninput="updateRevenueRowLive(${m});scheduleRevenueSave(${t.year},${m})" onblur="doRevenueSave(${t.year},${m})"
              onkeydown="handleRevenueKeydown(event,'target',${m})" onpaste="handleRevenuePaste(event,'target',${m})"> 억` : formatEok(monthlyTarget)}</td>
       <td>${isAdmin ? `<input type="number" id="f-rev-actual-${m}" value="${monthlyActual!=null?(monthlyActual/1e8):''}" style="width:80px;" placeholder="억원"
-             oninput="scheduleRevenueSave(${t.year},${m})" onblur="doRevenueSave(${t.year},${m})"
+             oninput="updateRevenueRowLive(${m});scheduleRevenueSave(${t.year},${m})" onblur="doRevenueSave(${t.year},${m})"
              onkeydown="handleRevenueKeydown(event,'actual',${m})" onpaste="handleRevenuePaste(event,'actual',${m})"> 억` : formatEok(monthlyActual)}</td>
-      <td>${diff===null?'-':(diff>=0?'+':'')+formatEok(diff)}</td>
-      <td>${monthlyRate!=null ? monthlyRate.toFixed(1)+'%' : '데이터 없음'}</td>
+      <td id="f-rev-diff-${m}">${diff===null?'-':(diff>=0?'+':'')+formatEok(diff)}</td>
+      <td id="f-rev-rate-${m}">${monthlyRate!=null ? monthlyRate.toFixed(1)+'%' : '데이터 없음'}</td>
       ${isAdmin ? `<td><button class="btn primary sm" onclick="doRevenueSave(${t.year},${m})">저장</button></td>` : ''}
     </tr>`;
   }).join('');
