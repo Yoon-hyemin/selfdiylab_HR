@@ -489,6 +489,7 @@ let okrOvMonth = null;
 let okrOvQuarter = null;
 let okrOvHalf = null;
 let okrOvExpandedCompanies = new Set();
+let okrOvAccordionInitialized = false;
 let okrOvExpandedDeptRows = new Set();
 function toggleOkrOvDeptRow(key){
   if(okrOvExpandedDeptRows.has(key)) okrOvExpandedDeptRows.delete(key); else okrOvExpandedDeptRows.add(key);
@@ -1868,7 +1869,18 @@ function renderOkrOverview(){
   // 실행현황 표의 "현재 달성률"과 완전히 같은 함수(orgTeamStatusAtMonth)를
   // 그대로 재사용한다 -- 그래야 두 곳 숫자가 어긋나지 않는다. 데이터 없는
   // 부서는 0%로 표시(요구사항).
-  const allActiveTeams = [...new Set((DB.roster||[]).map(m=>m.team).filter(Boolean))].sort();
+  // 2026-08-12(5차): 부서 표시 순서를 사용자가 직접 지정 -- 이 순서에
+  // 없는(새로 생기는) 부서는 목록 끝에 이름순으로 자동 추가된다("부서명을
+  // 하드코딩하지 않는다"는 기존 원칙과, "이 순서로 보여달라"는 이번 요청을
+  // 절충한 것 -- 순서만 고정하고, 부서가 늘어나도 목록 자체는 그대로 반영).
+  const DEPT_DISPLAY_ORDER = ['인사회계팀','콘텐츠팀','영업팀','기획팀','SCM팀','CX팀'];
+  const allActiveTeams = [...new Set((DB.roster||[]).map(m=>m.team).filter(Boolean))].sort((a,b)=>{
+    const ia = DEPT_DISPLAY_ORDER.indexOf(a), ib = DEPT_DISPLAY_ORDER.indexOf(b);
+    if(ia===-1 && ib===-1) return a.localeCompare(b);
+    if(ia===-1) return 1;
+    if(ib===-1) return -1;
+    return ia-ib;
+  });
   const deptChartRowsHtml = allActiveTeams.length ? allActiveTeams.map(team=>{
     const st = orgTeamStatusAtMonth(team, refMonth);
     const pct = st.rate===null ? 0 : st.rate;
@@ -1888,8 +1900,15 @@ function renderOkrOverview(){
     </div>`;
 
   // 회사 목표별 부서 실행 현황 -- 회사 목표가 늘어도 화면이 과도하게
-  // 길어지지 않도록 아코디언으로 바꿨다(첫 목표만 기본 펼침).
-  if(okrOvExpandedCompanies.size===0 && companies.length) okrOvExpandedCompanies.add(companies[0].id);
+  // 길어지지 않도록 아코디언으로 바꿨다(첫 목표만 기본 펼침). 버그: 이걸
+  // "okrOvExpandedCompanies.size===0"으로 판단하면, 사용자가 1번 목표를
+  // 접어서 세트가 다시 비어버리는 순간 이 조건이 또 참이 돼서 렌더마다
+  // 1번을 강제로 다시 펼쳐버린다(그래서 1번만 눌러도 안 접히는 것처럼
+  // 보였다). "딱 한 번만" 실행되게 별도 플래그로 관리한다.
+  if(!okrOvAccordionInitialized && companies.length){
+    okrOvExpandedCompanies.add(companies[0].id);
+    okrOvAccordionInitialized = true;
+  }
   const companyCardsHtml = companies.length ? companies.map((c,idx)=>{
     const elapsed = companyElapsedRate(c, refMonth);
     const elapsedPct = elapsed===null ? null : Math.round(elapsed*1000)/10;
