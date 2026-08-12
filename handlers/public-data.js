@@ -1,7 +1,12 @@
 /**
  * handlers/public-data.js
  *
- * GET -> { members, okrs, okrTasks, okrProgress, evals, calibration, oneonones }
+ * GET -> { members, okrs, okrTasks, okrProgress, evals, calibration, oneonones, revenueTargets, revenueMonthly }
+ *
+ * 2026-08-12: revenueTargets/revenueMonthly("매출 달성" 탭)는 KPI(okrs)와
+ * 무관한 별도 테이블이고, role 필터링 없이 로그인한 사람 전원에게 그대로
+ * 내려준다("전체 구성원 조회 가능, 관리자만 입력/확정" 요구사항 -- 조회는
+ * 역할 제한이 없고 수정만 handlers/revenue/*.js에서 ADMIN으로 막는다).
  *
  * 2026-08-11(개인 계정 로그인 도입): 파일 이름은 여전히 "public-data"이지만
  * 더 이상 공개(비로그인) 엔드포인트가 아니다 -- 로그인한 계정이면 역할
@@ -35,7 +40,8 @@ export default async function handler(req, res) {
   if (!account) return;
 
   try {
-    const [members, okrs, okrTasks, okrProgress, evals, calibrationCycles, calibrationOverrides, oneonones] = await Promise.all([
+    const [members, okrs, okrTasks, okrProgress, evals, calibrationCycles, calibrationOverrides, oneonones,
+      revenueTargets, revenueMonthly] = await Promise.all([
       sql`SELECT id, name, team, position FROM members ORDER BY name`,
       sql`SELECT *, start_date::text AS start_date_txt, end_date::text AS end_date_txt FROM okrs`,
       sql`SELECT * FROM okr_tasks`,
@@ -43,7 +49,9 @@ export default async function handler(req, res) {
       sql`SELECT * FROM evals`,
       sql`SELECT * FROM calibration_cycles`,
       sql`SELECT * FROM calibration_overrides`,
-      sql`SELECT * FROM oneonones ORDER BY date`
+      sql`SELECT * FROM oneonones ORDER BY date`,
+      sql`SELECT * FROM revenue_targets ORDER BY year`,
+      sql`SELECT * FROM revenue_monthly ORDER BY year, month`
     ]);
 
     const memberNameById = Object.fromEntries(members.map(m => [m.id, m.name]));
@@ -103,6 +111,17 @@ export default async function handler(req, res) {
       date: m.date, note: m.note
     }));
 
+    const revenueTargets_out = revenueTargets.map(r => ({
+      year: r.year, annualTarget: Number(r.annual_target),
+      baseCumulativeActual: Number(r.base_cumulative_actual), baseThroughMonth: r.base_through_month
+    }));
+    const revenueMonthly_out = revenueMonthly.map(r => ({
+      id: r.id, year: r.year, month: r.month,
+      monthlyTarget: r.monthly_target === null ? null : Number(r.monthly_target),
+      monthlyActual: r.monthly_actual === null ? null : Number(r.monthly_actual),
+      status: r.status, note: r.note || ''
+    }));
+
     res.status(200).json({
       members: members.map(m => ({ id: m.id, name: m.name, team: m.team || '', position: m.position || '' })),
       okrs: okrs_out,
@@ -110,7 +129,9 @@ export default async function handler(req, res) {
       okrProgress: okrProgress_out,
       evals: evals_out,
       calibration: calibration_out,
-      oneonones: oneonones_out
+      oneonones: oneonones_out,
+      revenueTargets: revenueTargets_out,
+      revenueMonthly: revenueMonthly_out
     });
   } catch (err) {
     console.error(err);

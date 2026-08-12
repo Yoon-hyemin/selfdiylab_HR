@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   try {
     const [members, leaveHistory, awards, discipline, career, education, family,
       holidays, jobs, candidates, candidateHistory, okrs, okrTasks, okrProgress, evals, calibrationCycles,
-      calibrationOverrides, oneonones] = await Promise.all([
+      calibrationOverrides, oneonones, revenueTargets, revenueMonthly] = await Promise.all([
       sql`SELECT * FROM members ORDER BY name`,
       sql`SELECT * FROM member_leave_history`,
       sql`SELECT * FROM member_awards`,
@@ -26,7 +26,9 @@ export default async function handler(req, res) {
       sql`SELECT * FROM evals`,
       sql`SELECT * FROM calibration_cycles`,
       sql`SELECT * FROM calibration_overrides`,
-      sql`SELECT * FROM oneonones ORDER BY date`
+      sql`SELECT * FROM oneonones ORDER BY date`,
+      sql`SELECT * FROM revenue_targets ORDER BY year`,
+      sql`SELECT * FROM revenue_monthly ORDER BY year, month`
     ]);
 
     const holidayNames = holidays.map(h => h.name);
@@ -119,6 +121,17 @@ export default async function handler(req, res) {
       date: m.date, note: m.note
     }));
 
+    const revenueTargets_out = revenueTargets.map(r => ({
+      year: r.year, annualTarget: Number(r.annual_target),
+      baseCumulativeActual: Number(r.base_cumulative_actual), baseThroughMonth: r.base_through_month
+    }));
+    const revenueMonthly_out = revenueMonthly.map(r => ({
+      id: r.id, year: r.year, month: r.month,
+      monthlyTarget: r.monthly_target === null ? null : Number(r.monthly_target),
+      monthlyActual: r.monthly_actual === null ? null : Number(r.monthly_actual),
+      status: r.status, note: r.note || ''
+    }));
+
     res.status(200).json({
       members: members_out,
       jobs: jobs_out,
@@ -128,7 +141,9 @@ export default async function handler(req, res) {
       okrProgress: okrProgress_out,
       evals: evals_out,
       calibration: calibration_out,
-      oneonones: oneonones_out
+      oneonones: oneonones_out,
+      revenueTargets: revenueTargets_out,
+      revenueMonthly: revenueMonthly_out
     });
   } catch (err) {
     console.error(err);

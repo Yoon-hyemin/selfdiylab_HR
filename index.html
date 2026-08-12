@@ -328,13 +328,20 @@
     <div class="view" id="view-okr">
       <div class="page-head"><div><h1>목표</h1><p id="okr-page-desc">이번 달 목표를 관리해요</p></div></div>
       <div class="tabs">
-        <button class="tab active" onclick="switchOkrTab('overview')" id="okrtab-overview">전체 현황</button>
-        <button class="tab" onclick="switchOkrTab('dept')" id="okrtab-dept">부서 목표</button>
-        <button class="tab" onclick="switchOkrTab('personal')" id="okrtab-personal">개인 목표</button>
+        <button class="tab active" onclick="switchGoalArea('kpi')" id="goalarea-kpi">KPI 관리</button>
+        <button class="tab" onclick="switchGoalArea('revenue')" id="goalarea-revenue">매출 달성</button>
       </div>
-      <div id="okr-overview"><div id="okr-overview-body"></div></div>
-      <div id="okr-dept" style="display:none;"><div id="okr-dept-body"></div></div>
-      <div id="okr-personal" style="display:none;"><div id="okr-personal-body"></div></div>
+      <div id="goalarea-kpi-panel">
+        <div class="tabs">
+          <button class="tab active" onclick="switchOkrTab('overview')" id="okrtab-overview">전체 현황</button>
+          <button class="tab" onclick="switchOkrTab('dept')" id="okrtab-dept">부서 목표</button>
+          <button class="tab" onclick="switchOkrTab('personal')" id="okrtab-personal">개인 목표</button>
+        </div>
+        <div id="okr-overview"><div id="okr-overview-body"></div></div>
+        <div id="okr-dept" style="display:none;"><div id="okr-dept-body"></div></div>
+        <div id="okr-personal" style="display:none;"><div id="okr-personal-body"></div></div>
+      </div>
+      <div id="goalarea-revenue-panel" style="display:none;"><div id="okr-revenue-body"></div></div>
     </div>
 
     <!-- EVAL -->
@@ -465,7 +472,7 @@ function escapeHtml(s){
 // <select> has to be populated on first load, and renderOkrDept()의 팀원별
 // 현황 목록도 team으로 DB.roster를 필터링해요. Use DB.roster for pickers,
 // DB.members only inside the password-gated 구성원 views.
-let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], okrProgress:[], evals:[], calibration:{}, oneonones:[], accounts:[], auditLog:[] };
+let DB = { members:[], roster:[], jobs:[], candidates:[], okrs:[], okrTasks:[], okrProgress:[], evals:[], calibration:{}, oneonones:[], accounts:[], auditLog:[], revenueTargets:[], revenueMonthly:[] };
 let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, roles} | null (roles는 배열, 관리자+부서장 동시 가능)
 
 /* 전체현황(대표님용) 대시보드 상태 -- 2026-08-06. 연도는 아래 연간 차트 2개의
@@ -507,12 +514,14 @@ async function refreshPublicData(){
   const d = await apiGet('/public-data');
   DB.roster = d.members;
   DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.okrProgress = d.okrProgress || []; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+  DB.revenueTargets = d.revenueTargets || []; DB.revenueMonthly = d.revenueMonthly || [];
 }
 async function refreshHrData(){
   const d = await apiGet('/all');
   DB.members = d.members; DB.jobs = d.jobs; DB.candidates = d.candidates;
   DB.roster = d.members.map(m => ({ id: m.id, name: m.name, team: m.team || '', position: m.position || '' }));
   DB.okrs = d.okrs; DB.okrTasks = d.okrTasks; DB.okrProgress = d.okrProgress || []; DB.evals = d.evals; DB.calibration = d.calibration; DB.oneonones = d.oneonones;
+  DB.revenueTargets = d.revenueTargets || []; DB.revenueMonthly = d.revenueMonthly || [];
 }
 async function refreshDB(){
   if(me && me.systemRole==='ADMIN') await refreshHrData();
@@ -1102,22 +1111,95 @@ function orgProgress(okr){
   if(!children.length) return 0;
   return Math.round(children.reduce((a,c)=>a+individualProgress(c),0) / children.length);
 }
-function companyProgress(okr){
-  const children = DB.okrs.filter(o=>o.level==='조직' && o.parent===okr.id);
-  if(!children.length) return 0;
-  return Math.round(children.reduce((a,o)=>a+orgProgress(o),0) / children.length);
+/* ---------- 기업 목표 기간 누적 캐스케이드 (2026-08-12, 버그 수정) --------
+   기존 companyProgress()는 이 기업 목표에 "연결된 부서 목표 행이 존재하는
+   달"만 평균 내고 있었다 -- 그래서 반기·분기처럼 여러 달짜리 기업 목표가
+   시작 후 1~2개월만 지나도 이미 100%인 것처럼 보이는 버그가 있었다(예:
+   6개월 목표인데 7월 몫 부서 목표 하나만 100% 채워도 그게 전체 평균이
+   됨 -- 8~12월은 "아직 없음"이 아니라 그냥 분모에서 빠져버렸기 때문).
+   이제 기간 전체 개월 수로 나누고, 아직 도래하지 않은 달은 0으로 채운다
+   (handlers/_lib/kpiCalc.js와 같은 공식 -- 여기는 import 불가능한 순수
+   <script>라 그대로 복제했다, 이 프로젝트의 기존 관례).
+
+   "부서 기여도": DB에 "기업 목표 하나에 부서가 몇 %씩 기여하는지"를 저장하는
+   필드가 없어서, 이 기업 목표에 (기간 내 어느 달이든) 한 번이라도 연결된
+   적 있는 부서들에게 균등 배분한다 -- 부서 수를 하드코딩하지 않고 실제
+   연결 이력에서 센다. 연결된 부서가 특정 달에 목표/실적을 안 넣었으면 그
+   달 기여는 0%로 반영하고 분모(부서 수)에서 빼지 않는다. 반면 이 기업
+   목표에 한 번도 연결된 적 없는 부서는 계산에 전혀 들어가지 않는다
+   ("미연결"과 "미입력"을 구분). */
+function clamp01(x){ const n = Number(x); return Number.isFinite(n) ? Math.min(Math.max(n,0),1) : 0; }
+function periodMonthCountFromDates(start, end){
+  const [sy,sm] = start.slice(0,7).split('-').map(Number);
+  const [ey,em] = end.slice(0,7).split('-').map(Number);
+  return (ey-sy)*12 + (em-sm) + 1;
+}
+function periodMonthsList(startMonth, endMonth){
+  const out = []; let [y,m] = startMonth.split('-').map(Number); const [ey,em] = endMonth.split('-').map(Number);
+  let guard=0;
+  while((y<ey || (y===ey && m<=em)) && guard<600){ out.push(`${y}-${String(m).padStart(2,'0')}`); m++; if(m>12){m=1;y++;} guard++; }
+  return out;
+}
+// 이 기업 목표에 (기간 내 어느 달이든) 연결된 적 있는 부서(owner) 목록.
+function companyConnectedTeams(companyId){
+  return [...new Set(DB.okrs.filter(o=>o.level==='조직' && o.parent===companyId).map(o=>o.owner))];
+}
+// 한 부서의 그 달 실행률(0~1|null) -- 그 부서·그 달의 부서 목표들을 자기
+// weight로 가중평균한다(weightedGroupScore와 같은 공식). weight 합이
+// 정확히 100%가 아니거나(하나라도 미설정 포함) 그 달 목표가 하나도 없으면
+// null(가중치 설정 미완료/미입력)을 돌려준다 -- 상위 집계에서는 이 null을
+// 0으로 취급하되(미입력=0), 애초에 이 부서가 그 기업 목표에 연결된 적
+// 없으면 companyConnectedTeams()에 안 잡혀서 여기까지 오지 않는다(미연결
+// 배제).
+function deptMonthlyExecRate01(team, mk){
+  const goals = DB.okrs.filter(o=>o.level==='조직' && o.owner===team && o.month===mk);
+  if(!goals.length) return null;
+  const weighted = goals.filter(g=>g.weight!==null && g.weight!==undefined);
+  const weightSum = weighted.reduce((a,g)=>a+g.weight,0);
+  const complete = weighted.length===goals.length && weightSum===100;
+  if(!complete) return null;
+  return weighted.reduce((a,g)=>a+(g.weight/100)*clamp01(orgProgress(g)/100),0);
+}
+// 기업 목표의 그 달(mk) 실행률(0~1|null, 연결된 부서가 아예 없으면 null).
+function companyMonthlyExecRate01(companyOkr, mk){
+  const teams = companyConnectedTeams(companyOkr.id);
+  if(!teams.length) return null;
+  const contribution = 1/teams.length;
+  return teams.reduce((a,team)=>a + contribution*clamp01(deptMonthlyExecRate01(team, mk)||0), 0);
+}
+// 기업 목표의 기간 누적 실행률(0~1|null) -- refMonthKey까지(그 뒤는 미도래로
+// 0 처리)를 기간 전체 개월 수로 나눈다.
+function companyPeriodCumulativeExecRate01(companyOkr, refMonthKey){
+  const teams = companyConnectedTeams(companyOkr.id);
+  if(!teams.length) return null;
+  const period = deriveGoalPeriod(companyOkr);
+  const startMonth = period.start.slice(0,7), endMonth = period.end.slice(0,7);
+  const monthCount = periodMonthCountFromDates(period.start, period.end);
+  const months = periodMonthsList(startMonth, endMonth);
+  const sum = months.reduce((a,mk)=> a + clamp01(mk<=refMonthKey ? (companyMonthlyExecRate01(companyOkr, mk)||0) : 0), 0);
+  return monthCount>0 ? sum/monthCount : 0;
+}
+function companyProgress(okr, mk){
+  const cascade = companyPeriodCumulativeExecRate01(okr, mk || thisMonthKey());
+  return cascade===null ? 0 : Math.round(cascade*100);
 }
 // 2026-08-11: "기업 KPI 결과 달성률"(companyRepresentativeProgress -- 숫자
-// 실적/목표 기반, 없으면 companyProgress 단순평균 폴백)과는 별개로 "연결
-// 목표 실행 진척도"를 따로 보여달라는 요청 -- 이 기업 목표에 달린 부서
-// 목표들을 그 부서 목표 자신의 weight로 가중 평균한 값이다(요청한
-// 공식 그대로: Σ(하위 목표 달성률 × 가중치)). weightedGroupScore를 그대로
-// 재사용하고 companyProgress()는 다른 곳(폴백)에서 계속 쓰이므로 손대지
-// 않았다 -- 서로 다른 두 지표를 나란히 보여주는 것이지, 기존 계산을 바꾸는
-// 게 아니다.
-function companyLinkedExecutionProgress(companyOkr){
-  const children = DB.okrs.filter(o=>o.level==='조직' && o.parent===companyOkr.id);
-  return weightedGroupScore(children, orgProgress);
+// 실적/목표 기반, 없으면 companyProgress 기간 누적 캐스케이드 폴백)과는
+// 별개로 "연결 목표 실행 진척도"를 따로 보여달라는 요청 -- companyProgress와
+// 같은 기간 누적 공식을 그대로 쓰되(2026-08-12: 둘 다 같은 버그를 갖고
+// 있었어서 같은 방식으로 고쳤다), weightSumBadgeHtml에 물려줄 "입력 완료
+// 부서 수/전체 연결 부서 수"를 같이 돌려준다.
+function companyLinkedExecutionProgress(companyOkr, mk){
+  const teams = companyConnectedTeams(companyOkr.id);
+  const refMonthKey = mk || thisMonthKey();
+  const cascade = companyPeriodCumulativeExecRate01(companyOkr, refMonthKey);
+  const reportedCount = teams.filter(t=>deptMonthlyExecRate01(t, refMonthKey)!==null).length;
+  return {
+    score: cascade===null ? null : Math.round(cascade*100),
+    weightSum: teams.length ? Math.round(reportedCount/teams.length*100) : 0,
+    weightedCount: reportedCount,
+    totalCount: teams.length
+  };
 }
 
 /* ---------- 기간형 기업 목표 (2026-08-07) -------------------------------
@@ -1144,6 +1226,10 @@ function goalPeriodLabel(okr){
   const fmt = d => { const [y,m,day] = d.split('-'); return `${y}.${m}.${day}`; };
   return `${fmt(p.start)} ~ ${fmt(p.end)}`;
 }
+// 회사 목표의 기간 유형(월간/분기/반기/연간/직접설정) 뱃지 텍스트. periodType이
+// 없는 기존(마이그레이션 이전) 행은 항상 1개월짜리였으니 "월간"으로 표시한다.
+const PERIOD_TYPE_LABELS = { monthly:'월간', quarterly:'분기', half:'반기', yearly:'연간', custom:'직접설정' };
+function periodTypeLabel(okr){ return PERIOD_TYPE_LABELS[okr.periodType] || '월간'; }
 // 기업 목표의 월별 진행기록(DB.okrProgress)에서 월간/누적/최종 달성률을
 // 계산한다. 진행기록이 하나도 없으면 null을 돌려주고, 호출부는 그때
 // companyProgress()(부서 목표 평균 캐스케이드)로 폴백한다 -- "기업 목표
@@ -1222,6 +1308,17 @@ function switchOkrTab(tab){
     document.getElementById('okr-'+t).style.display = t===tab ? '' : 'none';
     document.getElementById('okrtab-'+t).classList.toggle('active', t===tab);
   });
+}
+// 2026-08-12: "목표" 페이지 상위를 KPI 관리/매출 달성 두 탭으로 분리. KPI
+// 관리 쪽(전체현황/부서목표/개인목표)은 구조·계산식 전부 그대로고, 이 탭
+// 전환은 그 위에 얹은 것뿐이다 -- 매출 실적은 절대 KPI 실행률에 합산하지
+// 않는다(데이터/계산식 완전 분리).
+function switchGoalArea(area){
+  ['kpi','revenue'].forEach(a=>{
+    document.getElementById('goalarea-'+a+'-panel').style.display = a===area ? '' : 'none';
+    document.getElementById('goalarea-'+a).classList.toggle('active', a===area);
+  });
+  if(area==='revenue') renderRevenue();
 }
 
 /* ---------- OKR ---------- */
@@ -1655,7 +1752,7 @@ function renderOkrOverview(){
         const numeric = companyNumericProgress(c, mk);
         const p = companyRepresentativeProgress(c, mk);
         const contribution = c.weight!=null ? Math.round(c.weight/100*p) : null;
-        const linkedExec = companyLinkedExecutionProgress(c);
+        const linkedExec = companyLinkedExecutionProgress(c, mk);
         const expanded = okrOvExpandedCompanies.has(c.id);
         const [py,pm] = mk.split('-').map(Number);
         const curRec = numeric && numeric.currentRecord;
@@ -1667,7 +1764,7 @@ function renderOkrOverview(){
                 ${okrStatusBadge(p)}
               </div>
               <div style="font-size:14px;font-weight:800;">${escapeHtml(c.title)}</div>
-              <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${goalPeriodLabel(c)} · ${escapeHtml(c.owner||'전사')}${c.unit && c.unit!=='%' ? ` · 단위 ${escapeHtml(c.unit)}` : ''}</div>
+              <div style="font-size:11.5px;color:var(--sub);margin-top:2px;"><span class="badge grey">${periodTypeLabel(c)}</span> ${goalPeriodLabel(c)} · ${escapeHtml(c.owner||'전사')}${c.unit && c.unit!=='%' ? ` · 단위 ${escapeHtml(c.unit)}` : ''}</div>
             </div>
             <div style="display:flex;gap:28px;flex:1 1 220px;flex-wrap:wrap;">
               <div><div style="font-size:11px;color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;font-size:13px;">${c.weight!=null?c.weight+'%':'미설정'}</div></div>
@@ -1715,6 +1812,47 @@ function renderOkrOverview(){
     ? `${okrDeptLegendHtml(teams)}<div style="margin-top:8px;">${buildOkrLineChartSvg(deptSeries, {highlightIndex:monthNum-1})}</div>`
     : '<div class="empty">등록된 부서 목표가 없어요</div>';
 
+  // 부서별 현황 (2026-08-12 추가) -- "모든 활성 부서"를 조회할 수 있어야
+  // 한다는 요구사항 때문에 부서 목표가 아직 없는 팀도 DB.roster에서 끌어와
+  // 같이 보여준다. 연결된 기업 목표가 없는 부서는 "미연결"(계산 대상에서
+  // 아예 제외), 연결됐지만 그 달 부서 목표를 안 만든 부서는 "미입력·0%"로
+  // 구분해서 보여준다.
+  const allActiveTeams = [...new Set([...(DB.roster||[]).map(m=>m.team), ...teams].filter(Boolean))].sort();
+  const deptStatusRows = allActiveTeams.map(team=>{
+    const linkedCompany = companies.find(c=>companyConnectedTeams(c.id).includes(team));
+    const hasGoalsThisMonth = DB.okrs.some(o=>o.level==='조직' && o.owner===team && o.month===mk);
+    const monthlyRate01 = deptMonthlyExecRate01(team, mk);
+    let inputStatus, monthlyDisplay;
+    if(!linkedCompany){
+      inputStatus = '-'; monthlyDisplay = '<span class="badge grey">미연결</span>';
+    }else if(!hasGoalsThisMonth){
+      inputStatus = '미입력'; monthlyDisplay = '0%';
+    }else if(monthlyRate01===null){
+      inputStatus = '입력됨'; monthlyDisplay = '<span class="badge amber">가중치 설정 미완료</span>';
+    }else{
+      const pct = Math.round(monthlyRate01*100);
+      inputStatus = '입력됨'; monthlyDisplay = `<span style="font-weight:700;color:${progressTextColor(pct)}">${pct}%</span>`;
+    }
+    const cumulative01 = linkedCompany ? companyPeriodCumulativeExecRate01(linkedCompany, mk) : null;
+    const cumulativeDisplay = cumulative01===null ? '-' : `${(cumulative01*100).toFixed(1)}%`;
+    return { team, linkedCompany, monthlyDisplay, cumulativeDisplay, inputStatus };
+  });
+  const deptStatusHtml = deptStatusRows.length ? `
+    <div style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>부서명</th><th>연결 기업 목표</th><th>목표 기간</th><th>당월 실행률</th><th>기간 누적 실행률</th><th>입력 상태</th></tr></thead>
+      <tbody>${deptStatusRows.map(r=>`
+        <tr>
+          <td style="font-weight:700;">${escapeHtml(r.team)}</td>
+          <td>${r.linkedCompany?escapeHtml(r.linkedCompany.title):'-'}</td>
+          <td>${r.linkedCompany?`<span class="badge grey">${periodTypeLabel(r.linkedCompany)}</span> ${goalPeriodLabel(r.linkedCompany)}`:'-'}</td>
+          <td>${r.monthlyDisplay}</td>
+          <td>${r.cumulativeDisplay}</td>
+          <td>${r.inputStatus}</td>
+        </tr>`).join('')}</tbody>
+    </table>
+    </div>` : '<div class="empty">등록된 부서가 없어요</div>';
+
   const rows = okrOvHistoryRows(mk);
   const shown = rows.slice(0, okrOvHistLimit);
   const historyHtml = rows.length ? `
@@ -1752,6 +1890,10 @@ function renderOkrOverview(){
     <div class="section">
       <div class="section-head"><div><h3>이번 달 기업 목표</h3><div class="desc">${mk} 기준, 최대 3개</div></div></div>
       ${companyCardsHtml}
+    </div>
+    <div class="section">
+      <div class="section-head"><div><h3>부서별 현황</h3><div class="desc">${mk} 기준 · 모든 부서</div></div></div>
+      ${deptStatusHtml}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="okr-chart-row">
       <div class="section">
@@ -2964,6 +3106,144 @@ function importData(evt){ alert('실제 데이터베이스로 전환된 이후�
 function resetData(){ alert('실제 데이터베이스로 전환된 이후에는 전체 초기화가 지원되지 않아요. 필요하면 Neon 콘솔에서 직접 데이터를 관리해주세요.'); }
 
 /* ---------- INIT ---------- */
+/* ---------- 매출 달성 탭 (2026-08-12) --------------------------------------
+   KPI 관리(okrs 기반)와 데이터·계산식이 완전히 분리된 별도 영역이다.
+   revenue_targets/revenue_monthly 테이블만 쓰고, 여기서 계산하는 숫자는
+   어디에서도 KPI 실행률과 합산되지 않는다. */
+let revenueYear = null;
+function revenueTargetForYear(year){ return (DB.revenueTargets||[]).find(r=>r.year===year) || null; }
+function revenueMonthlyForYear(year){ return (DB.revenueMonthly||[]).filter(r=>r.year===year).sort((a,b)=>a.month-b.month); }
+function formatEok(won){
+  if(won==null || !Number.isFinite(won)) return '데이터 없음';
+  const eok = Math.round((won/1e8)*10)/10;
+  return `${eok}억`;
+}
+// 확정 누적 실적 = 기초 확정 누적(6월까지) + 7월 이후 '확정' 상태 월매출
+// 합계. '입력중' 상태는 상단 누적에 포함하지 않는다(요구사항 9).
+function revenueYearSummary(year){
+  const target = revenueTargetForYear(year);
+  if(!target) return null;
+  const monthly = revenueMonthlyForYear(year);
+  const confirmedActualSum = monthly.filter(m=>m.status==='확정').reduce((a,m)=>a+(m.monthlyActual||0),0);
+  const cumulativeActual = target.baseCumulativeActual + confirmedActualSum;
+  const remaining = Math.max(target.annualTarget - cumulativeActual, 0);
+  const annualRate = target.annualTarget>0 ? (cumulativeActual/target.annualTarget*100) : 0;
+  const remainingTarget = Math.max(target.annualTarget - target.baseCumulativeActual, 0);
+  const monthlyTargetSum = monthly.reduce((a,m)=>a+(m.monthlyTarget||0),0);
+  const targetSumMismatch = monthly.some(m=>m.monthlyTarget!=null) && Math.round(monthlyTargetSum) !== Math.round(remainingTarget);
+  return { target, monthly, cumulativeActual, remaining, annualRate, remainingTarget, monthlyTargetSum, targetSumMismatch };
+}
+function changeRevenueYear(v){ revenueYear = Number(v); renderRevenue(); }
+function revenueYearOptions(){
+  const years = new Set((DB.revenueTargets||[]).map(t=>t.year));
+  years.add(revenueYear);
+  return [...years].sort().map(y=>`<option value="${y}" ${y===revenueYear?'selected':''}>${y}년</option>`).join('');
+}
+async function saveRevenueMonth(year, month, confirm){
+  const targetEl = document.getElementById(`f-rev-target-${month}`);
+  const actualEl = document.getElementById(`f-rev-actual-${month}`);
+  const monthlyTarget = targetEl.value.trim()===''? null : Number(targetEl.value)*1e8;
+  const monthlyActual = actualEl.value.trim()===''? null : Number(actualEl.value)*1e8;
+  try{
+    await apiPost('/revenue', { year, month, monthlyTarget, monthlyActual, status: confirm?'확정':'입력중' });
+  }catch(err){ return alert(err.message); }
+  await refreshDB(); renderRevenue();
+}
+async function saveRevenueTarget(){
+  const year = revenueYear;
+  const annualTarget = Number(document.getElementById('f-rev-annual').value)*1e8;
+  const baseCumulativeActual = Number(document.getElementById('f-rev-base').value)*1e8;
+  const baseThroughMonth = Number(document.getElementById('f-rev-basemonth').value);
+  try{ await apiPost('/revenue/target', { year, annualTarget, baseCumulativeActual, baseThroughMonth }); }
+  catch(err){ return alert(err.message); }
+  await refreshDB(); renderRevenue();
+}
+function renderRevenue(){
+  const el = document.getElementById('okr-revenue-body');
+  if(!el) return;
+  const isAdmin = me && me.systemRole==='ADMIN';
+  if(revenueYear===null){
+    const years = (DB.revenueTargets||[]).map(t=>t.year);
+    revenueYear = years.length ? Math.max(...years) : new Date().getUTCFullYear();
+  }
+  const summary = revenueYearSummary(revenueYear);
+
+  const headerHtml = `
+    <div class="section" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;">
+      <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">연도</label><select onchange="changeRevenueYear(this.value)">${revenueYearOptions()}</select></div>
+    </div>`;
+
+  if(!summary){
+    el.innerHTML = headerHtml + `<div class="empty">${revenueYear}년 매출 목표가 아직 설정되지 않았어요${isAdmin?' · 아래에서 설정해보세요':''}</div>` +
+      (isAdmin ? revenueTargetFormHtml(revenueYear, null) : '');
+    return;
+  }
+
+  const t = summary.target;
+  const kpiHtml = `
+    <div class="grid4">
+      <div class="kpi"><div class="label">연간 목표</div><div class="value">${formatEok(t.annualTarget)}</div></div>
+      <div class="kpi"><div class="label">누적 실적</div><div class="value">${formatEok(summary.cumulativeActual)}</div></div>
+      <div class="kpi"><div class="label">잔여 목표</div><div class="value">${formatEok(summary.remaining)}</div></div>
+      <div class="kpi"><div class="label">달성률</div><div class="value" style="color:${progressTextColor(Math.min(summary.annualRate,100))}">${summary.annualRate.toFixed(2)}%</div></div>
+    </div>
+    <div class="bar" style="margin-top:4px;"><i style="width:${Math.min(summary.annualRate,100)}%;${progressBarStyle(Math.min(summary.annualRate,100))}"></i></div>`;
+
+  const mismatchBadge = summary.targetSumMismatch ? `<span class="badge red">월별 목표 합계 불일치 · 확정 불가</span>` : `<span class="badge green">월별 목표 합계 일치</span>`;
+
+  const months = [];
+  for(let m=t.baseThroughMonth+1; m<=12; m++) months.push(m);
+  const rowsHtml = months.map(m=>{
+    const rec = summary.monthly.find(r=>r.month===m);
+    const monthlyTarget = rec ? rec.monthlyTarget : null;
+    const monthlyActual = rec ? rec.monthlyActual : null;
+    const status = rec ? rec.status : '입력중';
+    const monthlyRate = (monthlyTarget && monthlyActual!=null) ? (monthlyActual/monthlyTarget*100) : null;
+    // 이 달까지의 누적(확정된 달만) -- 표시용, 상단 지표와 같은 규칙.
+    const cumThroughHere = t.baseCumulativeActual + summary.monthly.filter(r=>r.month<=m && r.status==='확정').reduce((a,r)=>a+(r.monthlyActual||0),0);
+    const cumRateThroughHere = t.annualTarget>0 ? (cumThroughHere/t.annualTarget*100) : null;
+    return `<tr>
+      <td>${m}월</td>
+      <td>${isAdmin ? `<input type="number" id="f-rev-target-${m}" value="${monthlyTarget!=null?(monthlyTarget/1e8):''}" style="width:80px;" placeholder="억원"> 억` : formatEok(monthlyTarget)}</td>
+      <td>${isAdmin ? `<input type="number" id="f-rev-actual-${m}" value="${monthlyActual!=null?(monthlyActual/1e8):''}" style="width:80px;" placeholder="억원"> 억` : formatEok(monthlyActual)}</td>
+      <td>${monthlyRate!=null ? monthlyRate.toFixed(1)+'%' : '데이터 없음'}</td>
+      <td>${formatEok(cumThroughHere)}</td>
+      <td>${cumRateThroughHere!=null ? cumRateThroughHere.toFixed(2)+'%' : '데이터 없음'}</td>
+      <td><span class="badge ${status==='확정'?'green':'amber'}">${status}</span></td>
+      ${isAdmin ? `<td style="white-space:nowrap;">
+        <button class="btn ghost sm" onclick="saveRevenueMonth(${t.year},${m},false)">저장</button>
+        <button class="btn primary sm" onclick="saveRevenueMonth(${t.year},${m},true)">확정</button>
+      </td>` : ''}
+    </tr>`;
+  }).join('');
+
+  const tableHtml = `
+    <div class="section">
+      <div class="section-head"><div><h3>월별 매출 달성표</h3><div class="desc">${t.year}년 ${t.baseThroughMonth+1}월 ~ 12월 · ${mismatchBadge}</div></div></div>
+      <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>월</th><th>월 목표</th><th>확정 매출</th><th>월 달성률</th><th>누적 실적</th><th>연간 달성률</th><th>상태</th>${isAdmin?'<th></th>':''}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      </div>
+    </div>`;
+
+  el.innerHTML = headerHtml + kpiHtml + tableHtml + (isAdmin ? revenueTargetFormHtml(t.year, t) : '');
+}
+function revenueTargetFormHtml(year, target){
+  return `
+    <div class="section">
+      <div class="section-head"><h3>연간 목표 설정</h3></div>
+      <div class="form-row">
+        <div class="field"><label>연간 매출 목표 (억원)</label><input id="f-rev-annual" type="number" value="${target?target.annualTarget/1e8:''}" placeholder="예: 400"></div>
+        <div class="field"><label>기초 확정 누적 실적 (억원)</label><input id="f-rev-base" type="number" value="${target?target.baseCumulativeActual/1e8:''}" placeholder="예: 159"></div>
+        <div class="field"><label>기초 누적 기준월</label><input id="f-rev-basemonth" type="number" min="0" max="12" value="${target?target.baseThroughMonth:6}" placeholder="예: 6"></div>
+      </div>
+      <div class="modal-sub">기초 확정 누적 실적은 "기준월까지" 이미 확정된 매출이에요. 그 다음 달부터 아래 표에서 월별로 입력해요.</div>
+      <button class="btn primary sm" onclick="saveRevenueTarget()">저장</button>
+    </div>`;
+}
+
 function renderAll(){
   renderHrDash();
   renderMembers();
@@ -2976,6 +3256,7 @@ function renderAll(){
   renderOkrOverview();
   renderOkrDept();
   renderOkrPersonal();
+  renderRevenue();
   renderMyPage();
 }
 // 2026-08-11: 예전엔 로그인 여부와 무관하게 페이지 로드 즉시 한 번 그려서
