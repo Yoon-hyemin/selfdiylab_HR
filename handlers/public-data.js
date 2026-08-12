@@ -41,7 +41,7 @@ export default async function handler(req, res) {
 
   try {
     const [members, okrs, okrTasks, okrProgress, evals, calibrationCycles, calibrationOverrides, oneonones,
-      revenueTargets, revenueMonthly] = await Promise.all([
+      revenueTargets, revenueMonthly, companyContributions] = await Promise.all([
       sql`SELECT id, name, team, position FROM members ORDER BY name`,
       sql`SELECT *, start_date::text AS start_date_txt, end_date::text AS end_date_txt FROM okrs`,
       sql`SELECT * FROM okr_tasks`,
@@ -51,7 +51,8 @@ export default async function handler(req, res) {
       sql`SELECT * FROM calibration_overrides`,
       sql`SELECT * FROM oneonones ORDER BY date`,
       sql`SELECT * FROM revenue_targets ORDER BY year`,
-      sql`SELECT * FROM revenue_monthly ORDER BY year, month`
+      sql`SELECT * FROM revenue_monthly ORDER BY year, month`,
+      sql`SELECT * FROM company_goal_dept_contributions`
     ]);
 
     const memberNameById = Object.fromEntries(members.map(m => [m.id, m.name]));
@@ -121,6 +122,9 @@ export default async function handler(req, res) {
       monthlyActual: r.monthly_actual === null ? null : Number(r.monthly_actual),
       status: r.status, note: r.note || ''
     }));
+    const companyContributions_out = companyContributions.map(r => ({
+      companyOkrId: r.company_okr_id, team: r.team, contribution: r.contribution
+    }));
 
     res.status(200).json({
       members: members.map(m => ({ id: m.id, name: m.name, team: m.team || '', position: m.position || '' })),
@@ -131,7 +135,8 @@ export default async function handler(req, res) {
       calibration: calibration_out,
       oneonones: oneonones_out,
       revenueTargets: revenueTargets_out,
-      revenueMonthly: revenueMonthly_out
+      revenueMonthly: revenueMonthly_out,
+      companyContributions: companyContributions_out
     });
   } catch (err) {
     console.error(err);

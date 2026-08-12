@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   clamp01, weightedLevelRate, periodMonthCount, monthsBetween,
-  periodCumulativeRate, companyMonthlyRateFromDepts
+  periodCumulativeRate, companyMonthlyRateFromDepts, elapsedAverageRate
 } from './kpiCalc.js';
 
 test('clamp01: 범위 밖 값은 0~1로 강제, 숫자가 아니면 0', () => {
@@ -113,6 +113,23 @@ test('시나리오8: 매출 연간 달성률/잔여목표 계산', () => {
   const rate = (cumulativeActual / annualTarget) * 100;
   assert.equal(remaining, 24_100_000_000);
   assert.equal(rate, 39.75);
+});
+
+// 2026-08-12(2차): "기준월까지 실행률" vs "전체 기간 진척도" 요구사항 예시
+// 그대로 검증 -- 7월 80%, 8월 60%, 9~12월은 아직 안 지난 반기 목표.
+test('기준월까지 실행률(경과월 평균) 8월 기준 70%', () => {
+  const elapsed = [0.8, 0.6]; // 7월, 8월만 -- 9~12월은 호출부가 애초에 안 넣음
+  assert.equal(elapsedAverageRate(elapsed), 0.7);
+});
+test('전체 기간 진척도(반기 6개월 분모, 미래월 0 포함) 23.3%', () => {
+  const allSixMonths = [0.8, 0.6, 0, 0, 0, 0];
+  const result = periodCumulativeRate(allSixMonths, 6);
+  assert.equal(Math.round(result * 1000) / 1000, 0.233);
+});
+test('elapsedAverageRate: 데이터 없으면 null, 미입력 달은 0으로 반영(분모 유지)', () => {
+  assert.equal(elapsedAverageRate([]), null);
+  assert.equal(elapsedAverageRate(null), null);
+  assert.equal(elapsedAverageRate([1, null]), 0.5); // 미입력 달도 분모에는 남음
 });
 
 // 시나리오 11: 월별 목표 합계가 241억과 불일치하면 확정을 막아야 한다 --

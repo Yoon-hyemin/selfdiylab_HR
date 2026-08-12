@@ -88,3 +88,18 @@ export function companyMonthlyRateFromDepts(depts) {
   if (!depts || !depts.length) return 0;
   return depts.reduce((a, d) => a + d.contribution * clamp01(d.rate == null ? 0 : d.rate), 0);
 }
+
+/**
+ * 2026-08-12(2차): "기준월까지 실행률" -- 목표 시작월부터 기준월까지(미래월은
+ * 애초에 배열에 넣지 않고 호출부가 잘라서 넘겨야 한다)의 월별 실행률
+ * 평균이다. periodCumulativeRate(전체 기간 진척도, 분모=기간 전체 개월수,
+ * 미래월=0으로 포함)와는 분모가 다르다 -- 이 함수는 "지금까지 경과한 달
+ * 수"로만 나눈다. 과거/현재 달인데 데이터가 없으면(미입력) 그 달은
+ * 0으로 반영하고 개월 수 자체에서는 빼지 않는다(요구사항: "분모에서
+ * 제외하지 않는다").
+ */
+export function elapsedAverageRate(elapsedRates01) {
+  if (!elapsedRates01 || !elapsedRates01.length) return null;
+  const sum = elapsedRates01.reduce((a, r) => a + clamp01(r == null ? 0 : r), 0);
+  return sum / elapsedRates01.length;
+}

@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   try {
     const [members, leaveHistory, awards, discipline, career, education, family,
       holidays, jobs, candidates, candidateHistory, okrs, okrTasks, okrProgress, evals, calibrationCycles,
-      calibrationOverrides, oneonones, revenueTargets, revenueMonthly] = await Promise.all([
+      calibrationOverrides, oneonones, revenueTargets, revenueMonthly, companyContributions] = await Promise.all([
       sql`SELECT * FROM members ORDER BY name`,
       sql`SELECT * FROM member_leave_history`,
       sql`SELECT * FROM member_awards`,
@@ -28,7 +28,8 @@ export default async function handler(req, res) {
       sql`SELECT * FROM calibration_overrides`,
       sql`SELECT * FROM oneonones ORDER BY date`,
       sql`SELECT * FROM revenue_targets ORDER BY year`,
-      sql`SELECT * FROM revenue_monthly ORDER BY year, month`
+      sql`SELECT * FROM revenue_monthly ORDER BY year, month`,
+      sql`SELECT * FROM company_goal_dept_contributions`
     ]);
 
     const holidayNames = holidays.map(h => h.name);
@@ -131,6 +132,9 @@ export default async function handler(req, res) {
       monthlyActual: r.monthly_actual === null ? null : Number(r.monthly_actual),
       status: r.status, note: r.note || ''
     }));
+    const companyContributions_out = companyContributions.map(r => ({
+      companyOkrId: r.company_okr_id, team: r.team, contribution: r.contribution
+    }));
 
     res.status(200).json({
       members: members_out,
@@ -143,7 +147,8 @@ export default async function handler(req, res) {
       calibration: calibration_out,
       oneonones: oneonones_out,
       revenueTargets: revenueTargets_out,
-      revenueMonthly: revenueMonthly_out
+      revenueMonthly: revenueMonthly_out,
+      companyContributions: companyContributions_out
     });
   } catch (err) {
     console.error(err);
