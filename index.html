@@ -71,6 +71,11 @@
   th{text-align:left;color:var(--sub);font-weight:700;font-size:11.5px;padding:8px 10px;border-bottom:1px solid var(--border);}
   td{padding:10px 10px;border-bottom:1px solid var(--border);}
   tr:last-child td{border-bottom:none;}
+  tr.clickable:hover{background:var(--bg);}
+  td input[type=number],td input[type=text]{border:1px solid var(--border);border-radius:8px;padding:7px 9px;font-size:13px;font-family:inherit;width:84px;}
+  td input[type=number]:focus,td input[type=text]:focus{outline:none;border-color:var(--primary);}
+  .icon-btn{width:30px;height:30px;border-radius:9px;border:1px solid var(--border);background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;}
+  .icon-btn:hover{background:var(--bg);}
   tr.clickable:hover{background:var(--bg);cursor:pointer;}
 
   .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-block;}
@@ -478,8 +483,11 @@ let me = null; // 마이페이지/목표탭 로그인 상태: {id, name, team, r
 /* 전체현황(대표님용) 대시보드 상태 -- 2026-08-06. 연도는 아래 연간 차트 2개의
    기준, 월은 KPI/당월 기업 목표/월별 달성 이력의 기준. null로 두고 첫 렌더에서
    thisMonthKey()로 채운다(okrOvInitDefaults). */
+let okrOvPeriodType = 'monthly';
 let okrOvYear = null;
 let okrOvMonth = null;
+let okrOvQuarter = null;
+let okrOvHalf = null;
 let okrOvExpandedCompanies = new Set();
 let okrOvExpandedDeptRows = new Set();
 function toggleOkrOvDeptRow(key){
@@ -1521,13 +1529,18 @@ async function saveCompanyGoal(){
    연간 추이 차트 + 과거 이력 테이블을 추가했다. 개인 목표는 이 화면 계산에서
    전부 제외한다(기업·부서만). */
 function okrOvInitDefaults(){
-  if(okrOvYear && okrOvMonth) return;
+  if(okrOvYear && okrOvMonth && okrOvQuarter && okrOvHalf) return;
   const [y,m] = thisMonthKey().split('-');
   okrOvYear = okrOvYear || y;
   okrOvMonth = okrOvMonth || m;
+  okrOvQuarter = okrOvQuarter || String(Math.floor((Number(m)-1)/3)+1);
+  okrOvHalf = okrOvHalf || String(Number(m)<=6?1:2);
 }
+function changeOkrOvPeriodType(t){ okrOvPeriodType = t; renderOkrOverview(); }
 function changeOkrOvYear(v){ okrOvYear = v; renderOkrOverview(); }
 function changeOkrOvMonth(v){ okrOvMonth = v; renderOkrOverview(); }
+function changeOkrOvQuarter(v){ okrOvQuarter = v; renderOkrOverview(); }
+function changeOkrOvHalf(v){ okrOvHalf = v; renderOkrOverview(); }
 function okrOvYearOptions(){
   const years = new Set([Number(okrOvYear)]);
   DB.okrs.forEach(o=>{ if(o.month) years.add(Number(o.month.split('-')[0])); });
@@ -1539,9 +1552,15 @@ function okrOvMonthOptions(){
     return `<option value="${mm}" ${mm===okrOvMonth?'selected':''}>${m}월</option>`;
   }).join('');
 }
-// 2026-08-12(2차): 전체현황은 연도+기준월 두 가지 필터만 쓴다(월/분기/반기/
-// 연도 탭은 제거) -- 기준월을 바꾸면 카드·표가 전부 그 기준월로 다시 계산된다.
-function okrOvMonthKey(){ return `${okrOvYear}-${okrOvMonth}`; }
+function okrOvQuarterOptions(){
+  return [1,2,3,4].map(q=>`<option value="${q}" ${String(q)===String(okrOvQuarter)?'selected':''}>${q}분기</option>`).join('');
+}
+// 2026-08-12(3차): 전체현황도 부서목표/개인목표 탭과 같은 월/분기/반기/연도
+// 4개 탭으로 다시 통일했다(2차에서 연도+기준월만으로 줄였다가, 그 결정이
+// 이전에 확정했던 "일관성 있게 반기까지 보이게 해달라" 요청과 충돌한다는
+// 지적을 받아 되돌림). periodKeyFor 등 공용 유틸을 그대로 재사용한다.
+function okrOvCurrentPeriodKey(){ return periodKeyFor(okrOvPeriodType, okrOvYear, okrOvMonth, okrOvQuarter, okrOvHalf); }
+function okrOvPeriodLabel(pk){ return periodLabelFor(okrOvPeriodType, pk); }
 function okrStatusBadge(p){ return p>=100 ? '<span class="badge green">완료</span>' : '<span class="badge blue">진행 중</span>'; }
 function myGoalStatusBadge(status){
   if(status==='draft') return '<span class="badge grey">작성 중</span>';
@@ -1767,15 +1786,26 @@ function renderOkrOverview(){
   if(!el) return;
   okrOvInitDefaults();
   const isAdmin = me && me.systemRole==='ADMIN';
-  const mk = okrOvMonthKey();
-  const prevMk = shiftMonthKey(mk, -1);
+  // pk: 선택한 기간(월/분기/반기/연도) 키. refMonth: 그 기간의 마지막 달 --
+  // "기준월까지 실행률"/부서 상태 스냅샷은 전부 이 refMonth를 기준으로
+  // 계산한다(분기/반기/연도를 고르면 그 기간의 마지막 달 시점 스냅샷을
+  // 보는 셈). "총 목표 수"처럼 개수를 세는 지표는 기간 전체에 걸친 목표를
+  // 다 센다(goalsInPeriodFor).
+  const pk = okrOvCurrentPeriodKey();
+  const prevPk = shiftPeriodKeyFor(okrOvPeriodType, pk, -1);
+  const periodRange = periodDateRangeFor(okrOvPeriodType, pk);
+  const refMonth = periodRange.end.slice(0,7);
+  const periodBadge = `<span class="badge grey" style="margin-left:4px;">${okrOvPeriodLabel(pk)} 기준</span>`;
+  const changeLabel = changeLabelFor(okrOvPeriodType);
 
-  const companies = DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(mk, o));
-  const overallGroup = weightedLevelRateJs(companies.map(c=>({weight:c.weight, rate:companyElapsedRate(c, mk)})));
+  const companies = DB.okrs.filter(o=>o.level==='회사' && periodsOverlap(periodRange, deriveGoalPeriod(o)));
+  const overallGroup = weightedLevelRateJs(companies.map(c=>({weight:c.weight, rate:companyElapsedRate(c, refMonth)})));
   const overallScore = overallGroup.rate===null ? null : Math.round(overallGroup.rate*100);
 
-  const prevCompanies = DB.okrs.filter(o=>o.level==='회사' && monthOverlapsGoal(prevMk, o));
-  const prevGroup = weightedLevelRateJs(prevCompanies.map(c=>({weight:c.weight, rate:companyElapsedRate(c, prevMk)})));
+  const prevRange = periodDateRangeFor(okrOvPeriodType, prevPk);
+  const prevRefMonth = prevRange.end.slice(0,7);
+  const prevCompanies = DB.okrs.filter(o=>o.level==='회사' && periodsOverlap(prevRange, deriveGoalPeriod(o)));
+  const prevGroup = weightedLevelRateJs(prevCompanies.map(c=>({weight:c.weight, rate:companyElapsedRate(c, prevRefMonth)})));
   const prevScore = prevGroup.rate===null ? null : Math.round(prevGroup.rate*100);
 
   let momHtml;
@@ -1788,42 +1818,45 @@ function renderOkrOverview(){
       <div style="font-size:12px;color:var(--sub);margin-top:2px;">${pctChange===null?'—':(pctChange>=0?'+':'')+pctChange+'%'}</div>`;
   }
 
-  // 총 목표 수 -- 월별 실적행이 아니라 고유 goal id 기준(회사+부서+개인).
-  const activeOrgGoals = DB.okrs.filter(o=>o.level==='조직' && o.month===mk);
-  const activePersonalGoals = DB.okrs.filter(o=>o.level==='개인' && o.month===mk);
+  // 총 목표 수 -- 월별 실적행이 아니라 고유 goal id 기준(회사+부서+개인),
+  // 선택한 기간 전체에 걸친 목표를 센다.
+  const activeOrgGoals = goalsInPeriodFor('조직', okrOvPeriodType, pk);
+  const activePersonalGoals = goalsInPeriodFor('개인', okrOvPeriodType, pk);
   const totalGoalCount = new Set([...companies.map(c=>c.id), ...activeOrgGoals.map(o=>o.id), ...activePersonalGoals.map(o=>o.id)]).size;
 
-  // 위험/가중치미완료/미입력/개인목표미연결 건수 -- 이번 기준월에 활성화된
-  // 회사 목표들에 연결된 부서(중복 없이 합쳐서)를 기준으로 센다.
+  // 위험/가중치미완료/미입력/개인목표미연결 건수 -- refMonth(선택 기간의
+  // 마지막 달) 시점 스냅샷으로, 이번 기간에 활성화된 회사 목표들에 연결된
+  // 부서(중복 없이 합쳐서)를 기준으로 센다.
   const connectedTeamsUnion = [...new Set(companies.flatMap(c=>companyConnectedTeams(c.id)))];
   let riskyCount=0, incompleteWeightCount=0, missingInputCount=0;
   connectedTeamsUnion.forEach(team=>{
-    const st = orgTeamStatusAtMonth(team, mk).status;
+    const st = orgTeamStatusAtMonth(team, refMonth).status;
     if(st==='위험') riskyCount++;
     else if(st==='가중치 설정 미완료') incompleteWeightCount++;
     else if(st==='미입력') missingInputCount++;
   });
-  const unlinkedPersonalCount = activeOrgGoals.filter(o=>connectedTeamsUnion.includes(o.owner) && !DB.okrs.some(x=>x.level==='개인' && x.parent===o.id && (x.status||'approved')==='approved')).length;
+  const refMonthOrgGoals = DB.okrs.filter(o=>o.level==='조직' && o.month===refMonth);
+  const unlinkedPersonalCount = refMonthOrgGoals.filter(o=>connectedTeamsUnion.includes(o.owner) && !DB.okrs.some(x=>x.level==='개인' && x.parent===o.id && (x.status||'approved')==='approved')).length;
 
   const kpiHtml = `
     <div class="grid4">
-      <div class="kpi"><div class="label">전사 총 달성률</div><div class="value">${overallScore===null?'데이터 없음':overallScore+'%'}</div></div>
-      <div class="kpi"><div class="label">총 목표 수</div><div class="value">${totalGoalCount}개</div></div>
-      <div class="kpi"><div class="label">30% 미만 부서 목표</div><div class="value" style="color:${riskyCount>0?'var(--red)':'var(--text)'}">${riskyCount}개</div></div>
-      <div class="kpi"><div class="label">전월 대비 변화</div>${momHtml}</div>
+      <div class="kpi"><div class="label">전사 총 달성률${periodBadge}</div><div class="value">${overallScore===null?'데이터 없음':overallScore+'%'}</div></div>
+      <div class="kpi"><div class="label">총 목표 수${periodBadge}</div><div class="value">${totalGoalCount}개</div></div>
+      <div class="kpi"><div class="label">30% 미만 부서 목표${periodBadge}</div><div class="value" style="color:${riskyCount>0?'var(--red)':'var(--text)'}">${riskyCount}개</div></div>
+      <div class="kpi"><div class="label">${changeLabel} 변화</div>${momHtml}</div>
     </div>
     <div style="font-size:12px;color:var(--sub);margin-top:10px;">가중치 미완료 ${incompleteWeightCount}건 · 개인 목표 미연결 ${unlinkedPersonalCount}건 · 실적 미입력 ${missingInputCount}건</div>`;
 
   const companyCapReached = companies.length >= 3;
   const companyCardsHtml = companies.length ? companies.map((c,idx)=>{
-    const elapsed = companyElapsedRate(c, mk);
+    const elapsed = companyElapsedRate(c, refMonth);
     const elapsedPct = elapsed===null ? null : Math.round(elapsed*100);
-    const fullPeriod = companyPeriodCumulativeExecRate01(c, mk);
+    const fullPeriod = companyPeriodCumulativeExecRate01(c, refMonth);
     const fullPeriodPct = fullPeriod===null ? null : Math.round(fullPeriod*1000)/10;
     const contribs = companyDeptContributions(c);
     const teamRows = contribs.map(cn=>{
-      const st = orgTeamStatusAtMonth(cn.team, mk);
-      const goalsThisMonth = DB.okrs.filter(o=>o.level==='조직' && o.owner===cn.team && o.month===mk && o.parent===c.id);
+      const st = orgTeamStatusAtMonth(cn.team, refMonth);
+      const goalsThisMonth = DB.okrs.filter(o=>o.level==='조직' && o.owner===cn.team && o.month===refMonth && o.parent===c.id);
       const titleLabel = goalsThisMonth.length===0 ? '-' : goalsThisMonth.length===1 ? escapeHtml(goalsThisMonth[0].title) : `${goalsThisMonth.length}개 목표`;
       return { team:cn.team, contribution:Math.round(cn.contribution*100), status:st.status, rate:st.rate, goals:goalsThisMonth, titleLabel };
     });
@@ -1878,19 +1911,24 @@ function renderOkrOverview(){
       </table>
       </div>
     </div>`;
-  }).join('') : `<div class="empty">${mk}에 등록된 기업 목표가 없어요${isAdmin ? ' · 위에서 추가해보세요' : ''}</div>`;
+  }).join('') : `<div class="empty">${okrOvPeriodLabel(pk)}에 등록된 기업 목표가 없어요${isAdmin ? ' · 위에서 추가해보세요' : ''}</div>`;
 
   el.innerHTML = `
     <div class="section" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:space-between;">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">연도</label><select onchange="changeOkrOvYear(this.value)">${okrOvYearOptions()}</select></div>
-        <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">기준월</label><select onchange="changeOkrOvMonth(this.value)">${okrOvMonthOptions()}</select></div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        ${periodControlsHtml({
+          type: okrOvPeriodType, onType: 'changeOkrOvPeriodType',
+          year: okrOvYear, onYear: 'changeOkrOvYear', yearOptions: okrOvYearOptions(),
+          month: okrOvMonth, onMonth: 'changeOkrOvMonth', monthOptions: okrOvMonthOptions(),
+          quarter: okrOvQuarter, onQuarter: 'changeOkrOvQuarter', quarterOptions: okrOvQuarterOptions(),
+          half: okrOvHalf, onHalf: 'changeOkrOvHalf', halfOptions: halfSelectOptionsHtml(okrOvHalf)
+        })}
       </div>
       ${isAdmin ? `<button class="btn primary sm" ${companyCapReached?'disabled title="기업 목표는 최대 3개까지 설정할 수 있습니다."':''} onclick="openCompanyGoalModal()">+ 회사 목표 추가</button>` : ''}
     </div>
     ${kpiHtml}
     <div class="section">
-      <div class="section-head"><h3>회사 목표별 부서 실행현황</h3></div>
+      <div class="section-head"><div><h3>회사 목표별 부서 실행현황</h3><div class="desc">${okrOvPeriodLabel(pk)} 기준(부서 상태는 그 기간의 마지막 달 시점)</div></div></div>
       ${companyCardsHtml}
     </div>
   `;
@@ -3224,7 +3262,21 @@ async function saveRevenueTarget(){
   const baseThroughMonth = Number(document.getElementById('f-rev-basemonth').value);
   try{ await apiPost('/revenue/target', { year, annualTarget, baseCumulativeActual, baseThroughMonth }); }
   catch(err){ return alert(err.message); }
-  await refreshDB(); renderRevenue();
+  await refreshDB(); closeModal(); renderRevenue();
+}
+// 2026-08-12(3차): "연간 목표 설정"이 페이지 맨 아래 항상 펼쳐져 있어서
+// 다른 화면(카드/모달 위주)과 스타일이 안 맞고 화면이 어수선하다는 지적으로
+// 팝업(모달)으로 옮겼다 -- 연도 선택 옆의 톱니 아이콘을 눌러야 연다.
+function openRevenueTargetModal(){
+  const target = revenueTargetForYear(revenueYear);
+  showModal(`
+    <h3>${revenueYear}년 연간 목표 설정</h3>
+    <div class="field"><label>연간 매출 목표 (억원)</label><input id="f-rev-annual" type="number" value="${target?target.annualTarget/1e8:''}" placeholder="예: 400"></div>
+    <div class="field"><label>기초 확정 누적 실적 (억원)</label><input id="f-rev-base" type="number" value="${target?target.baseCumulativeActual/1e8:''}" placeholder="예: 159"></div>
+    <div class="field"><label>기초 누적 기준월</label><input id="f-rev-basemonth" type="number" min="0" max="12" value="${target?target.baseThroughMonth:6}" placeholder="예: 6"></div>
+    <div class="modal-sub">기초 확정 누적 실적은 "기준월까지" 이미 확정된 매출이에요. 그 다음 달부터 월별 매출 달성표에서 입력해요.</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveRevenueTarget()">저장</button></div>
+  `);
 }
 function renderRevenue(){
   const el = document.getElementById('okr-revenue-body');
@@ -3238,12 +3290,14 @@ function renderRevenue(){
 
   const headerHtml = `
     <div class="section" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;">
-      <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">연도</label><select onchange="changeRevenueYear(this.value)">${revenueYearOptions()}</select></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="field" style="margin:0;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">연도</label><select onchange="changeRevenueYear(this.value)">${revenueYearOptions()}</select></div>
+        ${isAdmin ? `<button class="icon-btn" title="연간 목표 설정" onclick="openRevenueTargetModal()">⚙️</button>` : ''}
+      </div>
     </div>`;
 
   if(!summary){
-    el.innerHTML = headerHtml + `<div class="empty">${revenueYear}년 매출 목표가 아직 설정되지 않았어요${isAdmin?' · 아래에서 설정해보세요':''}</div>` +
-      (isAdmin ? revenueTargetFormHtml(revenueYear, null) : '');
+    el.innerHTML = headerHtml + `<div class="empty">${revenueYear}년 매출 목표가 아직 설정되지 않았어요${isAdmin?' · 연도 옆 설정 아이콘을 눌러보세요':''}</div>`;
     return;
   }
 
@@ -3286,21 +3340,8 @@ function renderRevenue(){
       ${isAdmin ? `<div class="modal-sub" style="margin-top:10px;">입력하면 자동으로 저장돼요. 엑셀에서 "월 목표, 실제 매출" 두 열을 여러 행 복사해 붙여넣으면 한 번에 채워져요.</div>` : ''}
     </div>`;
 
-  el.innerHTML = headerHtml + kpiHtml + tableHtml + (isAdmin ? revenueTargetFormHtml(t.year, t) : '');
+  el.innerHTML = headerHtml + kpiHtml + tableHtml;
   if(isAdmin) months.forEach(m=>updateRevenueSaveIndicator(m));
-}
-function revenueTargetFormHtml(year, target){
-  return `
-    <div class="section">
-      <div class="section-head"><h3>연간 목표 설정</h3></div>
-      <div class="form-row">
-        <div class="field"><label>연간 매출 목표 (억원)</label><input id="f-rev-annual" type="number" value="${target?target.annualTarget/1e8:''}" placeholder="예: 400"></div>
-        <div class="field"><label>기초 확정 누적 실적 (억원)</label><input id="f-rev-base" type="number" value="${target?target.baseCumulativeActual/1e8:''}" placeholder="예: 159"></div>
-        <div class="field"><label>기초 누적 기준월</label><input id="f-rev-basemonth" type="number" min="0" max="12" value="${target?target.baseThroughMonth:6}" placeholder="예: 6"></div>
-      </div>
-      <div class="modal-sub">기초 확정 누적 실적은 "기준월까지" 이미 확정된 매출이에요. 그 다음 달부터 아래 표에서 월별로 입력해요.</div>
-      <button class="btn primary sm" onclick="saveRevenueTarget()">저장</button>
-    </div>`;
 }
 
 function renderAll(){
