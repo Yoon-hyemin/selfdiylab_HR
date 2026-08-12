@@ -3139,14 +3139,48 @@ function revenueYearOptions(){
   years.add(revenueYear);
   return [...years].sort().map(y=>`<option value="${y}" ${y===revenueYear?'selected':''}>${y}년</option>`).join('');
 }
+// 서버가 "월별 목표 합계 불일치" 에러에 {detail:{sum,remaining}}을 같이
+// 보내주는데(handlers/revenue/index.js), 그냥 err.message만 보여주면 무엇과
+// 무엇이 안 맞는지 알 수 없어서 실제 금액을 같이 보여준다.
+function revenueErrorMessage(err){
+  if(err.data && err.data.detail && err.data.detail.sum!=null && err.data.detail.remaining!=null){
+    return `${err.message} (지금 입력된 월별 목표 합계 ${formatEok(err.data.detail.sum)} / 맞춰야 하는 잔여 목표 ${formatEok(err.data.detail.remaining)})`;
+  }
+  return err.message;
+}
+function readRevenueMonthInputs(m){
+  const targetEl = document.getElementById(`f-rev-target-${m}`);
+  const actualEl = document.getElementById(`f-rev-actual-${m}`);
+  return {
+    monthlyTarget: targetEl.value.trim()===''? null : Number(targetEl.value)*1e8,
+    monthlyActual: actualEl.value.trim()===''? null : Number(actualEl.value)*1e8
+  };
+}
 async function saveRevenueMonth(year, month, confirm){
-  const targetEl = document.getElementById(`f-rev-target-${month}`);
-  const actualEl = document.getElementById(`f-rev-actual-${month}`);
-  const monthlyTarget = targetEl.value.trim()===''? null : Number(targetEl.value)*1e8;
-  const monthlyActual = actualEl.value.trim()===''? null : Number(actualEl.value)*1e8;
+  const { monthlyTarget, monthlyActual } = readRevenueMonthInputs(month);
   try{
     await apiPost('/revenue', { year, month, monthlyTarget, monthlyActual, status: confirm?'확정':'입력중' });
-  }catch(err){ return alert(err.message); }
+  }catch(err){ return alert(revenueErrorMessage(err)); }
+  await refreshDB(); renderRevenue();
+}
+// 2026-08-12: 원래는 저장 버튼이 달마다 따로 있어서, 한 달을 저장하면
+// renderRevenue()가 표 전체를 DB 최신값으로 다시 그리는 바람에 아직
+// 저장하지 않은 다른 달의 입력값이 화면에서 통째로 사라지는 문제가
+// 있었다(예: 7~12월을 전부 입력해두고 7월만 저장을 눌렀는데, 그 순간
+// 8~12월 입력칸이 DB에 저장된 값 없음으로 다시 그려져서 지워짐). 이제
+// "전체 저장" 하나로 6개 달을 순서대로 저장하고 딱 한 번만 다시 그린다 --
+// 저장 사이에는 다시 그리지 않아서 아직 처리 안 된 칸의 값이 안 지워진다.
+// 확정 상태는 이 배치 저장으로 건드리지 않는다(이미 확정된 달을 실수로
+// 되돌리지 않기 위해 기존 상태를 그대로 유지).
+async function saveAllRevenueMonths(year, months){
+  try{
+    for(const m of months){
+      const { monthlyTarget, monthlyActual } = readRevenueMonthInputs(m);
+      const existing = revenueMonthlyForYear(year).find(r=>r.month===m);
+      const status = existing ? existing.status : '입력중';
+      await apiPost('/revenue', { year, month:m, monthlyTarget, monthlyActual, status });
+    }
+  }catch(err){ alert(revenueErrorMessage(err)); }
   await refreshDB(); renderRevenue();
 }
 async function saveRevenueTarget(){
@@ -3210,10 +3244,7 @@ function renderRevenue(){
       <td>${formatEok(cumThroughHere)}</td>
       <td>${cumRateThroughHere!=null ? cumRateThroughHere.toFixed(2)+'%' : '데이터 없음'}</td>
       <td><span class="badge ${status==='확정'?'green':'amber'}">${status}</span></td>
-      ${isAdmin ? `<td style="white-space:nowrap;">
-        <button class="btn ghost sm" onclick="saveRevenueMonth(${t.year},${m},false)">저장</button>
-        <button class="btn primary sm" onclick="saveRevenueMonth(${t.year},${m},true)">확정</button>
-      </td>` : ''}
+      ${isAdmin ? `<td style="white-space:nowrap;"><button class="btn primary sm" onclick="saveRevenueMonth(${t.year},${m},true)">확정</button></td>` : ''}
     </tr>`;
   }).join('');
 
@@ -3226,6 +3257,8 @@ function renderRevenue(){
         <tbody>${rowsHtml}</tbody>
       </table>
       </div>
+      ${isAdmin ? `<div class="modal-sub" style="margin-top:10px;">여러 달을 한꺼번에 입력했으면 <b>전체 저장</b>을 한 번만 눌러주세요(달마다 따로 저장하면 아직 저장 안 한 다른 달 입력값이 지워져요). 그 달 실적이 최종 확정됐을 때만 그 달의 <b>확정</b>을 눌러주세요 -- 확정된 달만 위 누적 실적·연간 달성률에 들어가요.</div>
+      <button class="btn primary sm" style="margin-top:8px;" onclick="saveAllRevenueMonths(${t.year}, ${JSON.stringify(months)})">전체 저장</button>` : ''}
     </div>`;
 
   el.innerHTML = headerHtml + kpiHtml + tableHtml + (isAdmin ? revenueTargetFormHtml(t.year, t) : '');
