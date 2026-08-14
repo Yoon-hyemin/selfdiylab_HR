@@ -5,11 +5,18 @@
  * DELETE                   -> 200 { ok: true }   개인 목표 삭제
  *
  * 2026-08-06: handlers/okrs/[id].js와 짝을 이루는 개인 목표용 수정/삭제
- * 엔드포인트. 권한은 딱 하나 — 로그인한 본인이 만든(member_id 일치) 목표만
- * 고치거나 지울 수 있다. 다른 사람의 개인 목표는 관리자든 부서장이든 손댈 수
- * 없다(생성 때부터 본인 명의로만 만들어지는 것과 대칭).
+ * 엔드포인트. 원래 권한은 딱 하나 — 로그인한 본인이 만든(member_id 일치)
+ * 목표만 고치거나 지울 수 있었다(생성 때부터 본인 명의로만 만들어지는 것과
+ * 대칭).
  *
  * 삭제해도 하위 체크리스트(okr_tasks)는 ON DELETE CASCADE로 같이 지워진다.
+ *
+ * 2026-08-14: 부서장이 "승인 대기 개인 목표" 목록에서 팀원 목표의 제목/
+ * 가중치를 직접 고칠 수 있게 해달라는 요청으로, PATCH(수정)에만 관리자
+ * 권한을 추가했다 — DELETE(삭제)는 그대로 작성자 본인만 가능하다(요청
+ * 범위가 "수정"이었고, 남의 목표를 지울 수 있게 하는 건 더 큰 권한 확장이라
+ * 별도 요청 없이는 넓히지 않았다). handlers/my-goals/[id]/review.js의
+ * "관리자는 팀 무관, 부서장은 본인 팀만" 패턴을 그대로 따른다.
  *
  * 2026-08-06(부서목표 화면 재설계): 승인된(status='approved') 개인 목표의
  * 제목이나 가중치를 고치면 자동으로 status='pending'으로 되돌아간다 —
@@ -18,7 +25,7 @@
  * 처리하므로 재승인 트리거 대상이 아니다(의도된 분리).
  */
 import { sql } from '../_lib/db.js';
-import { requireEmployeeAuth } from '../_lib/accountAuth.js';
+import { requireAuth } from '../_lib/accountAuth.js';
 import { isEditableMonth } from '../_lib/monthWindow.js';
 
 function parseWeight(raw) {
@@ -29,8 +36,9 @@ function parseWeight(raw) {
 }
 
 export default async function handler(req, res) {
-  const memberId = await requireEmployeeAuth(req, res);
-  if (!memberId) return;
+  const account = await requireAuth(req, res);
+  if (!account) return;
+  const memberId = account.employee_id;
 
   const { id } = req.query;
 
@@ -38,7 +46,17 @@ export default async function handler(req, res) {
     const [okr] = await sql`SELECT id, level, member_id, parent_id, month, title, weight, status FROM okrs WHERE id = ${id}`;
     if (!okr) return res.status(404).json({ error: '목표를 찾을 수 없어요' });
     if (okr.level !== '개인') return res.status(400).json({ error: '개인 목표가 아니에요' });
-    if (okr.member_id !== memberId) return res.status(403).json({ error: '본인이 만든 목표만 수정/삭제할 수 있어요' });
+
+    const isOwner = okr.member_id === memberId;
+    if (!isOwner) {
+      if (req.method === 'DELETE') return res.status(403).json({ error: '본인이 만든 목표만 삭제할 수 있어요' });
+      let isManager = account.system_role === 'ADMIN';
+      if (!isManager && account.system_role === 'DEPARTMENT_HEAD') {
+        const [parent] = await sql`SELECT owner FROM okrs WHERE id = ${okr.parent_id}`;
+        isManager = !!parent && parent.owner === account.department_id;
+      }
+      if (!isManager) return res.status(403).json({ error: '본인이 만든 목표만 수정할 수 있어요' });
+    }
     if (!isEditableMonth(okr.month)) return res.status(400).json({ error: '이번 달/지난달 목표만 수정/삭제할 수 있어요' });
 
     if (req.method === 'PATCH') {

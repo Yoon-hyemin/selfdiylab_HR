@@ -507,8 +507,14 @@ function toggleOkrOvCompany(id){
 let deptPeriodType = 'monthly';
 let deptYear = null, deptMonth = null, deptQuarter = null, deptHalf = null;
 let deptHistLimit = 8;
-let deptExpandedGoals = new Set();
-let deptExpandedMembers = new Set();
+// 2026-08-14: 부서목표 탭 재설계 -- 파트별 게이지바 아코디언과 "부서
+// 인원별 목표"(사람 중심 뷰)에 쓰는 펼침 상태, 승인 대기 목록의 체크박스
+// 선택 상태. 기본값은 전부 비어있다(=전부 접힌 채로 시작) -- "겉에서는
+// 게이지바만 보이고 눌러야 상세가 열린다"는 요구사항이라, 회사 목표
+// 아코디언처럼 첫 항목을 자동으로 펼쳐두지 않는다.
+let deptExpandedParts = new Set();
+let deptExpandedRosterMembers = new Set();
+let deptPendingSelected = new Set();
 
 /* 개인목표(로그인한 나) 탭 상태 -- 2026-08-06, 부서목표 탭과 같은 월/분기/연도
    조회 패턴을 그대로 따른다. 팀/사람이 항상 me로 고정이라는 점만 다르다. */
@@ -2096,8 +2102,45 @@ function changeDeptMonth(v){ deptMonth = v; renderOkrDept(); }
 function changeDeptQuarter(v){ deptQuarter = v; renderOkrDept(); }
 function changeDeptHalf(v){ deptHalf = v; renderOkrDept(); }
 function showMoreDeptHistory(){ deptHistLimit += 8; renderOkrDept(); }
-function toggleDeptGoal(id){ deptExpandedGoals.has(id) ? deptExpandedGoals.delete(id) : deptExpandedGoals.add(id); renderOkrDept(); }
-function toggleDeptMember(key){ deptExpandedMembers.has(key) ? deptExpandedMembers.delete(key) : deptExpandedMembers.add(key); renderOkrDept(); }
+function toggleDeptPart(key){ deptExpandedParts.has(key) ? deptExpandedParts.delete(key) : deptExpandedParts.add(key); renderOkrDept(); }
+function toggleDeptRosterMember(id){ deptExpandedRosterMembers.has(id) ? deptExpandedRosterMembers.delete(id) : deptExpandedRosterMembers.add(id); renderOkrDept(); }
+function toggleDeptPendingSelect(id){ deptPendingSelected.has(id) ? deptPendingSelected.delete(id) : deptPendingSelected.add(id); renderOkrDept(); }
+async function approveSelectedPending(){
+  const ids = [...deptPendingSelected];
+  if(!ids.length) return;
+  if(!confirm(`선택한 ${ids.length}건을 모두 승인할까요?`)) return;
+  try{
+    for(const id of ids){ await apiPatch('/my-goals/'+id+'/review', {status:'approved'}); }
+  }catch(err){ alert(err.message); }
+  deptPendingSelected.clear();
+  await refreshDB(); renderOkrDept(); renderOkrPersonal(); renderOkrOverview();
+}
+// 2026-08-14: 부서장이 팀원의 개인 목표 제목/가중치를 직접 고칠 수 있게 하는
+// 모달 -- 승인/반려는 그대로 reviewMyGoal()이 처리하고, 이 모달은 내용
+// 자체를 고치는 용도라 저장 후에도 검토 상태(pending/rejected)는 안 바뀐다
+// (handlers/my-goals/[id].js는 status==='approved'였던 목표를 고칠 때만
+// pending으로 되돌린다 -- 이미 pending인 목표는 그대로 pending).
+function openDeptEditPersonalGoalModal(id){
+  const g = DB.okrs.find(o=>o.id===id);
+  if(!g) return;
+  window.__deptEditPersonalGoalId = id;
+  showModal(`
+    <h3>개인 목표 수정 (부서장)</h3>
+    <div class="field"><label>제목</label><input id="f-dept-edit-pgoal-title" value="${escapeHtml(g.title)}"></div>
+    <div class="field"><label>가중치 (%, 선택)</label><input id="f-dept-edit-pgoal-weight" type="number" min="0" max="100" value="${g.weight===null||g.weight===undefined?'':g.weight}"></div>
+    <div class="modal-sub">팀원이 제출한 목표 내용을 부서장이 직접 고칠 수 있어요. 저장해도 승인/반려 상태는 안 바뀌어요 -- 목록에서 따로 눌러주세요.</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveDeptEditPersonalGoal()">저장</button></div>
+  `);
+}
+async function saveDeptEditPersonalGoal(){
+  const id = window.__deptEditPersonalGoalId;
+  const title = document.getElementById('f-dept-edit-pgoal-title').value.trim();
+  const weight = document.getElementById('f-dept-edit-pgoal-weight').value.trim();
+  if(!title) return alert('제목을 입력해주세요');
+  try{ await apiPatch('/my-goals/'+id, {title, weight: weight===''?null:Number(weight)}); }
+  catch(err){ return alert(err.message); }
+  closeModal(); await refreshDB(); renderOkrDept(); renderOkrPersonal();
+}
 function deptYearOptions(){
   const years = new Set([Number(deptYear)]);
   DB.okrs.forEach(o=>{ if(o.month) years.add(Number(o.month.split('-')[0])); });
@@ -2161,7 +2204,6 @@ function renderOkrDept(){
   const capNote = hasParts ? '파트당 월 최대 10개' : '월 최대 10개';
   const goalCountDisplay = hasParts ? `${orgGoals.length}개` : `${orgGoals.length} / 10`;
   const approvedPersonalGoals = personalGoals.filter(g=>(g.status||'approved')==='approved');
-  const inProgressCount = approvedPersonalGoals.filter(g=>individualProgress(g)<100).length;
   const changeLabel = changeLabelFor(deptPeriodType);
 
   // 부서 가중 성과율 -- 이 팀의 부서 목표끼리만(다른 팀과 섞지 않음) 가중치
@@ -2197,21 +2239,33 @@ function renderOkrDept(){
   const pendingGoals = DB.okrs.filter(o=>o.level==='개인' && (o.status==='pending'||o.status==='rejected') && DB.okrs.find(x=>x.id===o.parent && x.owner===myTeam));
   const pendingGoalsCount = pendingGoals.length;
 
+  // 2026-08-14: 인사이트를 5개 카드에서 4개로 줄였다("개인 목표 수"/"진행 중인
+  // 개인 목표" 삭제, "당월 완료율" 신규 추가) -- 실사용 피드백으로 화면이
+  // 너무 복잡해 보인다는 지적 때문. "당월 완료율"은 이번 조회 기간의 부서
+  // 목표 중 100% 달성한 목표의 비율이다(개인 목표 완료율이 아니라 부서
+  // 목표 기준 -- 이 카드들이 전부 "부서 목표" 스코프라 맞춰뒀다).
+  const completedGoalsCount = orgGoals.filter(g=>orgProgress(g)===100).length;
+  const completionRate = orgGoals.length ? Math.round(completedGoalsCount/orgGoals.length*100) : null;
   const insightHtml = `
     <div class="section">
-      <div class="section-head"><h3>${escapeHtml(myTeam)} 기준 인사이트 (우리 팀 데이터)</h3></div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;" class="insight-grid5">
+      <div class="section-head"><h3>${escapeHtml(myTeam)} 기준 인사이트</h3></div>
+      <div class="grid4">
         <div class="kpi"><div class="label">부서 목표 수</div><div class="value">${goalCountDisplay}</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">${capNote}</div></div>
-        <div class="kpi"><div class="label">개인 목표 수</div><div class="value">${approvedPersonalGoals.length}개</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">승인된 목표 기준${pendingGoalsCount?` · 승인 대기 ${pendingGoalsCount}건`:''}</div></div>
         <div class="kpi"><div class="label">부서 가중 성과율</div><div class="value">${deptScore===null?'데이터 없음':deptScore+'%'}</div></div>
         <div class="kpi"><div class="label">${changeLabel}</div>${momHtml}</div>
-        <div class="kpi"><div class="label">진행 중인 개인 목표</div><div class="value">${inProgressCount}개</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">전체 ${approvedPersonalGoals.length}개 중</div></div>
+        <div class="kpi"><div class="label">당월 완료율</div><div class="value">${completionRate===null?'데이터 없음':completionRate+'%'}</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">100% 달성 ${completedGoalsCount}/${orgGoals.length}개</div></div>
       </div>
     </div>`;
 
+  // 2026-08-14: 체크박스로 여러 건을 골라 한 번에 승인할 수 있게 하고,
+  // "수정" 버튼으로 부서장이 팀원 목표의 제목/가중치를 직접 고칠 수 있게
+  // 했다(handlers/my-goals/[id].js 권한 확장, 삭제는 여전히 작성자 본인만).
   const reviewSection = canManage ? `
     <div class="section">
-      <div class="section-head"><div><h3>승인 대기 개인 목표</h3><div class="desc">팀원이 제출한 개인 목표를 승인하거나 반려하세요 (조회 기간과 무관하게 전부 표시)</div></div></div>
+      <div class="section-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+        <div><h3>승인 대기 개인 목표</h3><div class="desc">팀원이 제출한 개인 목표를 승인하거나 반려하세요 (조회 기간과 무관하게 전부 표시)</div></div>
+        ${deptPendingSelected.size ? `<button class="btn primary sm" onclick="approveSelectedPending()">선택 승인 (${deptPendingSelected.size}건)</button>` : ''}
+      </div>
       ${pendingGoals.length ? pendingGoals.map(g=>{
         const owner = DB.roster.find(m=>m.id===g.member);
         const status = g.status||'approved';
@@ -2220,8 +2274,10 @@ function renderOkrDept(){
           const d = new Date(g.createdAt);
           if(!isNaN(d)) submittedLabel = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} 제출`;
         }
+        const checked = deptPendingSelected.has(g.id);
         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);">
           <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            <input type="checkbox" style="width:16px;height:16px;flex-shrink:0;" ${checked?'checked':''} onchange="toggleDeptPendingSelect('${g.id}')">
             <div class="avatar-circle" style="width:32px;height:32px;font-size:12px;flex-shrink:0;">${initials(owner?owner.name:'?')}</div>
             <div style="min-width:0;">
               <div style="font-size:13px;font-weight:700;">${escapeHtml(g.title)} ${myGoalStatusBadge(status)}</div>
@@ -2229,6 +2285,7 @@ function renderOkrDept(){
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn ghost sm" onclick="openDeptEditPersonalGoalModal('${g.id}')">수정</button>
             <button class="btn primary sm" onclick="reviewMyGoal('${g.id}','approved')">승인</button>
             <button class="btn ghost sm" style="color:var(--red);" onclick="reviewMyGoal('${g.id}','rejected')">반려</button>
           </div>
@@ -2236,55 +2293,22 @@ function renderOkrDept(){
       }).join('') : '<div class="empty">승인 대기 중인 개인 목표가 없어요</div>'}
     </div>` : '';
 
-  const goalCardsHtml = orgGoals.length ? `
-    <div style="margin-bottom:10px;">${weightSumBadgeHtml(deptGroup)}</div>
-    ${orgGoals.map((g,idx)=>{
+  // 2026-08-14: 부서 목표를 파트별로 묶어서 각 파트를 게이지바 하나로 접어
+  // 두고, 눌러야 그 파트의 목표 카드들이 펼쳐지게 바꿨다("겉에서는 게이지바만"
+  // 요구사항). 각 목표 카드 안에 있던 "개인 목표 보기"(사람별 펼치기)는
+  // 아래 "부서 인원별 목표" 섹션으로 통째로 옮겨서 중복을 없앴다 -- 그
+  // 섹션이 사람 중심으로 같은 정보를 보여준다.
+  function renderDeptGoalCard(g, idx){
     const p = orgProgress(g);
     const contribution = g.weight!=null ? Math.round(g.weight/100*p) : null;
     const parentCompany = DB.okrs.find(o=>o.id===g.parent);
     const children = approvedPersonalGoals.filter(c=>c.parent===g.id);
-    // 2026-08-11: 부서 목표 자체엔 회사 목표처럼 "직접 입력하는 숫자 KPI"
-    // 개념이 없어서(unit/target이 항상 '%'/100으로 고정 생성됨), "부서 목표
-    // 자체 KPI"와 "연결 목표 실행 진척도"가 서로 다른 데이터가 아니다 --
-    // 다만 "연결된 개인 목표를 개인 목표 자신의 가중치로 가중 평균"한 값은
-    // 기존 orgProgress()(단순 평균)와 별개로 새로 보여줄 수 있어서 추가한다.
     const linkedExec = weightedGroupScore(children, individualProgress);
-    const expanded = deptExpandedGoals.has(g.id);
-    const byMember = {};
-    children.forEach(c=>{ (byMember[c.member] = byMember[c.member] || []).push(c); });
-    const memberIds = Object.keys(byMember);
-    const memberSectionHtml = memberIds.length ? memberIds.map(mid=>{
-      const m = DB.roster.find(x=>x.id===mid);
-      const mgoals = byMember[mid];
-      const mGroup = weightedGroupScore(mgoals, individualProgress);
-      const mkey = g.id+'::'+mid;
-      const mExpanded = deptExpandedMembers.has(mkey);
-      return `
-        <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px;">
-          <button type="button" aria-expanded="${mExpanded}" aria-controls="dept-member-${mkey}" onclick="toggleDeptMember('${mkey}')" style="display:flex;align-items:center;gap:10px;width:100%;background:none;text-align:left;padding:4px 0;">
-            <div class="avatar-circle" style="width:26px;height:26px;font-size:11px;">${initials(m?m.name:'?')}</div>
-            <span style="flex:1;font-size:12.5px;font-weight:700;">${escapeHtml(m?m.name:'(알 수 없음)')}${m&&m.position?' · '+escapeHtml(m.position):''} · 승인된 개인 목표 ${mgoals.length}개 · 개인 가중 성과율 ${mGroup.score===null?'미설정':mGroup.score+'%'}</span>
-            <span style="font-size:11px;color:var(--sub);">${mExpanded?'▲':'▼'}</span>
-          </button>
-          ${mExpanded ? `<div id="dept-member-${mkey}" style="padding-left:36px;display:flex;flex-direction:column;gap:8px;margin-top:6px;">
-            ${mgoals.map(c=>{
-              const cp = individualProgress(c);
-              const cContribution = c.weight!=null ? Math.round(c.weight/100*cp) : null;
-              return `
-              <div>
-                <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;gap:8px;"><span>${escapeHtml(c.title)} ${myGoalStatusBadge(c.status||'approved')}</span><span style="color:${progressTextColor(cp)}">${cp}%</span></div>
-                <div style="font-size:11px;color:var(--sub);margin:2px 0 4px;">가중치 ${c.weight!=null?c.weight+'%':'미설정'} · 기여율 ${cContribution!=null?cContribution+'%':'-'}</div>
-                <div class="bar" role="progressbar" aria-valuenow="${cp}" aria-valuemin="0" aria-valuemax="100" aria-label="달성률 ${cp}%"><i style="width:${cp}%;${progressBarStyle(cp)}"></i></div>
-              </div>`; }).join('')}
-          </div>` : ''}
-        </div>`;
-    }).join('') : '<div class="empty" style="padding:10px 0;">이 부서 목표에 연결된 승인된 개인 목표가 없어요</div>';
-
     return `
       <div style="border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
           <div style="flex:1;min-width:0;">
-            <div style="font-size:11px;color:var(--sub);font-weight:800;margin-bottom:2px;">#${idx+1}${g.part?` · ${escapeHtml(g.part)}`:''}</div>
+            <div style="font-size:11px;color:var(--sub);font-weight:800;margin-bottom:2px;">#${idx+1}</div>
             <div style="font-size:14px;font-weight:800;">${escapeHtml(g.title)}</div>
             <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${parentCompany?`연결 기업 목표: ${escapeHtml(parentCompany.title)}` : `<span class="badge amber">상위 목표 미연결</span>${canManage?` <button class="btn ghost sm" style="padding:1px 8px;" onclick="openReconnectParentModal('${g.id}','조직')">연결하기</button>`:''}`} · ${escapeHtml(g.month)} · ${okrStatusBadge(p)}</div>
             <div style="font-size:11px;color:var(--sub);margin-top:4px;">연결 개인목표 가중 실행 진척도: ${linkedExec.score===null?'데이터 없음':linkedExec.score+'%'}</div>
@@ -2305,12 +2329,83 @@ function renderOkrDept(){
           <div><div style="color:var(--sub);margin-bottom:2px;">가중치</div><div style="font-weight:800;">${g.weight!=null?g.weight+'%':'미설정'}</div></div>
           <div><div style="color:var(--sub);margin-bottom:2px;">기여율</div><div style="font-weight:800;">${contribution!=null?contribution+'%':'-'}</div></div>
         </div>
-        <div class="bar" style="margin-bottom:10px;" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100" aria-label="달성률 ${p}%"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
-        <button type="button" aria-expanded="${expanded}" aria-controls="dept-goal-${g.id}" onclick="toggleDeptGoal('${g.id}')" class="btn ghost sm">개인 목표 ${expanded?'숨기기':'보기'} (${memberIds.length}명)</button>
-        ${expanded ? `<div id="dept-goal-${g.id}" style="margin-top:10px;">${memberSectionHtml}</div>` : ''}
+        <div class="bar" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100" aria-label="달성률 ${p}%"><i style="width:${p}%;${progressBarStyle(p)}"></i></div>
       </div>`;
-  }).join('')}
+  }
+
+  // 파트 구분이 있는 팀은 파트별로 묶고, 없는 팀은 팀 전체를 그룹 하나로
+  // 취급한다(그래도 아코디언 형태는 유지 -- 게이지바만 보이다가 눌러야
+  // 목표 목록이 열림).
+  const deptGoalGroups = hasParts
+    ? Object.entries(orgGoals.reduce((acc,g)=>{ const k=g.part||'미분류'; (acc[k]=acc[k]||[]).push(g); return acc; }, {}))
+        .map(([label,goals])=>({ key:label, label, goals }))
+    : [{ key:'__all__', label: myTeam, goals: orgGoals }];
+
+  const goalCardsHtml = orgGoals.length ? `
+    <div style="margin-bottom:10px;">${weightSumBadgeHtml(deptGroup)}</div>
+    ${deptGoalGroups.map(group=>{
+      const group_score = weightedGroupScore(group.goals, orgProgress);
+      const pct = group_score.score===null?0:group_score.score;
+      const partKey = 'part::'+group.key;
+      const expanded = deptExpandedParts.has(partKey);
+      return `
+      <div style="border:1px solid var(--border);border-radius:14px;padding:4px 14px;margin-bottom:10px;">
+        <button type="button" aria-expanded="${expanded}" aria-controls="dept-part-${partKey}" onclick="toggleDeptPart('${partKey}')" style="display:flex;align-items:center;gap:14px;width:100%;background:none;text-align:left;padding:12px 0;">
+          <span style="font-weight:800;font-size:13.5px;width:84px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(group.label)}</span>
+          <span class="bar" style="flex:1;"><i style="width:${pct}%;${progressBarStyle(pct)}"></i></span>
+          <span style="font-weight:900;font-size:13.5px;width:52px;text-align:right;flex-shrink:0;color:${group_score.score===null?'var(--sub)':progressTextColor(pct)};">${group_score.score===null?'-':pct+'%'}</span>
+          <span style="font-size:11px;color:var(--sub);flex-shrink:0;">${expanded?'▲':'▼'}</span>
+        </button>
+        ${expanded ? `<div id="dept-part-${partKey}" style="padding-bottom:8px;">${group.goals.map((g,gi)=>renderDeptGoalCard(g,gi)).join('')}</div>` : ''}
+      </div>`;
+    }).join('')}
   ` : `<div class="empty">${deptPeriodLabel(periodKey)}에 등록된 부서 목표가 없어요${canCreate ? ' · 위에서 추가해보세요' : ''}</div>`;
+
+  // 2026-08-14: "부서 인원별 목표" -- 사람 중심으로 다시 보는 새 섹션. 목표가
+  // 하나도 없는 팀원도 이름은 그대로 나오게(달성률은 "데이터 없음") 팀
+  // 전체 로스터 기준으로 만든다. 각 사람의 목표 목록은 가중치 높은 게
+  // 위로 오도록 정렬한다.
+  const teamRoster = (DB.roster||[]).filter(m=>m.team===myTeam);
+  const memberSummaries = teamRoster.map(m=>{
+    const mgoals = approvedPersonalGoals.filter(g=>g.member===m.id);
+    const mGroup = weightedGroupScore(mgoals, individualProgress);
+    return { member:m, goals:mgoals, score:mGroup.score };
+  }).sort((a,b)=>{
+    const av = a.score===null?-1:a.score, bv = b.score===null?-1:b.score;
+    return bv-av || a.member.name.localeCompare(b.member.name);
+  });
+  const memberRosterHtml = `
+    <div class="section">
+      <div class="section-head"><div><h3>부서 인원별 목표</h3><div class="desc">${escapeHtml(deptPeriodLabel(periodKey))} 기준 · ${escapeHtml(myTeam)} · 이름을 누르면 목표별 상세가 열려요</div></div></div>
+      ${memberSummaries.length ? memberSummaries.map(({member:m, goals:mgoals, score})=>{
+        const mkey = m.id;
+        const mExpanded = deptExpandedRosterMembers.has(mkey);
+        const pct = score===null?0:score;
+        const sortedGoals = [...mgoals].sort((a,b)=>{
+          const aw = a.weight==null?-1:a.weight, bw = b.weight==null?-1:b.weight;
+          return bw-aw;
+        });
+        return `
+        <div style="border-top:1px solid var(--border);">
+          <button type="button" aria-expanded="${mExpanded}" aria-controls="dept-roster-${mkey}" onclick="toggleDeptRosterMember('${mkey}')" style="display:flex;align-items:center;gap:12px;width:100%;background:none;text-align:left;padding:11px 0;">
+            <div class="avatar-circle" style="width:28px;height:28px;font-size:11px;flex-shrink:0;">${initials(m.name)}</div>
+            <span style="font-weight:700;font-size:13px;width:90px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.name)}</span>
+            <span class="bar" style="flex:1;"><i style="width:${pct}%;${progressBarStyle(pct)}"></i></span>
+            <span style="font-weight:800;font-size:12.5px;width:56px;text-align:right;flex-shrink:0;color:${score===null?'var(--sub)':progressTextColor(pct)};">${score===null?'데이터 없음':pct+'%'}</span>
+            <span style="font-size:11px;color:var(--sub);flex-shrink:0;">${mExpanded?'▲':'▼'}</span>
+          </button>
+          ${mExpanded ? `<div id="dept-roster-${mkey}" style="padding:0 0 12px 40px;">${sortedGoals.length ? sortedGoals.map(c=>{
+            const cp = individualProgress(c);
+            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;">
+              <span style="width:30px;height:30px;border-radius:50%;background:#fff;border:1px solid var(--border);color:var(--sub);font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${c.weight!=null?c.weight+'%':'-'}</span>
+              <span style="flex:1;min-width:0;font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(c.title)} ${myGoalStatusBadge(c.status||'approved')}</span>
+              <span style="width:90px;flex-shrink:0;"><div class="bar"><i style="width:${cp}%;${progressBarStyle(cp)}"></i></div></span>
+              <span style="width:40px;text-align:right;font-weight:800;font-size:11.5px;flex-shrink:0;color:${progressTextColor(cp)};">${cp}%</span>
+            </div>`;
+          }).join('') : '<div class="empty" style="padding:8px 0;">이번 기간에 승인된 개인 목표가 없어요</div>'}</div>` : ''}
+        </div>`;
+      }).join('') : '<div class="empty">등록된 팀원이 없어요</div>'}
+    </div>`;
 
   const histPeriods = deptHistoryPeriods(myTeam);
   const histShown = histPeriods.slice(0, deptHistLimit);
@@ -2380,11 +2475,12 @@ function renderOkrDept(){
     ${periodSelectorHtml}
     <div style="font-size:12px;font-weight:800;color:var(--sub);margin:-10px 0 14px;">${escapeHtml(myTeam)}</div>
     ${insightHtml}
-    ${reviewSection}
     <div class="section">
       <div class="section-head"><div><h3>부서 목표</h3><div class="desc">${escapeHtml(deptPeriodLabel(periodKey))} 기준 · ${escapeHtml(myTeam)}</div></div></div>
       ${goalCardsHtml}
     </div>
+    ${reviewSection}
+    ${memberRosterHtml}
     <div class="section">
       <div class="section-head"><div><h3>우리 부서 이력</h3><div class="desc">${deptPeriodType==='monthly'?'월별':deptPeriodType==='quarterly'?'분기별':'연도별'} · ${escapeHtml(myTeam)}</div></div></div>
       ${historyTableHtml}
