@@ -3190,7 +3190,7 @@ function renderAccounts(){
       <td>${escapeHtml(a.email)}</td>
       <td><select onchange="changeAccountRole('${a.id}', this.value)">${Object.keys(ROLE_OPTION_LABELS).map(r=>`<option value="${r}" ${a.systemRole===r?'selected':''}>${ROLE_OPTION_LABELS[r]}</option>`).join('')}</select></td>
       <td style="text-align:center;">${a.systemRole==='ADMIN'
-        ? '<input type="checkbox" checked disabled title="관리자는 항상 접근 가능해요">'
+        ? '<span class="badge grey" title="관리자는 이 값과 무관하게 항상 접근 가능해요">항상 가능</span>'
         : `<input type="checkbox" ${a.canUseTalentSearch?'checked':''} onchange="toggleTalentSearchAccess('${a.id}', this.checked)">`}</td>
       <td>${statusBadge}${a.mustChangePassword?' <span class="badge grey">비번변경대기</span>':''}</td>
       <td>${a.lastLoginAt ? new Date(a.lastLoginAt).toLocaleString('ko-KR') : '-'}</td>

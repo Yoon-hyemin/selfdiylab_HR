@@ -7,16 +7,20 @@
 -- 마이그레이션으로 추가한다.
 --
 -- can_use_talent_search는 accounts.system_role(ADMIN/DEPARTMENT_HEAD/EMPLOYEE)과
--- 별개 축이다. ADMIN은 이 값과 무관하게 항상 접근 가능(핸들러에서 검사),
--- 그 외 역할은 이 플래그가 true일 때만 "인재검색" 메뉴가 보인다 --
+-- 별개 축이다. ADMIN은 이 값과 무관하게 항상 접근 가능하다 -- 단, 지금은
+-- 프론트엔드(index.html의 applySidebarForRole())에서만 이 값을 검사해
+-- 메뉴 노출을 결정하고, 서버 API는 아직 이 값을 검사하지 않는다. Phase 1A는
+-- 실제 후보자 데이터가 전혀 없는 화면 골격뿐이라 당장은 위험이 없지만,
+-- Phase 1B 이후 실제 데이터를 다루는 API가 생기면 그 API들은 반드시 서버
+-- 에서도 이 값을 검사해야 한다(CLAUDE.md "인재검색 자동화" 절 참고).
 -- "승인된 채용담당자"가 꼭 부서장/관리자일 필요는 없다는 요구사항 때문에
 -- system_role 값을 늘리는 대신 별도 boolean으로 뺐다.
-ALTER TABLE accounts ADD COLUMN can_use_talent_search boolean NOT NULL DEFAULT false;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS can_use_talent_search boolean NOT NULL DEFAULT false;
 
 -- 검색 프로젝트. 이번 Phase에서는 행을 만드는 화면이 없어(Phase 1C에서
 -- 추가) 테이블은 비어 있는 채로 시작한다 -- 스키마를 먼저 확정해두면 이후
 -- Phase에서 이 테이블에 대한 ALTER 없이 바로 API를 붙일 수 있다.
-CREATE TABLE talent_search_projects (
+CREATE TABLE IF NOT EXISTS talent_search_projects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
   role_title text NOT NULL,

@@ -9,6 +9,12 @@
  * 값을 켜고 끄는 것만 담당하고, 마지막 ADMIN 보호 같은 특수 규칙은
  * 없다(이 플래그를 끈다고 로그인 자체가 막히거나 다른 권한이 줄어들지
  * 않으므로 accounts/[id]/status.js 같은 안전장치가 필요 없다).
+ * 다른 accounts/[id] 계열 핸들러(예: status.js)는 권한이 바뀔 때
+ * session_version을 올려 기존 세션을 강제로 갱신시키지만, 여기서는
+ * 그러지 않는다 -- 지금은 이 플래그 뒤에 아무 것도 없어서(서버 API가
+ * 이 값을 검사하지 않음, 위 다른 파일들의 주석 참고) 즉시 반영이 안 돼도
+ * 실질적 위험이 없기 때문이다. 서버 사이드 검사가 생기면(Phase 1B) 이
+ * 선택을 다시 검토할 것.
  */
 import { sql } from '../../_lib/db.js';
 import { requireRole } from '../../_lib/accountAuth.js';
