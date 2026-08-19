@@ -234,6 +234,7 @@
     <button class="nav-item" data-view="hrdash">📊 인사 대시보드</button>
     <button class="nav-item" data-view="members">👥 구성원</button>
     <button class="nav-item" data-view="recruit">📥 채용</button>
+    <button class="nav-item" data-view="talentsearch">🔍 인재검색</button>
     <div class="nav-sep">성과관리</div>
     <button class="nav-item active" data-view="perfdash">📊 성과 대시보드</button>
     <button class="nav-item" data-view="okr">🎯 목표</button>
@@ -423,6 +424,15 @@
       </div>
     </div>
 
+    <!-- TALENT SEARCH (인재검색, ADMIN 또는 canUseTalentSearch 계정) -->
+    <div class="view" id="view-talentsearch">
+      <div class="page-head"><div><h1>인재검색</h1><p>여러 채용 플랫폼의 인재풀을 검색하고 평가해서 추천 후보를 정리해요</p></div></div>
+      <div class="section">
+        <div class="section-head"><div><h3>검색 프로젝트</h3><div class="desc">아직 화면 골격만 만든 단계라, 실제로 검색 프로젝트를 만드는 기능은 다음 단계에서 추가돼요</div></div></div>
+        <div id="talentsearch-projects"></div>
+      </div>
+    </div>
+
     <!-- DATA -->
     <div class="view" id="view-data">
       <div class="page-head"><div><h1>데이터 관리</h1><p>이 앱의 모든 데이터는 Neon 데이터베이스에 저장되고 팀원 모두에게 공유돼요.</p></div></div>
@@ -584,8 +594,11 @@ async function enterApp(){
 
 function applySidebarForRole(){
   const allowed = ROLE_VIEWS[me.systemRole] || [];
+  const canSeeTalentSearch = me.systemRole==='ADMIN' || !!me.canUseTalentSearch;
   document.querySelectorAll('.nav-item').forEach(btn=>{
-    btn.style.display = allowed.includes(btn.dataset.view) ? '' : 'none';
+    const view = btn.dataset.view;
+    const visible = view==='talentsearch' ? canSeeTalentSearch : allowed.includes(view);
+    btn.style.display = visible ? '' : 'none';
   });
   document.querySelectorAll('.nav-sep').forEach(sep=>{
     let sib = sep.nextElementSibling, anyVisible = false;
@@ -3033,6 +3046,38 @@ function renderHrDash(){
   renderTimelineInto('hrdash-timeline', events, '아직 채용 기록이 없어요');
 }
 
+/* ---------- TALENT SEARCH (인재검색) ---------- */
+function renderTalentSearchDashboard(){
+  const el = document.getElementById('talentsearch-projects');
+  if(!el) return;
+  const sample = [
+    {title:'이커머스 리빙상품 기획MD', sub:'대리급 · 정규직 · 서울', today:0, todayCap:50, cumulative:0, target:50},
+    {title:'콘텐츠팀 영상PD', sub:'경력 3~5년 · 정규직 · 서울', today:0, todayCap:50, cumulative:0, target:30}
+  ];
+  el.innerHTML = `
+    <div style="margin-bottom:14px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--sub);">
+      아직 실제 검색 프로젝트를 만드는 기능은 없어요 — 화면이 완성되면 이렇게 카드로 보이게 될 거예요. 아래 2개는 예시예요.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
+      ${sample.map(p=>`
+        <div class="section" style="margin-bottom:0;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+            <div>
+              <div style="font-size:15px;font-weight:800;">${escapeHtml(p.title)}</div>
+              <div style="font-size:12px;color:var(--sub);margin-top:2px;">${escapeHtml(p.sub)}</div>
+            </div>
+            <span class="badge grey">예시</span>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <div class="kpi" style="flex:1;margin-bottom:0;"><div class="label">오늘 추천</div><div class="value">${p.today} / ${p.todayCap}</div></div>
+            <div class="kpi" style="flex:1;margin-bottom:0;"><div class="label">누적 추천</div><div class="value">${p.cumulative} / ${p.target}</div></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 /* ---------- RECRUIT RENDER ---------- */
 function renderJobs(){
   document.getElementById('jobs-table').innerHTML = DB.jobs.map(j=>{
@@ -3539,6 +3584,7 @@ function renderAll(){
   renderOkrDept();
   renderOkrPersonal();
   renderRevenue();
+  renderTalentSearchDashboard();
   renderMyPage();
 }
 // 2026-08-11: 예전엔 로그인 여부와 무관하게 페이지 로드 즉시 한 번 그려서
