@@ -212,6 +212,22 @@ export async function requireRole(req, res, allowedRoles) {
   return account;
 }
 
+// 인재검색 기능 전용 권한 검사. requireRole(['ADMIN'])과 달리 "ADMIN이거나
+// can_use_talent_search 플래그가 켜진 사람" OR 조건이라 requireRole(배열에
+// 값이 있는지만 봄)로는 표현이 안 돼서 별도 함수로 뺀다. Phase 1B-1부터
+// 인재검색 관련 모든 API는 requireRole 대신 이 함수를 쓴다 -- Phase 1A
+// 시점엔 실제 데이터가 없어 프론트엔드 숨김만으로 충분했지만, 이번이
+// 실제 데이터를 내려주는 첫 API라 서버 검사가 필요해졌다.
+export async function requireTalentSearchAccess(req, res) {
+  const account = await requireAuth(req, res);
+  if (!account) return null;
+  if (account.system_role !== 'ADMIN' && !account.can_use_talent_search) {
+    res.status(403).json({ error: '인재검색 권한이 없어요' });
+    return null;
+  }
+  return account;
+}
+
 // handlers/_lib/memberSession.js의 requireMemberAuth(memberId를 직접
 // 반환)와 같은 모양으로 맞춘 어댑터. 개인 목표/체크리스트/원온원처럼
 // "역할과 무관하게 로그인한 본인이 누구인지"만 필요한 핸들러는 이 함수
