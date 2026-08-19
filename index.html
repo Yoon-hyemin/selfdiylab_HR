@@ -403,10 +403,11 @@
       <div class="section">
         <div class="section-head"><div><h3>계정 목록</h3><div class="desc">계정이 없는 구성원은 아래에서 새로 만들 수 있어요</div></div></div>
         <div class="modal-sub" style="margin-bottom:10px;"><b>부서 목표 관리 권한(부서장)</b> — 권한이 부여된 사용자는 본인 소속 부서의 목표를 생성하고 관리할 수 있습니다. 팀장·부장·파트장 같은 직책이 있어도 이 권한이 없으면 부서 목표를 등록할 수 없어요 — 직책과 이 권한은 서로 다른 값이에요. <b>관리자</b>는 모든 부서의 목표를 조회·관리할 수 있고, <b>팀원</b>은 조회만 가능해요.</div>
+        <div class="modal-sub" style="margin-bottom:10px;"><b>인재검색 권한</b> — 체크된 사람은 사이드바에 "인재검색" 메뉴가 보여요. 채용 업무를 맡은 팀원에게 개별로 켜주면 되고, 부서장·관리자 권한과는 무관해요. <b>관리자</b>는 이 체크와 무관하게 항상 볼 수 있어요.</div>
         <button class="btn primary sm" style="margin-bottom:14px;" onclick="openCreateAccountModal()">+ 계정 만들기</button>
         <div style="overflow-x:auto;">
           <table>
-            <thead><tr><th>이름</th><th>부서</th><th>이메일</th><th>권한</th><th>상태</th><th>최근 로그인</th><th></th></tr></thead>
+            <thead><tr><th>이름</th><th>부서</th><th>이메일</th><th>권한</th><th>인재검색</th><th>상태</th><th>최근 로그인</th><th></th></tr></thead>
             <tbody id="accounts-table"></tbody>
           </table>
         </div>
@@ -3120,7 +3121,8 @@ const AUDIT_ACTION_LABELS = {
   LOGIN_SUCCESS:'로그인 성공', LOGIN_FAILURE:'로그인 실패',
   PASSWORD_CHANGE_SELF:'비밀번호 변경(본인)', PASSWORD_RESET_BY_ADMIN:'비밀번호 초기화(관리자)',
   ACCOUNT_CREATED:'계정 생성', ROLE_CHANGE:'권한 변경', DEPARTMENT_CHANGE:'부서 변경',
-  ACCOUNT_UNLOCKED:'잠금 해제', ACCOUNT_DEACTIVATED:'비활성화', ACCOUNT_REACTIVATED:'재활성화'
+  ACCOUNT_UNLOCKED:'잠금 해제', ACCOUNT_DEACTIVATED:'비활성화', ACCOUNT_REACTIVATED:'재활성화',
+  TALENT_SEARCH_ACCESS_CHANGE:'인재검색 권한 변경'
 };
 const ROLE_OPTION_LABELS = { ADMIN:'관리자', DEPARTMENT_HEAD:'부서장', EMPLOYEE:'팀원' };
 
@@ -3142,6 +3144,9 @@ function renderAccounts(){
       <td>${escapeHtml(a.employeeTeam||'-')}</td>
       <td>${escapeHtml(a.email)}</td>
       <td><select onchange="changeAccountRole('${a.id}', this.value)">${Object.keys(ROLE_OPTION_LABELS).map(r=>`<option value="${r}" ${a.systemRole===r?'selected':''}>${ROLE_OPTION_LABELS[r]}</option>`).join('')}</select></td>
+      <td style="text-align:center;">${a.systemRole==='ADMIN'
+        ? '<input type="checkbox" checked disabled title="관리자는 항상 접근 가능해요">'
+        : `<input type="checkbox" ${a.canUseTalentSearch?'checked':''} onchange="toggleTalentSearchAccess('${a.id}', this.checked)">`}</td>
       <td>${statusBadge}${a.mustChangePassword?' <span class="badge grey">비번변경대기</span>':''}</td>
       <td>${a.lastLoginAt ? new Date(a.lastLoginAt).toLocaleString('ko-KR') : '-'}</td>
       <td style="white-space:nowrap;">
@@ -3150,7 +3155,7 @@ function renderAccounts(){
         <button class="btn ghost sm" onclick='openToggleStatusConfirm(${JSON.stringify(a.id)},${JSON.stringify(a.employeeName)},${JSON.stringify(a.accountStatus)})'>${a.accountStatus==='ACTIVE'?'비활성화':'재활성화'}</button>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="7" class="empty">생성된 계정이 없어요</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="empty">생성된 계정이 없어요</td></tr>';
 
   const auditTbody = document.getElementById('audit-log-table');
   if(auditTbody){
@@ -3244,6 +3249,11 @@ async function doToggleStatus(id, status){
 }
 async function changeAccountRole(id, systemRole){
   try{ await apiPatch('/accounts/'+id, {systemRole}); }
+  catch(err){ alert(err.message); }
+  await loadAndRenderAccounts();
+}
+async function toggleTalentSearchAccess(id, checked){
+  try{ await apiPatch('/accounts/'+id+'/talent-search-access', {canUseTalentSearch: checked}); }
   catch(err){ alert(err.message); }
   await loadAndRenderAccounts();
 }
