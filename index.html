@@ -3068,9 +3068,8 @@ async function loadAndRenderTalentSearchPolicy(){
   const el = document.getElementById('talentsearch-policy-body');
   if(!el) return;
   el.innerHTML = '불러오는 중...';
-  let policy;
-  try{ policy = await apiGet('/talent-search-policy'); }
-  catch(err){ el.innerHTML = `<div class="section">${escapeHtml(err.message)}</div>`; return; }
+  try{
+  const policy = await apiGet('/talent-search-policy');
 
   const l1 = policy.level1Rules;
   const commonSum = policy.commonFitWeights.reduce((s,w)=>s+w.points,0);
@@ -3116,10 +3115,11 @@ async function loadAndRenderTalentSearchPolicy(){
         <div class="kpi"><div class="label">총점 기준</div><div class="value">${policy.thresholds.totalScoreMin}점 이상</div></div>
         <div class="kpi"><div class="label">직무점수 기준</div><div class="value">${policy.thresholds.jobFitScoreMin}점 이상</div></div>
         <div class="kpi"><div class="label">의미있는 근거</div><div class="value">${policy.thresholds.minMeaningfulEvidenceCount}개 이상</div></div>
-        <div class="kpi"><div class="label">하루 추천 상한</div><div class="value">${policy.dailyRecommendCapDefault}명</div></div>
+        <div class="kpi"><div class="label">하루 추천 상한</div><div class="value">${policy.dailyRecommendCapDefault}명</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">절대 상한 ${policy.dailyRecommendCapAbsoluteMax}명</div></div>
       </div>
     </div>
   `;
+  }catch(err){ el.innerHTML = `<div class="section">${escapeHtml(err.message)}</div>`; }
 }
 
 function renderTalentSearchDashboard(){

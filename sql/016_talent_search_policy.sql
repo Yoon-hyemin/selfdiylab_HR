@@ -8,7 +8,7 @@
 -- status는 okrs.status와 같은 컨벤션으로 DB CHECK 제약 없이 앱 레벨에서만
 -- 관리한다(draft/active/superseded). 이번엔 시드 행 하나만 바로 active로
 -- 넣는다 -- 초안/적용 전환 로직은 1B-4에서 추가한다.
-CREATE TABLE talent_search_policy_versions (
+CREATE TABLE IF NOT EXISTS talent_search_policy_versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   version_no integer NOT NULL,
   level1_rules jsonb NOT NULL,
@@ -58,4 +58,4 @@ INSERT INTO talent_search_policy_versions (
   '{"totalScoreMin":70,"jobFitScoreMin":42,"minMeaningfulEvidenceCount":2}'::jsonb,
   '["totalScoreDesc","jobFitScoreDesc","evidenceCoverageDesc","resumeUpdatedAtDesc","candidateIdAsc"]'::jsonb,
   50, 50, 12, 'active', '초기값 (원본 명세서 기준값 그대로 시드)', now()
-);
+) ON CONFLICT (version_no) DO NOTHING;
