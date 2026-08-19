@@ -3187,7 +3187,7 @@ function renderCommonFitRows(){
   const el = document.getElementById('commonfit-rows');
   if(!el) return;
   el.innerHTML = commonFitDraft.map((w,i)=>`
-    <div class="field" style="display:flex;gap:8px;align-items:center;">
+    <div class="field" style="display:flex;flex-direction:row;gap:8px;align-items:center;">
       <input type="text" value="${escapeHtml(w.label)}" placeholder="항목 이름" style="flex:2;" onchange="commonFitDraft[${i}].label=this.value">
       <input type="number" value="${w.points}" placeholder="배점" style="flex:1;" onchange="commonFitDraft[${i}].points=Number(this.value); renderCommonFitSum();">
       <button class="btn ghost sm" onclick="removeCommonFitRow(${i})">삭제</button>
