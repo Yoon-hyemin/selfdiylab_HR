@@ -427,9 +427,18 @@
     <!-- TALENT SEARCH (인재검색, ADMIN 또는 canUseTalentSearch 계정) -->
     <div class="view" id="view-talentsearch">
       <div class="page-head"><div><h1>인재검색</h1><p>여러 채용 플랫폼의 인재풀을 검색하고 평가해서 추천 후보를 정리해요</p></div></div>
-      <div class="section">
-        <div class="section-head"><div><h3>검색 프로젝트</h3><div class="desc">아직 화면 골격만 만든 단계라, 실제로 검색 프로젝트를 만드는 기능은 다음 단계에서 추가돼요</div></div></div>
-        <div id="talentsearch-projects"></div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTalentSearchTab('dashboard')" id="tstab-dashboard">대시보드</button>
+        <button class="tab" onclick="switchTalentSearchTab('policy')" id="tstab-policy">기준 관리센터</button>
+      </div>
+      <div id="talentsearch-dashboard">
+        <div class="section">
+          <div class="section-head"><div><h3>검색 프로젝트</h3><div class="desc">아직 화면 골격만 만든 단계라, 실제로 검색 프로젝트를 만드는 기능은 다음 단계에서 추가돼요</div></div></div>
+          <div id="talentsearch-projects"></div>
+        </div>
+      </div>
+      <div id="talentsearch-policy" style="display:none;">
+        <div id="talentsearch-policy-body"></div>
       </div>
     </div>
 
@@ -3047,6 +3056,72 @@ function renderHrDash(){
 }
 
 /* ---------- TALENT SEARCH (인재검색) ---------- */
+function switchTalentSearchTab(tab){
+  ['dashboard','policy'].forEach(t=>{
+    document.getElementById('talentsearch-'+t).style.display = t===tab ? '' : 'none';
+    document.getElementById('tstab-'+t).classList.toggle('active', t===tab);
+  });
+  if(tab==='policy') loadAndRenderTalentSearchPolicy();
+}
+
+async function loadAndRenderTalentSearchPolicy(){
+  const el = document.getElementById('talentsearch-policy-body');
+  if(!el) return;
+  el.innerHTML = '불러오는 중...';
+  let policy;
+  try{ policy = await apiGet('/talent-search-policy'); }
+  catch(err){ el.innerHTML = `<div class="section">${escapeHtml(err.message)}</div>`; return; }
+
+  const l1 = policy.level1Rules;
+  const commonSum = policy.commonFitWeights.reduce((s,w)=>s+w.points,0);
+  const jobFitSum = policy.jobFitDefaultWeights.reduce((s,w)=>s+w.points,0);
+  const ec = policy.evidenceCoefficients;
+
+  el.innerHTML = `
+    <div class="section">
+      <div class="section-head"><div><h3>현재 적용 중 · 버전 ${policy.versionNo}</h3><div class="desc">지금은 조회만 가능해요 — 수정 기능은 다음 단계에서 추가돼요</div></div></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>1차 필터(Level 1) 기준</h3></div>
+      <div style="font-size:13px;line-height:1.8;">
+        이력서 업데이트: <b>${l1.resumeUpdated.passWithinDays}일 이내</b> 통과, <b>${l1.resumeUpdated.verifyWithinDays}일</b>까지는 확인 필요, 그 이후는 제외<br>
+        잦은 이직: 완료 경력 <b>${l1.shortTenure.monthsThreshold}개월 미만</b>이 단기근속, 최근 <b>${l1.shortTenure.lookbackYears}년</b> 내 <b>${l1.shortTenure.countThreshold}회</b> 이상이면 확인 필요 (예외: ${l1.shortTenure.exceptions.map(escapeHtml).join(', ')})<br>
+        경력 공백: <b>${l1.careerGap.ignoreUnderMonths}개월 미만</b> 무시, <b>${l1.careerGap.verifyUnderMonths}개월</b>까지 확인 필요, 그 이상은 설명 필요
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>공통 적합도 40점 (합계 ${commonSum}점)</h3></div>
+      <div class="grid4">
+        ${policy.commonFitWeights.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>직무 적합도 60점 기본 배점 (합계 ${jobFitSum}점)</h3></div>
+      <div class="grid4">
+        ${policy.jobFitDefaultWeights.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>근거수준별 점수</h3></div>
+      <div class="grid4">
+        <div class="kpi"><div class="label">없음</div><div class="value">${Math.round(ec.none*100)}%</div></div>
+        <div class="kpi"><div class="label">약함</div><div class="value">${Math.round(ec.weak*100)}%</div></div>
+        <div class="kpi"><div class="label">부분</div><div class="value">${Math.round(ec.partial*100)}%</div></div>
+        <div class="kpi"><div class="label">명확</div><div class="value">${Math.round(ec.clear*100)}%</div></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>추천 임계값 · 하루 추천 상한</h3></div>
+      <div class="grid4">
+        <div class="kpi"><div class="label">총점 기준</div><div class="value">${policy.thresholds.totalScoreMin}점 이상</div></div>
+        <div class="kpi"><div class="label">직무점수 기준</div><div class="value">${policy.thresholds.jobFitScoreMin}점 이상</div></div>
+        <div class="kpi"><div class="label">의미있는 근거</div><div class="value">${policy.thresholds.minMeaningfulEvidenceCount}개 이상</div></div>
+        <div class="kpi"><div class="label">하루 추천 상한</div><div class="value">${policy.dailyRecommendCapDefault}명</div></div>
+      </div>
+    </div>
+  `;
+}
+
 function renderTalentSearchDashboard(){
   const el = document.getElementById('talentsearch-projects');
   if(!el) return;
