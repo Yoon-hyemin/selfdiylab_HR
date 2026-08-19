@@ -33,6 +33,7 @@ export default async function handler(req, res) {
     email: account.email,
     team: account.employee_team || '',
     systemRole: account.system_role,
-    mustChangePassword: account.must_change_password
+    mustChangePassword: account.must_change_password,
+    canUseTalentSearch: account.can_use_talent_search
   });
 }

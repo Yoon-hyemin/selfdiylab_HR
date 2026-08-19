@@ -145,7 +145,7 @@ function readSessionToken(req) {
 export async function loadAccountById(accountId) {
   const [row] = await sql`
     SELECT a.id, a.employee_id, a.email, a.system_role, a.department_id, a.account_status,
-           a.must_change_password, a.session_version,
+           a.must_change_password, a.session_version, a.can_use_talent_search,
            m.name AS employee_name, m.team AS employee_team
     FROM accounts a
     JOIN members m ON m.id = a.employee_id
