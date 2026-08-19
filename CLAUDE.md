@@ -14,10 +14,11 @@
 
 - 배포: Vercel 프로젝트 `selfdiylab-hr` (https://selfdiylab-hr.vercel.app), GitHub `Yoon-hyemin/selfdiylab_HR`의 `master` 브랜치를 push하면 자동 배포됨
 - DB: Neon Postgres (Vercel 프로젝트 Settings → Environments → Production → Environment Variables에 `DATABASE_URL`·`SESSION_SECRET`이 Sensitive로 등록돼 있음 — 값은 대시보드에서 다시 조회 불가, 필요하면 Neon 콘솔에서 새로 복사). `HR_PASSWORD`는 2026-08-11 로그인 시스템 교체로 더 이상 어떤 코드에서도 읽지 않는다 — 지워도 무방하지만 남겨둬도 해가 없다.
+- **Neon 브랜치 분리 — 2026-08-19부터**: 그 전까지는 로컬 개발과 실제 서비스가 같은 Neon 브랜치(`production`) 하나를 썼다 — 로컬에서 `node scripts/run-sql.js`로 마이그레이션을 "테스트"하는 것 자체가 곧바로 실제 서비스 DB에 적용되는 것과 같았다(인재검색 기능 Phase 1A 작업 중 뒤늦게 발견 — 다행히 그때까지의 변경은 전부 컬럼/테이블 "추가"뿐이라 기존 데이터에는 영향 없었음). 이후로는 **`production`(실제 서비스, Vercel이 연결)과 `development`(로컬 전용, `production`에서 분기한 사본)를 분리**했다 — 새 Neon 프로젝트가 아니라 같은 프로젝트 안의 브랜치라 추가 비용은 없다. 로컬 `.env.local`은 항상 `development` 브랜치의 connection string을 가리켜야 하고, `production` 브랜치에 스키마 변경을 반영하는 건(같은 SQL 파일을 그 브랜치의 connection string으로 다시 실행) 항상 사용자 확인을 받은 뒤 별도로 진행한다.
 
 ## 로컬에서 실행하기
 
-1. `.env.local.example`을 복사해 `.env.local` 생성, `DATABASE_URL`(Neon 콘솔에서 복사)·`SESSION_SECRET`(아무 임의 문자열) 채우기
+1. `.env.local.example`을 복사해 `.env.local` 생성, `DATABASE_URL`은 Neon 콘솔에서 **`development` 브랜치**의 connection string을 복사(`production` 브랜치 아님 — 위 "Neon 브랜치 분리" 참고)·`SESSION_SECRET`(아무 임의 문자열) 채우기
 2. `npm install`
 3. 스키마 변경이 있었다면 `node scripts/run-sql.js sql/00X_*.sql`로 마이그레이션 적용 (한 번만)
 4. 계정이 하나도 없는 새 DB라면 `INITIAL_ADMIN_EMAIL=...` `INITIAL_ADMIN_TEMP_PASSWORD=...` 환경변수를 셸에 export하고 `node scripts/bootstrap-admin.js`로 최초 관리자 계정 생성 (멱등 -- 이미 있으면 아무것도 안 함)
@@ -145,6 +146,19 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 
 **비개발자 운영 메모**: 부서 목표를 만들 때 이제 "상위 기업 목표"를 반드시 골라야 한다 — 연결할 기업 목표가 없으면(예: 그 기간에 회사 목표를 아직 안 만들었으면) 저장 버튼이 안 눌린다. 하위 목표가 달린 목표를 지우려고 하면 먼저 "다른 목표로 이동할지, 연결만 끊을지" 물어본다 — 아무 생각 없이 삭제 버튼을 눌러도 하위 목표가 통째로 사라지지 않는다.
 
+## 인재검색 자동화 — 2026-08-19 Phase 1A (화면 골격)
+
+기존 "채용" 탭(지원자가 채용공고에 지원 → 접수/서류/면접 단계 관리, `jobs`/`candidates` 테이블)과는 **정반대 방향의 별도 기능**이다 — 이건 인사팀이 잡코리아·사람인·리멤버·원티드 같은 채용 플랫폼의 인재풀에서 먼저 사람을 찾아서 평가·추천받는 소싱(sourcing) 기능이다. 사용자(윤혜민)가 GPT로 작성해온 매우 상세한 제품 명세를 바탕으로 시작했다.
+
+- **원본 명세**: `인재검색_자동화_마스터프롬프트_원본.md`(저장소 루트) — 채점 로직(Level 1 필터, 공통 적합도 40점 + 직무 적합도 60점, 0.5점 반올림, 하루 추천 50명 상한 등), 안전 원칙(자동 제안/메시지 발송 절대 금지, CAPTCHA 우회 금지 등), 전체 Phase(0~5) 로드맵이 여기 원문 그대로 있다. 이 파일은 각색 없이 보존한다.
+- **이 저장소 통합용 설계**: `docs/superpowers/specs/2026-08-19-talent-search-automation-design.md` — 원본 명세는 로컬 전용 프로그램(SQLite+Electron+Chrome 확장)으로 완전 독립 설계돼 있었는데, 사용자와의 협의로 **"검색·평가 실행 엔진"만 로컬 프로그램(크롬 확장 포함)으로 분리하고, 나머지(검색 프로젝트 관리, 기준 설정·승인, 진행 상황, 추천 결과 보기)는 이 HR 웹사이트(Vercel+Neon)에 그대로 통합**하는 방향으로 각색했다. 이유: 채용 플랫폼 기업회원 계정은 여러 컴퓨터에서 돌아가며 쓰므로, 실행 엔진이 DB 접속정보를 직접 들고 있는 것보다 기존 계정 시스템으로 인증해서 API를 통해서만 데이터를 주고받는 게 안전하고, 감사로그도 자동으로 남는다.
+- **새 테이블은 `talent_search_` 접두사**로 기존 `jobs`/`candidates`와 이름이 겹치지 않게 한다. Phase 1A(`sql/015_talent_search.sql`)에서 `talent_search_projects`(빈 테이블, 아직 아무도 안 씀)와 `accounts.can_use_talent_search`(boolean, 기본 false)를 추가했다.
+- **권한**: `accounts.system_role`과 별개 축인 `can_use_talent_search` 플래그로 사이드바 "🔍 인재검색" 메뉴 노출 여부를 정한다. **ADMIN은 이 값과 무관하게 항상 접근 가능**(`index.html`의 `applySidebarForRole()`), 그 외 역할은 "계정 및 권한 관리" 화면에서 이 체크박스를 켜줘야 보인다 — "승인된 채용담당자"가 꼭 부서장/관리자일 필요는 없다는 요구사항 때문에 `system_role` 값을 늘리는 대신 별도 boolean으로 뺐다. 지금은 **프론트엔드 화면 노출만 이 값으로 걸러지고, 서버 쪽 API 엔드포인트는 아직 이 값을 검사하지 않는다** — Phase 1A는 실제 후보자 데이터가 전혀 없는 화면 골격뿐이라 당장은 위험이 없지만, Phase 1B 이후 실제 후보자/기준 데이터를 다루는 API가 생기면 그 API들은 반드시 서버에서도 `system_role==='ADMIN' || can_use_talent_search`를 검사해야 한다(아직 없음, 후속 과제).
+- Phase 1A 완료 항목: 위 스키마, `/api/me`에 `canUseTalentSearch` 노출, `PATCH /api/accounts/:id/talent-search-access`(계정별 플래그 변경, ADMIN 전용, `handlers/accounts/[id]/talent-search-access.js`), 계정 관리 화면 체크박스, 사이드바 메뉴 + 대시보드(실제 데이터 없이 "예시" 배지가 붙은 카드 2개만 — 검색 프로젝트를 실제로 만드는 기능은 아직 없음).
+- **다음 단계(Phase 1B)**: 평가·검색 기준 관리센터(Level 1 문턱값, 공통 40점/직무 60점 배점, 임계값, 하루 추천상한을 화면에서 편집) — 착수 전에 위 서버 사이드 권한 검사부터 추가할 것.
+
+**비개발자 운영 메모**: "인재검색" 메뉴가 안 보이는 팀원은 "계정 및 권한 관리" 화면에서 그 사람 행의 "인재검색" 체크박스를 켜주면 된다(관리자는 항상 보이므로 체크박스가 비활성화돼 있음). 지금은 화면 골격만 있어서 실제로 검색을 실행하는 기능은 아직 없다.
+
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 
 - 핸들러 파일 상단에 JSDoc 스타일 블록 코멘트로 "왜 이렇게 했는지"(트레이드오프, 보안 이유, 과거 버그 회피)를 남기는 게 이 코드베이스의 관례. 일반적인 "코멘트 최소화" 원칙보다 이 프로젝트의 기존 스타일을 따른다.
@@ -157,4 +171,5 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - `docs/superpowers/specs/` — 기능 설계 스펙 (배경/트레이드오프)
 - `docs/superpowers/plans/` — 구현 계획 (파일별 작업 내역)
 - `채용_성과관리_프로세스.md` — 채용·성과관리 프로세스 전체 그림(RACI, SLA)
+- `인재검색_자동화_마스터프롬프트_원본.md` — 인재검색 자동화 기능의 원본 제품 명세(채점표, Phase별 완료기준 등 전문)
 - `flex_*.md` — 참고 대상인 flex(외부 HR SaaS) 화면 구조 실측 노트. 화면/필드 설계할 때 참고
