@@ -153,11 +153,21 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - **원본 명세**: `인재검색_자동화_마스터프롬프트_원본.md`(저장소 루트) — 채점 로직(Level 1 필터, 공통 적합도 40점 + 직무 적합도 60점, 0.5점 반올림, 하루 추천 50명 상한 등), 안전 원칙(자동 제안/메시지 발송 절대 금지, CAPTCHA 우회 금지 등), 전체 Phase(0~5) 로드맵이 여기 원문 그대로 있다. 이 파일은 각색 없이 보존한다.
 - **이 저장소 통합용 설계**: `docs/superpowers/specs/2026-08-19-talent-search-automation-design.md` — 원본 명세는 로컬 전용 프로그램(SQLite+Electron+Chrome 확장)으로 완전 독립 설계돼 있었는데, 사용자와의 협의로 **"검색·평가 실행 엔진"만 로컬 프로그램(크롬 확장 포함)으로 분리하고, 나머지(검색 프로젝트 관리, 기준 설정·승인, 진행 상황, 추천 결과 보기)는 이 HR 웹사이트(Vercel+Neon)에 그대로 통합**하는 방향으로 각색했다. 이유: 채용 플랫폼 기업회원 계정은 여러 컴퓨터에서 돌아가며 쓰므로, 실행 엔진이 DB 접속정보를 직접 들고 있는 것보다 기존 계정 시스템으로 인증해서 API를 통해서만 데이터를 주고받는 게 안전하고, 감사로그도 자동으로 남는다.
 - **새 테이블은 `talent_search_` 접두사**로 기존 `jobs`/`candidates`와 이름이 겹치지 않게 한다. Phase 1A(`sql/015_talent_search.sql`)에서 `talent_search_projects`(빈 테이블, 아직 아무도 안 씀)와 `accounts.can_use_talent_search`(boolean, 기본 false)를 추가했다.
-- **권한**: `accounts.system_role`과 별개 축인 `can_use_talent_search` 플래그로 사이드바 "🔍 인재검색" 메뉴 노출 여부를 정한다. **ADMIN은 이 값과 무관하게 항상 접근 가능**(`index.html`의 `applySidebarForRole()`), 그 외 역할은 "계정 및 권한 관리" 화면에서 이 체크박스를 켜줘야 보인다 — "승인된 채용담당자"가 꼭 부서장/관리자일 필요는 없다는 요구사항 때문에 `system_role` 값을 늘리는 대신 별도 boolean으로 뺐다. 지금은 **프론트엔드 화면 노출만 이 값으로 걸러지고, 서버 쪽 API 엔드포인트는 아직 이 값을 검사하지 않는다** — Phase 1A는 실제 후보자 데이터가 전혀 없는 화면 골격뿐이라 당장은 위험이 없지만, Phase 1B 이후 실제 후보자/기준 데이터를 다루는 API가 생기면 그 API들은 반드시 서버에서도 `system_role==='ADMIN' || can_use_talent_search`를 검사해야 한다(아직 없음, 후속 과제).
+- **권한**: `accounts.system_role`과 별개 축인 `can_use_talent_search` 플래그로 사이드바 "🔍 인재검색" 메뉴 노출 여부를 정한다. **ADMIN은 이 값과 무관하게 항상 접근 가능**(`index.html`의 `applySidebarForRole()`), 그 외 역할은 "계정 및 권한 관리" 화면에서 이 체크박스를 켜줘야 보인다 — "승인된 채용담당자"가 꼭 부서장/관리자일 필요는 없다는 요구사항 때문에 `system_role` 값을 늘리는 대신 별도 boolean으로 뺐다. **Phase 1A 시점엔 프론트엔드 화면 노출만 이 값으로 걸러지고 서버 API는 검사하지 않았지만, Phase 1B-1부터는 서버에서도 검사한다** — `handlers/_lib/accountAuth.js`의 `requireTalentSearchAccess(req, res)`(`system_role==='ADMIN' || can_use_talent_search`)가 그 헬퍼이고, 인재검색 관련 API는 전부 `requireRole` 대신 이걸 쓴다.
 - Phase 1A 완료 항목: 위 스키마, `/api/me`에 `canUseTalentSearch` 노출, `PATCH /api/accounts/:id/talent-search-access`(계정별 플래그 변경, ADMIN 전용, `handlers/accounts/[id]/talent-search-access.js`), 계정 관리 화면 체크박스, 사이드바 메뉴 + 대시보드(실제 데이터 없이 "예시" 배지가 붙은 카드 2개만 — 검색 프로젝트를 실제로 만드는 기능은 아직 없음).
-- **다음 단계(Phase 1B)**: 평가·검색 기준 관리센터(Level 1 문턱값, 공통 40점/직무 60점 배점, 임계값, 하루 추천상한을 화면에서 편집) — 착수 전에 위 서버 사이드 권한 검사부터 추가할 것.
 
-**비개발자 운영 메모**: "인재검색" 메뉴가 안 보이는 팀원은 "계정 및 권한 관리" 화면에서 그 사람 행의 "인재검색" 체크박스를 켜주면 된다(관리자 행은 체크박스 대신 "항상 가능" 회색 배지가 떠서 편집 대상이 아님을 보여준다). 지금은 화면 골격만 있어서 실제로 검색을 실행하는 기능은 아직 없다.
+### Phase 1B-1 — 기준 관리센터 데이터구조 + 읽기전용 화면 (2026-08-19)
+
+`docs/superpowers/specs/2026-08-19-talent-search-phase1b1-policy-schema-design.md`에 전체 배경이 있다. Phase 1B(평가·검색 기준 관리센터)는 범위가 커서 1B-1(데이터구조+읽기전용) → 1B-2(Level1+공통40점 편집) → 1B-3(직무60점+임계값·하루상한 편집) → 1B-4(버전이력·복구·가상후보 미리보기) 4단계로 쪼갰다. 이번엔 **1B-1만** 완료했다.
+
+- 이 화면(및 이후 편집 기능)은 **ADMIN 전용이 아니다** — 인재검색 전체와 동일하게 `system_role==='ADMIN' || can_use_talent_search`로 연다(사용자가 명시적으로 확인한 결정: "담당자한테만 열어줄 것이라서" 굳이 더 좁힐 필요 없음).
+- `talent_search_policy_versions`(`sql/016_talent_search_policy.sql`) — 회사 전체 공용 채점 정책(Level1 문턱값, 공통 40점 배점, 근거계수, 직무 60점 기본 배점, 추천 임계값, 하루 추천상한, 데이터 보관기간)을 JSONB로 저장. `talent_search_projects`와 달리 프로젝트와 무관한 공용 설정이라 `project_id`가 없다. 원본 명세서 초기값 그대로 `version_no=1, status='active'`로 시드해뒀다. `status`는 `okrs.status`와 같은 컨벤션으로 DB CHECK 없이 앱 레벨에서만 관리(draft/active/superseded 전환 로직은 1B-4에서 추가).
+- `GET /api/talent-search-policy`(`handlers/talent-search-policy/index.js`) — 지금 `status='active'`인 정책 1건을 camelCase로 반환. `requireTalentSearchAccess`로 보호. 이번엔 조회만 있고 수정(POST/PATCH)은 1B-2/1B-3에서 추가.
+- 화면: "인재검색" 뷰에 서브탭("대시보드"/"기준 관리센터") 추가. 기준 관리센터는 지금 적용 중인 정책값을 그룹별 카드(1차필터/공통40점/직무60점/근거수준/임계값·하루상한)로 읽기 전용 표시만 한다 — 수정 버튼은 없음.
+- **다음 단계(Phase 1B-2)**: Level1 문턱값과 공통 40점 배점을 실제로 수정 가능하게(합계 40 검증 포함). 이때 정책 수정 UI가 처음 생기므로, 숫자 필드(현재는 시드값이라 이스케이프 없이 그대로 출력 중)에도 문자열 필드와 동일한 `escapeHtml`/숫자 검증을 적용할 것 — 1B-1 최종 검토에서 나온 지적.
+- **프로덕션 마이그레이션 미적용**: `sql/016_talent_search_policy.sql`은 아직 `development` 브랜치에만 적용돼 있다. `master`에 머지해서 배포하기 전에 반드시 같은 파일을 프로덕션 브랜치의 connection string으로도 실행해야 한다(사용자 확인 후 진행 — 위 "Neon 브랜치 분리" 절 참고). 안 하면 기준 관리센터 탭이 500 에러를 낸다.
+
+**비개발자 운영 메모**: "인재검색" 메뉴가 안 보이는 팀원은 "계정 및 권한 관리" 화면에서 그 사람 행의 "인재검색" 체크박스를 켜주면 된다(관리자 행은 체크박스 대신 "항상 가능" 회색 배지가 떠서 편집 대상이 아님을 보여준다). 지금은 "기준 관리센터"에서 지금 적용 중인 채점 기준을 볼 수만 있고, 실제로 검색을 실행하거나 기준을 수정하는 기능은 아직 없다.
 
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 
