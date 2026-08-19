@@ -19,6 +19,7 @@ export function account_out(row) {
     departmentId: row.department_id,
     accountStatus: row.account_status,
     mustChangePassword: row.must_change_password,
+    canUseTalentSearch: row.can_use_talent_search,
     failedLoginCount: row.failed_login_count,
     isLocked: !!(row.locked_until && new Date(row.locked_until).getTime() > Date.now()),
     lastLoginAt: row.last_login_at,

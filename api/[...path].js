@@ -52,6 +52,7 @@ import accountsId from '../handlers/accounts/[id].js';
 import accountsIdResetPassword from '../handlers/accounts/[id]/reset-password.js';
 import accountsIdUnlock from '../handlers/accounts/[id]/unlock.js';
 import accountsIdStatus from '../handlers/accounts/[id]/status.js';
+import accountsIdTalentSearchAccess from '../handlers/accounts/[id]/talent-search-access.js';
 import auditLogIndex from '../handlers/audit-log/index.js';
 import revenueIndex from '../handlers/revenue/index.js';
 import revenueTarget from '../handlers/revenue/target.js';
@@ -91,6 +92,7 @@ const ROUTES = [
   { pattern: ['accounts', ':id', 'reset-password'], handler: accountsIdResetPassword },
   { pattern: ['accounts', ':id', 'unlock'], handler: accountsIdUnlock },
   { pattern: ['accounts', ':id', 'status'], handler: accountsIdStatus },
+  { pattern: ['accounts', ':id', 'talent-search-access'], handler: accountsIdTalentSearchAccess },
   { pattern: ['audit-log'], handler: auditLogIndex },
   { pattern: ['revenue'], handler: revenueIndex },
   { pattern: ['revenue', 'target'], handler: revenueTarget },
