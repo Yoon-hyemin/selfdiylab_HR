@@ -118,6 +118,7 @@ CREATE TABLE talent_search_policy_versions (
   evidence_coefficients jsonb NOT NULL, -- {none:0.5, weak:0.65, partial:0.8, clear:1.0}
   rounding_rule jsonb NOT NULL,      -- 0.5점 단위, 정확히 중간이면 올림
   thresholds jsonb NOT NULL,         -- 총점70, 직무42, 의미있는 근거 최소개수 등
+  data_retention_months integer NOT NULL DEFAULT 12, -- 완료 프로젝트 보관기간, 관리 영역 화면에서 설정
   sort_tiebreak_rules jsonb NOT NULL,
   status text NOT NULL DEFAULT 'draft', -- draft | active | superseded
   change_reason text,
@@ -277,7 +278,7 @@ CREATE TABLE talent_search_quality_audit_samples (
 | 기준 확인·승인 | 1D |
 | 실시간 검색 진행 (+ 플랫폼 사용 잠금 표시) | 1E |
 | 추천 후보 목록 / 후보 상세 평가 | 1F |
-| 관리 영역 (정보부족, 제외사유 집계, 중복검토, 커넥터 상태) | 1F~1G |
+| 관리 영역 (정보부족, 제외사유 집계, 중복검토, 커넥터 상태, **데이터 보관기간 설정 + 완료 프로젝트 삭제**) | 1F~1G |
 | 직무 템플릿 관리 | 1B~1C |
 | 검색범위 보고서 | 1E~1G |
 
