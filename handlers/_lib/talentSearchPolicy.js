@@ -11,6 +11,7 @@
  * 버전을 insert"하는 트랜잭션 하나로 끝난다.
  */
 import { sql } from './db.js';
+import { requireTalentSearchAccess } from './accountAuth.js';
 
 export function policy_out(row) {
   return {
@@ -62,4 +63,31 @@ export async function createPolicyVersion(current, overrides, actorAccountId, ch
     ) RETURNING *`
   ]);
   return result[1][0];
+}
+
+// validate(body): body(= req.body에서 changeReason을 뺀 나머지)를 검사해 에러 메시지
+// 문자열 또는 null 반환. buildOverrides(body): body를 createPolicyVersion에 넘길
+// snake_case 필드 객체로 변환.
+export function makePolicyPatchHandler({ validate, buildOverrides }) {
+  return async function handler(req, res) {
+    if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
+
+    const account = await requireTalentSearchAccess(req, res);
+    if (!account) return;
+
+    const { changeReason, ...body } = req.body || {};
+    if (!changeReason || !String(changeReason).trim()) return res.status(400).json({ error: '변경 사유를 입력해주세요' });
+    const validationError = validate(body);
+    if (validationError) return res.status(400).json({ error: validationError });
+
+    try {
+      const current = await getActivePolicy();
+      if (!current) return res.status(404).json({ error: '적용 중인 기준이 없어요' });
+      const updated = await createPolicyVersion(current, buildOverrides(body), account.id, changeReason.trim());
+      return res.status(200).json(policy_out(updated));
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: '기준 수정에 실패했어요' });
+    }
+  };
 }

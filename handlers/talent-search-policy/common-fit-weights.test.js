@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateCommonFitWeights } from './common-fit-weights.js';
+import { validateCommonFitWeights } from '../_lib/talentSearchPolicyValidate.js';
 
 test('validateCommonFitWeights: 합계 40이면 null', () => {
   const items = [

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateLevel1Rules } from './level1-rules.js';
+import { validateLevel1Rules } from '../_lib/talentSearchPolicyValidate.js';
 
 const VALID = {
   resumeUpdated: { passWithinDays: 90, verifyWithinDays: 180 },
