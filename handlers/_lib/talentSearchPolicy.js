@@ -1,10 +1,12 @@
 /**
  * handlers/_lib/talentSearchPolicy.js
  *
- * 인재검색 채점 정책(talent_search_policy_versions) 공용 헬퍼. GET 핸들러와
- * 여러 PATCH 핸들러(Level1/공통40점, 이후 1B-3에서 직무60점/임계값도 추가될
- * 예정)가 전부 "현재 활성 버전 읽기"와 "필드 일부만 바꿔 새 버전 만들기"를
- * 반복하므로 여기 한 곳에 모은다.
+ * 인재검색 채점 정책(talent_search_policy_versions) 공용 헬퍼. 1B-2(Level1/
+ * 공통40점)에서 시작해 1B-3(직무60점/근거수준/임계값·하루상한)까지 총 5개
+ * PATCH 핸들러가 전부 "현재 활성 버전 읽기"와 "필드 일부만 바꿔 새 버전
+ * 만들기"를 반복하길래, 1B-3에서 makePolicyPatchHandler로 그 반복(메서드
+ * 검사→권한검사→changeReason검사→검증→조회→생성→응답)을 아예 팩토리로
+ * 묶었다 -- 각 핸들러 파일에는 이제 validate/buildOverrides만 남는다.
  *
  * 수정 = 새 버전을 만들어 바로 적용(초안 단계 없음, 1B-4에서 추가 예정)하는
  * 방식이라, createPolicyVersion은 "기존 활성 버전을 supersede하고 새 활성
@@ -12,6 +14,7 @@
  */
 import { sql } from './db.js';
 import { requireTalentSearchAccess } from './accountAuth.js';
+import { validateOverrideKeys } from './talentSearchPolicyValidate.js';
 
 export function policy_out(row) {
   return {
@@ -44,6 +47,8 @@ export async function getActivePolicy() {
 // overrides: 바뀌는 필드만 snake_case 키로 담은 객체(예: { level1_rules: {...} }).
 // 나머지 필드는 current 값을 그대로 복사해서 새 버전에 들어간다.
 export async function createPolicyVersion(current, overrides, actorAccountId, changeReason) {
+  const keyError = validateOverrideKeys(overrides);
+  if (keyError) throw new Error(keyError);
   const next = { ...current, ...overrides };
   const nextVersionNo = current.version_no + 1;
   const result = await sql.transaction([

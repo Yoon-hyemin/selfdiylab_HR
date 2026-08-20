@@ -3241,10 +3241,10 @@ function openEditEvidenceModal(){
   const ec = tsPolicy.evidenceCoefficients;
   showModal(`
     <h3>근거수준별 점수 수정</h3>
-    <div class="field"><label>명확 (%)</label><input id="f-ec-clear" type="number" min="0" max="100" value="${Math.round(ec.clear*100)}"></div>
-    <div class="field"><label>부분 (%)</label><input id="f-ec-partial" type="number" min="0" max="100" value="${Math.round(ec.partial*100)}"></div>
-    <div class="field"><label>약함 (%)</label><input id="f-ec-weak" type="number" min="0" max="100" value="${Math.round(ec.weak*100)}"></div>
-    <div class="field"><label>없음 (%)</label><input id="f-ec-none" type="number" min="0" max="100" value="${Math.round(ec.none*100)}"></div>
+    <div class="field"><label>명확 (%)</label><input id="f-ec-clear" type="number" min="1" max="100" step="1" value="${Math.round(ec.clear*100)}"></div>
+    <div class="field"><label>부분 (%)</label><input id="f-ec-partial" type="number" min="1" max="100" step="1" value="${Math.round(ec.partial*100)}"></div>
+    <div class="field"><label>약함 (%)</label><input id="f-ec-weak" type="number" min="1" max="100" step="1" value="${Math.round(ec.weak*100)}"></div>
+    <div class="field"><label>없음 (%)</label><input id="f-ec-none" type="number" min="1" max="100" step="1" value="${Math.round(ec.none*100)}"></div>
     <div class="field"><label>변경 사유</label><input id="f-ec-reason" placeholder="왜 바꾸는지 적어주세요"></div>
     <div id="ec-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveEvidenceCoefficients()">저장</button></div>
