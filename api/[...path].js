@@ -57,6 +57,7 @@ import talentSearchPolicyIndex from '../handlers/talent-search-policy/index.js';
 import talentSearchPolicyLevel1Rules from '../handlers/talent-search-policy/level1-rules.js';
 import talentSearchPolicyCommonFitWeights from '../handlers/talent-search-policy/common-fit-weights.js';
 import talentSearchPolicyJobFitWeights from '../handlers/talent-search-policy/job-fit-weights.js';
+import talentSearchPolicyEvidenceCoefficients from '../handlers/talent-search-policy/evidence-coefficients.js';
 import auditLogIndex from '../handlers/audit-log/index.js';
 import revenueIndex from '../handlers/revenue/index.js';
 import revenueTarget from '../handlers/revenue/target.js';
@@ -101,6 +102,7 @@ const ROUTES = [
   { pattern: ['talent-search-policy', 'level1-rules'], handler: talentSearchPolicyLevel1Rules },
   { pattern: ['talent-search-policy', 'common-fit-weights'], handler: talentSearchPolicyCommonFitWeights },
   { pattern: ['talent-search-policy', 'job-fit-weights'], handler: talentSearchPolicyJobFitWeights },
+  { pattern: ['talent-search-policy', 'evidence-coefficients'], handler: talentSearchPolicyEvidenceCoefficients },
   { pattern: ['audit-log'], handler: auditLogIndex },
   { pattern: ['revenue'], handler: revenueIndex },
   { pattern: ['revenue', 'target'], handler: revenueTarget },
