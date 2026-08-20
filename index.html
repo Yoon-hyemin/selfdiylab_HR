@@ -3065,7 +3065,6 @@ function switchTalentSearchTab(tab){
 }
 
 let tsPolicy = null;
-let commonFitDraft = [];
 async function loadAndRenderTalentSearchPolicy(){
   const el = document.getElementById('talentsearch-policy-body');
   if(!el) return;
@@ -3081,7 +3080,7 @@ async function loadAndRenderTalentSearchPolicy(){
 
   el.innerHTML = `
     <div class="section">
-      <div class="section-head"><div><h3>현재 적용 중 · 버전 ${policy.versionNo}</h3><div class="desc">Level 1 기준과 공통 40점은 아래 "수정" 버튼으로 바꿀 수 있어요 — 나머지 항목은 다음 단계에서 열려요</div></div></div>
+      <div class="section-head"><div><h3>현재 적용 중 · 버전 ${policy.versionNo}</h3><div class="desc">아래 각 카드의 "수정" 버튼으로 값을 바꿀 수 있어요</div></div></div>
     </div>
     <div class="section">
       <div class="section-head"><h3>1차 필터(Level 1) 기준</h3></div>
@@ -3104,6 +3103,7 @@ async function loadAndRenderTalentSearchPolicy(){
       <div class="grid4">
         ${policy.jobFitDefaultWeights.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}
       </div>
+      <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditJobFitModal()">수정</button>
     </div>
     <div class="section">
       <div class="section-head"><h3>근거수준별 점수</h3></div>
@@ -3113,6 +3113,7 @@ async function loadAndRenderTalentSearchPolicy(){
         <div class="kpi"><div class="label">부분</div><div class="value">${Math.round(ec.partial*100)}%</div></div>
         <div class="kpi"><div class="label">명확</div><div class="value">${Math.round(ec.clear*100)}%</div></div>
       </div>
+      <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditEvidenceModal()">수정</button>
     </div>
     <div class="section">
       <div class="section-head"><h3>추천 임계값 · 하루 추천 상한</h3></div>
@@ -3122,6 +3123,7 @@ async function loadAndRenderTalentSearchPolicy(){
         <div class="kpi"><div class="label">의미있는 근거</div><div class="value">${policy.thresholds.minMeaningfulEvidenceCount}개 이상</div></div>
         <div class="kpi"><div class="label">하루 추천 상한</div><div class="value">${policy.dailyRecommendCapDefault}명</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">절대 상한 ${policy.dailyRecommendCapAbsoluteMax}명</div></div>
       </div>
+      <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditThresholdsModal()">수정</button>
     </div>
   `;
   }catch(err){ el.innerHTML = `<div class="section">${escapeHtml(err.message)}</div>`; }
@@ -3170,48 +3172,127 @@ async function saveLevel1Rules(){
   closeModal();
   await loadAndRenderTalentSearchPolicy();
 }
-function openEditCommonFitModal(){
-  commonFitDraft = tsPolicy.commonFitWeights.map(w=>({key:w.key, label:w.label, points:w.points}));
+let pointsListDraft = [];
+let pointsListConfig = null;
+function openEditPointsListModal(config){
+  pointsListConfig = config;
+  pointsListDraft = config.items.map(w=>({key:w.key, label:w.label, points:w.points}));
   showModal(`
-    <h3>공통 적합도 40점 수정</h3>
-    <div id="commonfit-rows"></div>
-    <button class="btn ghost sm" onclick="addCommonFitRow()">+ 항목 추가</button>
-    <div style="margin:10px 0;font-size:13px;">합계: <b id="commonfit-sum"></b>/40</div>
-    <div class="field"><label>변경 사유</label><input id="f-commonfit-reason" placeholder="왜 바꾸는지 적어주세요"></div>
-    <div id="commonfit-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
-    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveCommonFitWeights()">저장</button></div>
+    <h3>${escapeHtml(config.title)}</h3>
+    <div id="pointslist-rows"></div>
+    <button class="btn ghost sm" onclick="addPointsListRow()">+ 항목 추가</button>
+    <div style="margin:10px 0;font-size:13px;">합계: <b id="pointslist-sum"></b>/${config.expectedSum}</div>
+    <div class="field"><label>변경 사유</label><input id="f-pointslist-reason" placeholder="왜 바꾸는지 적어주세요"></div>
+    <div id="pointslist-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="savePointsList()">저장</button></div>
   `, true);
-  renderCommonFitRows();
+  renderPointsListRows();
 }
-function renderCommonFitRows(){
-  const el = document.getElementById('commonfit-rows');
+function renderPointsListRows(){
+  const el = document.getElementById('pointslist-rows');
   if(!el) return;
-  el.innerHTML = commonFitDraft.map((w,i)=>`
+  el.innerHTML = pointsListDraft.map((w,i)=>`
     <div class="field" style="display:flex;flex-direction:row;gap:8px;align-items:center;">
-      <input type="text" value="${escapeHtml(w.label)}" placeholder="항목 이름" style="flex:2;" onchange="commonFitDraft[${i}].label=this.value">
-      <input type="number" value="${w.points}" placeholder="배점" style="flex:1;" onchange="commonFitDraft[${i}].points=Number(this.value); renderCommonFitSum();">
-      <button class="btn ghost sm" onclick="removeCommonFitRow(${i})">삭제</button>
+      <input type="text" value="${escapeHtml(w.label)}" placeholder="항목 이름" style="flex:2;" onchange="pointsListDraft[${i}].label=this.value">
+      <input type="number" value="${w.points}" placeholder="배점" style="flex:1;" onchange="pointsListDraft[${i}].points=Number(this.value); renderPointsListSum();">
+      <button class="btn ghost sm" onclick="removePointsListRow(${i})">삭제</button>
     </div>
   `).join('');
-  renderCommonFitSum();
+  renderPointsListSum();
 }
-function renderCommonFitSum(){
-  const sumEl = document.getElementById('commonfit-sum');
+function renderPointsListSum(){
+  const sumEl = document.getElementById('pointslist-sum');
   if(!sumEl) return;
-  const sum = commonFitDraft.reduce((s,w)=>s+(Number(w.points)||0),0);
+  const sum = pointsListDraft.reduce((s,w)=>s+(Number(w.points)||0),0);
   sumEl.textContent = sum;
-  sumEl.style.color = sum===40 ? 'var(--primary-dark)' : 'var(--red)';
+  sumEl.style.color = sum===pointsListConfig.expectedSum ? 'var(--primary-dark)' : 'var(--red)';
 }
-function addCommonFitRow(){
-  commonFitDraft.push({key: 'item_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), label:'', points:0});
-  renderCommonFitRows();
+function addPointsListRow(){
+  pointsListDraft.push({key: 'item_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), label:'', points:0});
+  renderPointsListRows();
 }
-function removeCommonFitRow(i){ commonFitDraft.splice(i,1); renderCommonFitRows(); }
-async function saveCommonFitWeights(){
-  const changeReason = document.getElementById('f-commonfit-reason').value.trim();
-  try{ await apiPatch('/talent-search-policy/common-fit-weights', {commonFitWeights: commonFitDraft, changeReason}); }
+function removePointsListRow(i){ pointsListDraft.splice(i,1); renderPointsListRows(); }
+async function savePointsList(){
+  const changeReason = document.getElementById('f-pointslist-reason').value.trim();
+  try{ await apiPatch(pointsListConfig.apiPath, {[pointsListConfig.bodyKey]: pointsListDraft, changeReason}); }
   catch(err){
-    const box = document.getElementById('commonfit-edit-error');
+    const box = document.getElementById('pointslist-edit-error');
+    box.textContent = err.message; box.style.display = 'block';
+    return;
+  }
+  closeModal();
+  await loadAndRenderTalentSearchPolicy();
+}
+function openEditCommonFitModal(){
+  openEditPointsListModal({
+    items: tsPolicy.commonFitWeights, bodyKey: 'commonFitWeights',
+    apiPath: '/talent-search-policy/common-fit-weights', expectedSum: 40,
+    title: '공통 적합도 40점 수정'
+  });
+}
+function openEditJobFitModal(){
+  openEditPointsListModal({
+    items: tsPolicy.jobFitDefaultWeights, bodyKey: 'jobFitDefaultWeights',
+    apiPath: '/talent-search-policy/job-fit-weights', expectedSum: 60,
+    title: '직무 적합도 60점 수정'
+  });
+}
+function openEditEvidenceModal(){
+  const ec = tsPolicy.evidenceCoefficients;
+  showModal(`
+    <h3>근거수준별 점수 수정</h3>
+    <div class="field"><label>명확 (%)</label><input id="f-ec-clear" type="number" min="0" max="100" value="${Math.round(ec.clear*100)}"></div>
+    <div class="field"><label>부분 (%)</label><input id="f-ec-partial" type="number" min="0" max="100" value="${Math.round(ec.partial*100)}"></div>
+    <div class="field"><label>약함 (%)</label><input id="f-ec-weak" type="number" min="0" max="100" value="${Math.round(ec.weak*100)}"></div>
+    <div class="field"><label>없음 (%)</label><input id="f-ec-none" type="number" min="0" max="100" value="${Math.round(ec.none*100)}"></div>
+    <div class="field"><label>변경 사유</label><input id="f-ec-reason" placeholder="왜 바꾸는지 적어주세요"></div>
+    <div id="ec-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveEvidenceCoefficients()">저장</button></div>
+  `);
+}
+async function saveEvidenceCoefficients(){
+  const evidenceCoefficients = {
+    none: Number(document.getElementById('f-ec-none').value)/100,
+    weak: Number(document.getElementById('f-ec-weak').value)/100,
+    partial: Number(document.getElementById('f-ec-partial').value)/100,
+    clear: Number(document.getElementById('f-ec-clear').value)/100
+  };
+  const changeReason = document.getElementById('f-ec-reason').value.trim();
+  try{ await apiPatch('/talent-search-policy/evidence-coefficients', {evidenceCoefficients, changeReason}); }
+  catch(err){
+    const box = document.getElementById('ec-edit-error');
+    box.textContent = err.message; box.style.display = 'block';
+    return;
+  }
+  closeModal();
+  await loadAndRenderTalentSearchPolicy();
+}
+function openEditThresholdsModal(){
+  const t = tsPolicy.thresholds;
+  showModal(`
+    <h3>추천 임계값 · 하루 추천상한 수정</h3>
+    <div class="field"><label>총점 기준 (점, 100점 만점)</label><input id="f-th-total" type="number" min="0" max="100" value="${t.totalScoreMin}"></div>
+    <div class="field"><label>직무점수 기준 (점, 60점 만점)</label><input id="f-th-jobfit" type="number" min="0" max="60" value="${t.jobFitScoreMin}"></div>
+    <div class="field"><label>의미있는 근거 개수 (개)</label><input id="f-th-evidence" type="number" min="1" value="${t.minMeaningfulEvidenceCount}"></div>
+    <div class="field"><label>하루 추천상한 — 기본값 (명)</label><input id="f-th-capdefault" type="number" min="1" value="${tsPolicy.dailyRecommendCapDefault}"></div>
+    <div class="field"><label>하루 추천상한 — 절대상한 (명)</label><input id="f-th-capmax" type="number" min="1" value="${tsPolicy.dailyRecommendCapAbsoluteMax}"></div>
+    <div class="field"><label>변경 사유</label><input id="f-th-reason" placeholder="왜 바꾸는지 적어주세요"></div>
+    <div id="th-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveThresholds()">저장</button></div>
+  `);
+}
+async function saveThresholds(){
+  const thresholds = {
+    totalScoreMin: Number(document.getElementById('f-th-total').value),
+    jobFitScoreMin: Number(document.getElementById('f-th-jobfit').value),
+    minMeaningfulEvidenceCount: Number(document.getElementById('f-th-evidence').value)
+  };
+  const dailyRecommendCapDefault = Number(document.getElementById('f-th-capdefault').value);
+  const dailyRecommendCapAbsoluteMax = Number(document.getElementById('f-th-capmax').value);
+  const changeReason = document.getElementById('f-th-reason').value.trim();
+  try{ await apiPatch('/talent-search-policy/thresholds', {thresholds, dailyRecommendCapDefault, dailyRecommendCapAbsoluteMax, changeReason}); }
+  catch(err){
+    const box = document.getElementById('th-edit-error');
     box.textContent = err.message; box.style.display = 'block';
     return;
   }
