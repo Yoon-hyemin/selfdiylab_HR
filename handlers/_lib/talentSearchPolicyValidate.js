@@ -6,7 +6,7 @@
  * 알려진 한계). 이 파일은 그 문제를 해소하기 위해 분리했다.
  */
 
-// createPolicyVersion(handlers/_lib/talentSearchPolicy.js)에 넘길 수 있는
+// saveDraftOverrides(handlers/_lib/talentSearchPolicy.js)에 넘길 수 있는
 // snake_case override 키 전체 목록 -- 실제 talent_search_policy_versions
 // 테이블 컬럼과 정확히 일치해야 한다. 각 PATCH 핸들러의 buildOverrides가
 // 오타(예: daily_recommend_cap_max)를 내면 createPolicyVersion이 그 키를
