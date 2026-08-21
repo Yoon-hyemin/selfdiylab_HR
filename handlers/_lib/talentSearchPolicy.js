@@ -8,8 +8,9 @@
  * 하나만 존재한다: 이미 초안이 있으면 그 행을 그대로 UPDATE(병합)하고, 없으면
  * 활성 버전을 베이스로 새 초안 행을 만든다. 1B-4b부터는 여기에 버전 이력
  * 조회(listPolicyVersions)와 과거 버전 복구(restoreVersionAsDraft)가 추가된다
- * -- 복구도 "새 초안 만들기"라 saveDraftOverrides와 INSERT 로직을 공유한다
- * (insertNewDraft).
+ * -- 복구도 "새 초안 만들기"지만 기존 초안을 병합이 아니라 완전히 대체해야
+ * 하고 그 삭제+삽입이 원자적이어야 해서, saveDraftOverrides가 쓰는
+ * insertNewDraft 헬퍼 대신 자체 sql.transaction으로 처리한다.
  */
 import { sql } from './db.js';
 import { requireTalentSearchAccess } from './accountAuth.js';
@@ -51,8 +52,10 @@ export async function getDraftPolicy() {
 }
 
 // base(snake_case row 모양)의 필드값을 그대로 복사해 새 초안 행을 INSERT한다
-// (version_no는 현재 최댓값+1). saveDraftOverrides(초안이 아직 없을 때)와
-// restoreVersionAsDraft가 이 로직을 공유한다.
+// (version_no는 현재 최댓값+1). saveDraftOverrides(초안이 아직 없을 때)가 쓴다 --
+// 이 함수는 그저 base의 값을 복사할 뿐, 그 값을 기존 초안에 병합할지 통째로
+// 대체할지는 호출부가 결정한다(restoreVersionAsDraft는 트랜잭션 안에서 직접
+// INSERT하므로 이 함수를 쓰지 않는다 -- 아래 참고).
 async function insertNewDraft(base, actorAccountId) {
   const [maxRow] = await sql`SELECT MAX(version_no) AS max FROM talent_search_policy_versions`;
   const nextVersionNo = (maxRow.max || 0) + 1;
@@ -140,13 +143,33 @@ export async function discardDraft() {
 // 특정 버전(과거든 활성이든)의 값을 그대로 복구해 새 초안으로 만든다. 이미
 // 초안이 있었다면 통째로 덮어쓴다(saveDraftOverrides처럼 이어서 병합하는 게
 // 아니라, "이 시점 스냅샷으로 완전히 교체"가 목적이라서다 -- 사용자가
-// 명시적으로 확인한 동작).
+// 명시적으로 확인한 동작). DELETE와 INSERT를 applyDraft와 같은 방식으로
+// sql.transaction 하나로 묶어서, INSERT가 실패해도 기존 초안이 대체 없이
+// 사라지는 데이터손실 창을 없앤다 -- insertNewDraft는 그 자체로 별도
+// SELECT MAX(version_no) 라운드트립을 하므로 트랜잭션 안에서 재사용하지
+// 않고, 다음 버전 번호를 서브쿼리로 같은 트랜잭션 안에서 계산한다.
 export async function restoreVersionAsDraft(versionId, actorAccountId) {
   const [target] = await sql`SELECT * FROM talent_search_policy_versions WHERE id = ${versionId}`;
   if (!target) throw new Error('복구할 버전을 찾을 수 없어요');
 
-  await sql`DELETE FROM talent_search_policy_versions WHERE status = 'draft'`;
-  return insertNewDraft(target, actorAccountId);
+  const result = await sql.transaction([
+    sql`DELETE FROM talent_search_policy_versions WHERE status = 'draft'`,
+    sql`INSERT INTO talent_search_policy_versions (
+      version_no, level1_rules, common_fit_weights, evidence_coefficients,
+      job_fit_default_weights, rounding_rule, thresholds, sort_tiebreak_rules,
+      daily_recommend_cap_default, daily_recommend_cap_absolute_max,
+      data_retention_months, status, created_by
+    ) VALUES (
+      (SELECT COALESCE(MAX(version_no), 0) + 1 FROM talent_search_policy_versions),
+      ${JSON.stringify(target.level1_rules)}::jsonb,
+      ${JSON.stringify(target.common_fit_weights)}::jsonb, ${JSON.stringify(target.evidence_coefficients)}::jsonb,
+      ${JSON.stringify(target.job_fit_default_weights)}::jsonb, ${JSON.stringify(target.rounding_rule)}::jsonb,
+      ${JSON.stringify(target.thresholds)}::jsonb, ${JSON.stringify(target.sort_tiebreak_rules)}::jsonb,
+      ${target.daily_recommend_cap_default}, ${target.daily_recommend_cap_absolute_max},
+      ${target.data_retention_months}, 'draft', ${actorAccountId}
+    ) RETURNING *`
+  ]);
+  return result[1][0];
 }
 
 // 최근 limit개 버전(초안 제외)을 변경자 이름과 함께 최신순으로 조회한다.
