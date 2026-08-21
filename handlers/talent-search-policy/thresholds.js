@@ -1,6 +1,10 @@
 /**
- * PATCH { thresholds: {...}, dailyRecommendCapDefault, dailyRecommendCapAbsoluteMax,
- *         changeReason: string } -> 200 { ...policy_out 응답 }
+ * PATCH { thresholds: {...}, dailyRecommendCapDefault, dailyRecommendCapAbsoluteMax }
+ * -> 200 { ...policy_out 응답 (초안 행, status:"draft") }
+ *
+ * 1B-4a부터 changeReason은 이 요청에 없다 -- 저장은 초안에만 반영되고,
+ * changeReason은 별도의 PATCH /talent-search-policy/draft/apply 시점에만
+ * 받는다.
  *
  * 1B-3: 추천 임계값과 하루 추천상한(기본값+절대상한)을 하나의 엔드포인트로
  * 같이 수정한다 -- 화면에서도 "추천 임계값 · 하루 추천 상한" 한 카드로

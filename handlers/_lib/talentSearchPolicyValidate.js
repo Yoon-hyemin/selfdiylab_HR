@@ -9,7 +9,7 @@
 // saveDraftOverrides(handlers/_lib/talentSearchPolicy.js)에 넘길 수 있는
 // snake_case override 키 전체 목록 -- 실제 talent_search_policy_versions
 // 테이블 컬럼과 정확히 일치해야 한다. 각 PATCH 핸들러의 buildOverrides가
-// 오타(예: daily_recommend_cap_max)를 내면 createPolicyVersion이 그 키를
+// 오타(예: daily_recommend_cap_max)를 내면 saveDraftOverrides가 그 키를
 // 조용히 무시하고 기존 값을 그대로 복사해버려서 "저장했다고 200을 받았는데
 // 실제로는 아무것도 안 바뀐" 상태가 생긴다 -- validateOverrideKeys는 그걸
 // 막기 위한 가드다(리뷰에서 발견, thresholds.js가 한 번에 3개 키를 매핑하는
@@ -30,7 +30,7 @@ export const POLICY_OVERRIDE_COLUMNS = new Set([
 // overrides의 모든 키가 실제 컬럼인지 확인. 문제가 있으면 에러 메시지 문자열,
 // 없으면 null을 반환한다 (throw하지 않는 이유: 이 파일은 순수 검증 함수만
 // 모아둔 곳이라 컨벤션을 맞춤 -- 실제로 throw하는 건 호출부인
-// createPolicyVersion의 책임).
+// saveDraftOverrides의 책임).
 export function validateOverrideKeys(overrides) {
   for (const key of Object.keys(overrides || {})) {
     if (!POLICY_OVERRIDE_COLUMNS.has(key)) return `알 수 없는 정책 필드: ${key}`;

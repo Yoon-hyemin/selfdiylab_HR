@@ -170,26 +170,43 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 
 `docs/superpowers/specs/2026-08-19-talent-search-phase1b2-policy-editing-design.md`에 전체 배경이 있다.
 
-- **수정 = 새 버전 즉시 생성+적용**(초안 단계 없음 — 그건 1B-4에서 "이전 버전 보기/되돌리기"와 함께 추가). `handlers/_lib/talentSearchPolicy.js`의 `createPolicyVersion(current, overrides, actorAccountId, changeReason)`이 공용 로직 — 현재 활성 버전을 `superseded`로 바꾸고, `overrides`로 지정한 필드만 바꾼 새 행을 `version_no+1, status='active'`로 INSERT하는 트랜잭션 하나로 끝난다. **바뀌지 않는 필드는 현재 버전 값을 그대로 복사**하므로, Level1만 고쳐도 공통40점이 지워지거나 초기화되지 않는다(그 반대도 마찬가지) — 실제로 여러 번 번갈아 수정해서 서로 침범하지 않는 것을 확인함.
-- `PATCH /api/talent-search-policy/level1-rules`, `PATCH /api/talent-search-policy/common-fit-weights` — 둘 다 `requireTalentSearchAccess`로 보호, `changeReason` 필수(빈 문자열 거부).
+- **수정 = 새 버전 즉시 생성+적용**(초안 단계 없음 — 그건 1B-4에서 "이전 버전 보기/되돌리기"와 함께 추가). `handlers/_lib/talentSearchPolicy.js`의 `createPolicyVersion(current, overrides, actorAccountId, changeReason)`이 공용 로직 — 현재 활성 버전을 `superseded`로 바꾸고, `overrides`로 지정한 필드만 바꾼 새 행을 `version_no+1, status='active'`로 INSERT하는 트랜잭션 하나로 끝난다. **바뀌지 않는 필드는 현재 버전 값을 그대로 복사**하므로, Level1만 고쳐도 공통40점이 지워지거나 초기화되지 않는다(그 반대도 마찬가지) — 실제로 여러 번 번갈아 수정해서 서로 침범하지 않는 것을 확인함. **(1B-4a에서 대체)** — "수정=즉시적용"과 `createPolicyVersion` 자체가 1B-4a에서 초안 방식으로 교체됐다. 아래 1B-4a 절 참고.
+- `PATCH /api/talent-search-policy/level1-rules`, `PATCH /api/talent-search-policy/common-fit-weights` — 둘 다 `requireTalentSearchAccess`로 보호, `changeReason` 필수(빈 문자열 거부). **(1B-4a에서 대체)** — `changeReason`은 이제 이 두 엔드포인트가 아니라 `PATCH /talent-search-policy/draft/apply`에서만 받는다.
 - **공통 40점 항목은 개수 제한이 없다** — 이름·배점을 자유롭게 추가/삭제할 수 있고(사용자가 명시적으로 확인: "고정값 5개"가 아니라 자유 편집), 유일한 제약은 최소 1개 + 배점 합계가 정확히 40. 각 항목의 `key`는 화면에서 자동 생성되고, 라벨을 바꿔도 유지된다(항목 정체성 보존용).
-- 화면: 기준 관리센터의 "1차 필터" / "공통 40점" 카드 아래에 각각 "수정" 버튼 → 모달(값 입력 + 변경사유 필수) → 저장하면 화면이 새 버전으로 다시 그려짐. 공통 40점 모달은 "+ 항목 추가"/"삭제" 버튼으로 행을 자유롭게 조절.
+- 화면: 기준 관리센터의 "1차 필터" / "공통 40점" 카드 아래에 각각 "수정" 버튼 → 모달(값 입력 + 변경사유 필수) → 저장하면 화면이 새 버전으로 다시 그려짐. 공통 40점 모달은 "+ 항목 추가"/"삭제" 버튼으로 행을 자유롭게 조절. **(1B-4a에서 대체)** — 카드별 모달에서 변경사유 입력칸이 없어졌다(아래 1B-4a 절 참고). "+ 항목 추가"/"삭제" 조작 자체는 그대로.
 - **후속 과제(1B-3 착수 전에 볼 것)**: 숫자 필드(`thresholds`, `jobFitDefaultWeights` 등)는 아직 `escapeHtml` 없이 그대로 출력된다 — 지금은 시드값이라 위험 없지만 1B-3에서 이 필드들도 편집 가능해지면 문자열 필드와 동일하게 이스케이프를 적용할 것. **(1B-3에서 해결)** — 편집 가능해진 숫자 필드는 서버에서 실제 숫자인지 검증(`validateThresholdsAndCaps` 등)한 뒤에만 저장되므로 주입 경로 자체가 없어 이스케이프가 불필요하다고 판단, 별도 처리 없이 넘어감. 또한 두 PATCH 핸들러(Level1/공통40점)가 구조가 거의 동일해서(메서드검사→권한검사→changeReason검사→검증→조회→생성→응답), 1B-3에서 최소 2개가 더 늘어나면 공용 팩토리 함수로 묶는 걸 고려할 것. **(1B-3에서 해결)** — `handlers/_lib/talentSearchPolicy.js`의 `makePolicyPatchHandler({validate, buildOverrides})`가 그 팩토리이고, 5개 PATCH 핸들러(level1-rules/common-fit-weights/job-fit-weights/evidence-coefficients/thresholds) 전부 이걸로 통일했다.
 - **개발 DB 상태 주의**: `development` 브랜치의 지금 활성 정책(버전 7)은 이번 단계 수동 테스트 중 만든 값("새 항목"/"테스트항목" 등)이 남아있다 — 원본 명세서 초기값이 필요하면 버전 1(superseded)을 참고하거나, 기준 관리센터 화면에서 직접 원래 값으로 다시 수정해서 새 버전을 만들면 된다.
 
-**비개발자 운영 메모**: "인재검색" 메뉴가 안 보이는 팀원은 "계정 및 권한 관리" 화면에서 그 사람 행의 "인재검색" 체크박스를 켜주면 된다(관리자 행은 체크박스 대신 "항상 가능" 회색 배지가 떠서 편집 대상이 아님을 보여준다). "기준 관리센터"에서 이제 1차 필터와 공통 40점은 직접 수정할 수 있다(수정할 때마다 사유를 꼭 적어야 함) — 직무 60점·임계값·하루 상한도 1B-3부터 수정 가능해졌다(아래 절 참고).
+**비개발자 운영 메모**: "인재검색" 메뉴가 안 보이는 팀원은 "계정 및 권한 관리" 화면에서 그 사람 행의 "인재검색" 체크박스를 켜주면 된다(관리자 행은 체크박스 대신 "항상 가능" 회색 배지가 떠서 편집 대상이 아님을 보여준다). "기준 관리센터"에서 이제 1차 필터와 공통 40점은 직접 수정할 수 있다(수정할 때마다 사유를 꼭 적어야 함) — 직무 60점·임계값·하루 상한도 1B-3부터 수정 가능해졌다(아래 절 참고). **(1B-4a에서 대체)** — "수정할 때마다 사유를 꼭 적어야 함"은 더 이상 맞지 않다. 아래 1B-4a 절 참고.
 
 ### Phase 1B-3 — 직무60점 + 근거수준 + 임계값·하루상한 실제 수정 가능하게 (2026-08-20)
 
-`docs/superpowers/specs/2026-08-20-talent-search-phase1b3-design.md`에 전체 배경이 있다. 이번 단계로 기준 관리센터의 5개 카드(1차필터/공통40점/직무60점/근거수준/임계값·하루상한) 전부가 실제로 수정 가능해졌다 — 1B-2와 같은 "수정 = 새 버전 즉시 생성+적용"(초안 단계 없음) 패턴을 그대로 따른다.
+`docs/superpowers/specs/2026-08-20-talent-search-phase1b3-design.md`에 전체 배경이 있다. 이번 단계로 기준 관리센터의 5개 카드(1차필터/공통40점/직무60점/근거수준/임계값·하루상한) 전부가 실제로 수정 가능해졌다 — 1B-2와 같은 "수정 = 새 버전 즉시 생성+적용"(초안 단계 없음) 패턴을 그대로 따른다. **(1B-4a에서 대체)** — 이 "즉시 생성+적용" 패턴 자체가 1B-4a에서 초안 저장 방식으로 바뀌었다. 아래 1B-4a 절 참고.
 
 - **직무 60점**은 공통 40점과 완전히 같은 모양이다 — 항목 이름·배점을 자유롭게 추가/삭제할 수 있고(개수 제한 없음), 유일한 제약은 최소 1개 + 배점 합계가 정확히 60. 검증 로직(`validatePointsList`)을 공통 40점과 공유한다.
 - **근거수준별 점수**는 DB에 0~1 사이 소수로 저장되지만(예: 0.65), 화면에서는 %로 입력·표시한다(저장 직전에 100으로 나누고, 표시할 때 100을 곱해 반올림). 서버는 `none ≤ weak ≤ partial ≤ clear` 순서를 강제한다 — "약한 근거"가 "명확한 근거"보다 점수가 높아지는 모순을 막기 위한 제품 결정(사용자 확인됨).
 - **추천 임계값·하루상한** 카드는 `totalScoreMin`/`jobFitScoreMin`/`minMeaningfulEvidenceCount`뿐 아니라 `dailyRecommendCapDefault`와 `dailyRecommendCapAbsoluteMax` 둘 다 수정 가능하다 — **"절대"상한이라는 이름이지만 이 값도 조정 가능하게 열어둔 것은 실수가 아니라 사용자가 명시적으로 결정한 사항**이다(운영 중 실제로 상한 자체를 올려야 하는 상황이 있을 수 있다는 판단). 기본값은 절대상한을 넘을 수 없다는 제약만 서버에서 검증한다.
 - **리팩터링**: 검증 로직을 `handlers/_lib/talentSearchPolicyValidate.js`로 모았다(이 파일은 db.js를 import하지 않아서 `DATABASE_URL` 없이도 단위테스트가 돈다) — 이제 이 파일 하나가 Level1/공통40점/직무60점/근거수준/임계값·하루상한 5개 필드 검증을 전부 담당한다. 그리고 `handlers/_lib/talentSearchPolicy.js`에 `makePolicyPatchHandler({validate, buildOverrides})` 팩토리를 만들어 5개 PATCH 핸들러(level1-rules/common-fit-weights/job-fit-weights/evidence-coefficients/thresholds)가 전부 이걸로 얇아졌다 — 각 핸들러 파일에는 이제 그 필드만의 validate/buildOverrides 함수만 남는다.
-- **오타 방지 가드**: `createPolicyVersion`이 `overrides`를 그냥 `{...current, ...overrides}`로 합치던 방식은, `buildOverrides`에 오타(예: 실제 컬럼명이 아닌 키)가 있어도 조용히 무시되고 기존 값이 그대로 복사되는 위험이 있었다(200 응답은 오지만 실제로는 아무것도 안 바뀜) — 특히 한 번에 3개 키를 매핑하는 `thresholds.js`가 제일 위험했다. `talentSearchPolicyValidate.js`의 `validateOverrideKeys`로 실제 컬럼명 목록과 대조해서, 모르는 키가 들어오면 조용히 무시하는 대신 에러를 던지도록 고쳤다.
+- **오타 방지 가드**: `createPolicyVersion`이 `overrides`를 그냥 `{...current, ...overrides}`로 합치던 방식은, `buildOverrides`에 오타(예: 실제 컬럼명이 아닌 키)가 있어도 조용히 무시되고 기존 값이 그대로 복사되는 위험이 있었다(200 응답은 오지만 실제로는 아무것도 안 바뀜) — 특히 한 번에 3개 키를 매핑하는 `thresholds.js`가 제일 위험했다. `talentSearchPolicyValidate.js`의 `validateOverrideKeys`로 실제 컬럼명 목록과 대조해서, 모르는 키가 들어오면 조용히 무시하는 대신 에러를 던지도록 고쳤다. **(1B-4a에서 대체)** — `createPolicyVersion`은 삭제됐고, 이 가드는 이제 `saveDraftOverrides`(같은 파일)가 호출한다. 가드가 하는 일과 위험 시나리오는 그대로다.
 
-**비개발자 운영 메모**: "기준 관리센터"의 남은 3개 카드(직무 60점 / 근거수준별 점수 / 추천 임계값·하루 상한)도 이제 "수정" 버튼으로 직접 바꿀 수 있다(다른 카드와 마찬가지로 사유를 꼭 적어야 함). 근거수준은 %로 입력하면 되고, "약함"이 "명확"보다 점수가 높게 입력되면 저장이 거부된다. 하루 추천 상한은 "기본값"과 "절대상한" 두 값을 모두 바꿀 수 있다 — 절대상한은 이름과 달리 고정값이 아니라 필요하면 운영 판단으로 올릴 수 있게 일부러 열어둔 것이다.
+**비개발자 운영 메모**: "기준 관리센터"의 남은 3개 카드(직무 60점 / 근거수준별 점수 / 추천 임계값·하루 상한)도 이제 "수정" 버튼으로 직접 바꿀 수 있다(다른 카드와 마찬가지로 사유를 꼭 적어야 함). 근거수준은 %로 입력하면 되고, "약함"이 "명확"보다 점수가 높게 입력되면 저장이 거부된다. 하루 추천 상한은 "기본값"과 "절대상한" 두 값을 모두 바꿀 수 있다 — 절대상한은 이름과 달리 고정값이 아니라 필요하면 운영 판단으로 올릴 수 있게 일부러 열어둔 것이다. **(1B-4a에서 대체)** — "사유를 꼭 적어야 함" 부분은 더 이상 맞지 않다. 아래 1B-4a 절 참고.
+
+### Phase 1B-4a — 초안(draft) 상태 도입 (2026-08-21)
+
+`docs/superpowers/specs/2026-08-21-talent-search-phase1b4a-design.md`, `docs/superpowers/plans/2026-08-21-talent-search-phase1b4a.md`에 전체 배경이 있다. 1B-2/1B-3에서 만든 "카드 수정 = 새 버전 즉시 생성+활성화"를 "카드 수정은 초안에 쌓고, 별도의 '적용하기'를 눌러야 실제로 활성화"로 바꿨다.
+
+- **저장은 전역 단일 초안(`status='draft'`)에 병합**된다 — 초안은 한 번에 딱 하나만 존재하고, 이미 초안이 있는 상태에서 다른 카드를 저장하면 새 초안을 또 만드는 게 아니라 같은 초안 행에 그 필드만 병합해서 UPDATE한다. 초안이 없으면 활성 버전을 베이스로 새 초안 행을 INSERT한다. 공용 로직은 `handlers/_lib/talentSearchPolicy.js`의 `saveDraftOverrides(overrides, actorAccountId)` — 이전 단계의 `createPolicyVersion`을 대체했다(그 함수는 삭제됨).
+- **`changeReason`이 5개 카드 저장 요청 전부에서 없어지고, 새 엔드포인트 하나로 모였다**: `PATCH /api/talent-search-policy/level1-rules`/`common-fit-weights`/`job-fit-weights`/`evidence-coefficients`/`thresholds`는 이제 `changeReason` 없이 호출하고, 응답도 활성 버전이 아니라 초안 행(`status:'draft'`)이다. `changeReason`은 아래 `draft/apply`에서만 받는다.
+- **새 엔드포인트 2개** (둘 다 `requireTalentSearchAccess`로 보호):
+  - `PATCH /api/talent-search-policy/draft/apply` (`handlers/talent-search-policy/draft/apply.js`) — `changeReason` 필수(빈 문자열 거부). 초안을 활성으로 승격하고 기존 활성 버전은 `superseded`로 내린다(`handlers/_lib/talentSearchPolicy.js`의 `applyDraft`).
+  - `DELETE /api/talent-search-policy/draft` (`handlers/talent-search-policy/draft.js`) — 초안을 버린다(`discardDraft`). 초안이 없어도 에러 없이 성공(멱등).
+- **`GET /api/talent-search-policy`는 이제 `draft` 키를 추가로 반환**한다 — 초안이 없으면 `null`, 있으면 같은 모양의 객체(`status:'draft'`). 기존 최상위 필드(활성 버전)는 그대로라 하위호환.
+- 화면: 초안이 있으면 배너가 뜨고 "적용하기"(모달에서 변경사유 입력) / "초안 버리기" 버튼과 "기존 → 초안" 비교(바뀐 항목만)가 보인다. 초안이 있는 동안 카드들은 초안 값을 보여주고, 카드 수정도 초안 위에 계속 쌓인다.
+- 이 프로젝트가 이미 따르는 "내부 소규모 도구라 낙관적 동시성 제어는 넣지 않는다" 원칙을 여기도 그대로 적용했다 — `saveDraftOverrides`는 초안 존재 여부를 조회한 뒤 UPDATE/INSERT를 결정하는 check-then-act라, 이론상 동시에 첫 저장이 두 번 들어오면 초안 행이 두 개 생길 수 있다(이 내부 단일팀 도구에서 실제로 일어나기 극히 어려운 경합). DB 레벨 유니크 제약 등으로 막지는 않았다 — 다만 `applyDraft`에 초안 승격 뒤 "그 외 남은 draft 행 삭제" 문을 하나 추가해서, 혹시 그런 상태가 생겨도 적용 시점에 정리되게는 해뒀다.
+- **스키마 변경 없음** — `talent_search_policy_versions.status`는 1B-1 설계 때부터 이미 DB CHECK 없는 자유 텍스트 컬럼이라 `draft`/`active`/`superseded` 세 값을 앱 레벨에서만 관리한다. 새 마이그레이션 파일이 없다.
+- **프로덕션 마이그레이션 미적용 상태는 그대로**: `sql/015_talent_search.sql`(Phase 1A)과 `sql/016_talent_search_policy.sql`(Phase 1B-1)은 여전히 `development` 브랜치에만 적용돼 있다(1B-4a는 이 상태를 바꾸지 않았다 — 스키마 변경이 없어서). `master` 배포 전 프로덕션 브랜치에도 실행 필요(사용자 확인 후).
+
+**비개발자 운영 메모**: 기준 관리센터에서 카드를 "수정"할 때 더 이상 그 자리에서 사유를 적지 않는다 — 카드 저장은 일단 "초안"에 쌓이고, 화면 위쪽에 뜨는 배너의 "적용하기" 버튼을 눌러야 실제로 반영된다(이때 딱 한 번 사유를 적는다). 여러 카드를 고친 뒤 한 번에 적용해도 되고, 마음이 바뀌면 "초안 버리기"로 지금까지 고친 걸 통째로 취소할 수 있다. 배너에는 "기존 → 초안" 비교표가 같이 떠서 뭐가 바뀌는지 미리 확인할 수 있다.
 
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 

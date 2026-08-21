@@ -109,7 +109,15 @@ export async function applyDraft(changeReason, actorAccountId) {
           status = 'active', applied_at = now(),
           change_reason = ${changeReason}, created_by = ${actorAccountId}
         WHERE id = ${draft.id}
-        RETURNING *`
+        RETURNING *`,
+    // saveDraftOverrides는 초안이 있으면 UPDATE, 없으면 INSERT하는
+    // check-then-act라 DB 유니크 제약이 없다 -- 동시에 첫 저장이 두 번
+    // 들어오는 극히 드문 경우엔 초안 행이 두 개 생길 수 있다. 그 상태에서
+    // 방금 승격한 것 말고 다른 draft 행이 남아있으면 영구히 고아 초안으로
+    // 남아 배너가 계속 뜨고, 다음 카드 저장이 그 고아 행에 병합돼버린다.
+    // 정상 케이스(초안이 늘 하나뿐)에서는 대상이 없어 아무 효과가 없는
+    // 순수 보험용 삭제문이다.
+    sql`DELETE FROM talent_search_policy_versions WHERE status = 'draft' AND id <> ${draft.id}`
   ]);
   return result[1][0];
 }
