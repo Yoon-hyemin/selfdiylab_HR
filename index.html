@@ -430,6 +430,7 @@
       <div class="tabs">
         <button class="tab active" onclick="switchTalentSearchTab('dashboard')" id="tstab-dashboard">대시보드</button>
         <button class="tab" onclick="switchTalentSearchTab('policy')" id="tstab-policy">기준 관리센터</button>
+        <button class="tab" onclick="switchTalentSearchTab('versions')" id="tstab-versions">버전 이력</button>
       </div>
       <div id="talentsearch-dashboard">
         <div class="section">
@@ -439,6 +440,9 @@
       </div>
       <div id="talentsearch-policy" style="display:none;">
         <div id="talentsearch-policy-body"></div>
+      </div>
+      <div id="talentsearch-versions" style="display:none;">
+        <div id="talentsearch-versions-body"></div>
       </div>
     </div>
 
@@ -3057,11 +3061,12 @@ function renderHrDash(){
 
 /* ---------- TALENT SEARCH (인재검색) ---------- */
 function switchTalentSearchTab(tab){
-  ['dashboard','policy'].forEach(t=>{
+  ['dashboard','policy','versions'].forEach(t=>{
     document.getElementById('talentsearch-'+t).style.display = t===tab ? '' : 'none';
     document.getElementById('tstab-'+t).classList.toggle('active', t===tab);
   });
   if(tab==='policy') loadAndRenderTalentSearchPolicy();
+  if(tab==='versions') loadAndRenderTalentSearchVersions();
 }
 
 let tsPolicy = null;
@@ -3385,6 +3390,46 @@ async function discardDraftNow(){
   try{ await apiDelete('/talent-search-policy/draft'); }
   catch(err){ alert(err.message); return; }
   await loadAndRenderTalentSearchPolicy();
+}
+
+async function loadAndRenderTalentSearchVersions(){
+  const el = document.getElementById('talentsearch-versions-body');
+  if(!el) return;
+  el.innerHTML = '불러오는 중...';
+  try{
+    const { versions } = await apiGet('/talent-search-policy/versions');
+    el.innerHTML = `
+      <div class="section">
+        <div class="section-head"><div><h3>버전 이력</h3><div class="desc">최근 ${versions.length}개 (초안은 여기 안 보여요 -- 기준 관리센터에서 확인)</div></div></div>
+        <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>버전</th><th>상태</th><th>적용일시</th><th>변경한 사람</th><th>변경사유</th><th></th></tr></thead>
+          <tbody>
+            ${versions.map(v=>`
+              <tr>
+                <td>${v.versionNo}</td>
+                <td>${v.status==='active' ? '<span class="badge green">현재 적용 중</span>' : '<span class="badge grey">과거</span>'}</td>
+                <td>${v.appliedAt ? new Date(v.appliedAt).toLocaleString('ko-KR') : '-'}</td>
+                <td>${escapeHtml(v.createdByName)}</td>
+                <td>${escapeHtml(v.changeReason || '-')}</td>
+                <td>${v.status!=='active' ? `<button class="btn ghost sm" onclick="restoreVersionConfirm('${v.id}', ${v.versionNo})">복구</button>` : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    `;
+  }catch(err){ el.innerHTML = `<div class="section">${escapeHtml(err.message)}</div>`; }
+}
+function restoreVersionConfirm(id, versionNo){
+  if(!confirm(`버전 ${versionNo}의 내용을 초안으로 불러올까요? 지금 작성 중인 초안이 있다면 사라지고 이 버전 내용으로 덮어써요.`)) return;
+  restoreVersionNow(id);
+}
+async function restoreVersionNow(id){
+  try{ await apiPatch(`/talent-search-policy/versions/${id}/restore`, {}); }
+  catch(err){ alert(err.message); return; }
+  switchTalentSearchTab('policy');
 }
 
 function renderTalentSearchDashboard(){
