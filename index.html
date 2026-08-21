@@ -3065,64 +3065,125 @@ function switchTalentSearchTab(tab){
 }
 
 let tsPolicy = null;
+let tsActivePolicy = null;
+function renderLevel1Body(l1){
+  return `
+    이력서 업데이트: <b>${l1.resumeUpdated.passWithinDays}일 이내</b> 통과, <b>${l1.resumeUpdated.verifyWithinDays}일</b>까지는 확인 필요, 그 이후는 제외<br>
+    잦은 이직: 완료 경력 <b>${l1.shortTenure.monthsThreshold}개월 미만</b>이 단기근속, 최근 <b>${l1.shortTenure.lookbackYears}년</b> 내 <b>${l1.shortTenure.countThreshold}회</b> 이상이면 확인 필요 (예외: ${l1.shortTenure.exceptions.map(escapeHtml).join(', ')})<br>
+    경력 공백: <b>${l1.careerGap.ignoreUnderMonths}개월 미만</b> 무시, <b>${l1.careerGap.verifyUnderMonths}개월</b>까지 확인 필요, 그 이상은 설명 필요
+  `;
+}
+function renderPointsListBody(items){
+  const sum = items.reduce((s,w)=>s+w.points,0);
+  return `<div class="grid4">${items.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}</div><div style="font-size:12px;color:var(--sub);margin-top:6px;">합계 ${sum}점</div>`;
+}
+function renderEvidenceBody(ec){
+  return `<div class="grid4">
+    <div class="kpi"><div class="label">없음</div><div class="value">${Math.round(ec.none*100)}%</div></div>
+    <div class="kpi"><div class="label">약함</div><div class="value">${Math.round(ec.weak*100)}%</div></div>
+    <div class="kpi"><div class="label">부분</div><div class="value">${Math.round(ec.partial*100)}%</div></div>
+    <div class="kpi"><div class="label">명확</div><div class="value">${Math.round(ec.clear*100)}%</div></div>
+  </div>`;
+}
+function renderThresholdsBody(t, capDefault, capMax){
+  return `<div class="grid4">
+    <div class="kpi"><div class="label">총점 기준</div><div class="value">${t.totalScoreMin}점 이상</div></div>
+    <div class="kpi"><div class="label">직무점수 기준</div><div class="value">${t.jobFitScoreMin}점 이상</div></div>
+    <div class="kpi"><div class="label">의미있는 근거</div><div class="value">${t.minMeaningfulEvidenceCount}개 이상</div></div>
+    <div class="kpi"><div class="label">하루 추천 상한</div><div class="value">${capDefault}명</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">절대 상한 ${capMax}명</div></div>
+  </div>`;
+}
+function renderPolicyDiff(active, draft){
+  const rows = [];
+  if(JSON.stringify(active.level1Rules) !== JSON.stringify(draft.level1Rules)){
+    rows.push({title:'1차 필터(Level 1) 기준', from: renderLevel1Body(active.level1Rules), to: renderLevel1Body(draft.level1Rules)});
+  }
+  if(JSON.stringify(active.commonFitWeights) !== JSON.stringify(draft.commonFitWeights)){
+    rows.push({title:'공통 적합도 40점', from: renderPointsListBody(active.commonFitWeights), to: renderPointsListBody(draft.commonFitWeights)});
+  }
+  if(JSON.stringify(active.jobFitDefaultWeights) !== JSON.stringify(draft.jobFitDefaultWeights)){
+    rows.push({title:'직무 적합도 60점', from: renderPointsListBody(active.jobFitDefaultWeights), to: renderPointsListBody(draft.jobFitDefaultWeights)});
+  }
+  if(JSON.stringify(active.evidenceCoefficients) !== JSON.stringify(draft.evidenceCoefficients)){
+    rows.push({title:'근거수준별 점수', from: renderEvidenceBody(active.evidenceCoefficients), to: renderEvidenceBody(draft.evidenceCoefficients)});
+  }
+  const activeThresholdsKey = JSON.stringify([active.thresholds, active.dailyRecommendCapDefault, active.dailyRecommendCapAbsoluteMax]);
+  const draftThresholdsKey = JSON.stringify([draft.thresholds, draft.dailyRecommendCapDefault, draft.dailyRecommendCapAbsoluteMax]);
+  if(activeThresholdsKey !== draftThresholdsKey){
+    rows.push({title:'추천 임계값 · 하루 추천상한', from: renderThresholdsBody(active.thresholds, active.dailyRecommendCapDefault, active.dailyRecommendCapAbsoluteMax), to: renderThresholdsBody(draft.thresholds, draft.dailyRecommendCapDefault, draft.dailyRecommendCapAbsoluteMax)});
+  }
+  if(rows.length === 0) return '';
+  return `<div style="margin-top:14px;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">바뀐 항목</div>
+    ${rows.map(r=>`
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:4px;">${escapeHtml(r.title)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div><div style="font-size:11px;color:var(--sub);margin-bottom:4px;">기존</div>${r.from}</div>
+          <div><div style="font-size:11px;color:var(--sub);margin-bottom:4px;">초안</div>${r.to}</div>
+        </div>
+      </div>
+    `).join('')}
+  </div>`;
+}
 async function loadAndRenderTalentSearchPolicy(){
   const el = document.getElementById('talentsearch-policy-body');
   if(!el) return;
   el.innerHTML = '불러오는 중...';
   try{
   const policy = await apiGet('/talent-search-policy');
-  tsPolicy = policy;
+  const draft = policy.draft;
+  tsActivePolicy = policy;
+  tsPolicy = draft || policy;
 
-  const l1 = policy.level1Rules;
-  const commonSum = policy.commonFitWeights.reduce((s,w)=>s+w.points,0);
-  const jobFitSum = policy.jobFitDefaultWeights.reduce((s,w)=>s+w.points,0);
-  const ec = policy.evidenceCoefficients;
+  const view = tsPolicy;
+  const l1 = view.level1Rules;
+  const commonSum = view.commonFitWeights.reduce((s,w)=>s+w.points,0);
+  const jobFitSum = view.jobFitDefaultWeights.reduce((s,w)=>s+w.points,0);
+  const ec = view.evidenceCoefficients;
 
-  el.innerHTML = `
+  const bannerHtml = draft ? `
+    <div class="section" style="border-color:var(--primary);">
+      <div class="section-head"><div><h3>수정 중인 초안이 있어요 (버전 ${draft.versionNo}, 아직 적용 안 됨)</h3><div class="desc">지금 적용 중인 버전은 ${policy.versionNo}예요</div></div></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn primary sm" onclick="openApplyDraftModal()">적용하기</button>
+        <button class="btn ghost sm" onclick="discardDraftConfirm()">초안 버리기</button>
+      </div>
+      ${renderPolicyDiff(policy, draft)}
+    </div>
+  ` : '';
+
+  el.innerHTML = bannerHtml + `
     <div class="section">
-      <div class="section-head"><div><h3>현재 적용 중 · 버전 ${policy.versionNo}</h3><div class="desc">아래 각 카드의 "수정" 버튼으로 값을 바꿀 수 있어요</div></div></div>
+      <div class="section-head"><div><h3>현재 적용 중 · 버전 ${policy.versionNo}</h3><div class="desc">아래 각 카드의 "수정" 버튼으로 값을 바꿀 수 있어요${draft ? ' — 지금 카드는 초안 값을 보여주고 있어요(적용 전까지 실제로는 안 바뀜)' : ''}</div></div></div>
     </div>
     <div class="section">
       <div class="section-head"><h3>1차 필터(Level 1) 기준</h3></div>
-      <div style="font-size:13px;line-height:1.8;">
-        이력서 업데이트: <b>${l1.resumeUpdated.passWithinDays}일 이내</b> 통과, <b>${l1.resumeUpdated.verifyWithinDays}일</b>까지는 확인 필요, 그 이후는 제외<br>
-        잦은 이직: 완료 경력 <b>${l1.shortTenure.monthsThreshold}개월 미만</b>이 단기근속, 최근 <b>${l1.shortTenure.lookbackYears}년</b> 내 <b>${l1.shortTenure.countThreshold}회</b> 이상이면 확인 필요 (예외: ${l1.shortTenure.exceptions.map(escapeHtml).join(', ')})<br>
-        경력 공백: <b>${l1.careerGap.ignoreUnderMonths}개월 미만</b> 무시, <b>${l1.careerGap.verifyUnderMonths}개월</b>까지 확인 필요, 그 이상은 설명 필요
-      </div>
+      <div style="font-size:13px;line-height:1.8;">${renderLevel1Body(l1)}</div>
       <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditLevel1Modal()">수정</button>
     </div>
     <div class="section">
       <div class="section-head"><h3>공통 적합도 40점 (합계 ${commonSum}점)</h3></div>
       <div class="grid4">
-        ${policy.commonFitWeights.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}
+        ${view.commonFitWeights.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}
       </div>
       <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditCommonFitModal()">수정</button>
     </div>
     <div class="section">
       <div class="section-head"><h3>직무 적합도 60점 기본 배점 (합계 ${jobFitSum}점)</h3></div>
       <div class="grid4">
-        ${policy.jobFitDefaultWeights.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}
+        ${view.jobFitDefaultWeights.map(w=>`<div class="kpi"><div class="label">${escapeHtml(w.label)}</div><div class="value">${w.points}점</div></div>`).join('')}
       </div>
       <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditJobFitModal()">수정</button>
     </div>
     <div class="section">
       <div class="section-head"><h3>근거수준별 점수</h3></div>
-      <div class="grid4">
-        <div class="kpi"><div class="label">없음</div><div class="value">${Math.round(ec.none*100)}%</div></div>
-        <div class="kpi"><div class="label">약함</div><div class="value">${Math.round(ec.weak*100)}%</div></div>
-        <div class="kpi"><div class="label">부분</div><div class="value">${Math.round(ec.partial*100)}%</div></div>
-        <div class="kpi"><div class="label">명확</div><div class="value">${Math.round(ec.clear*100)}%</div></div>
-      </div>
+      ${renderEvidenceBody(ec)}
       <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditEvidenceModal()">수정</button>
     </div>
     <div class="section">
       <div class="section-head"><h3>추천 임계값 · 하루 추천 상한</h3></div>
-      <div class="grid4">
-        <div class="kpi"><div class="label">총점 기준</div><div class="value">${policy.thresholds.totalScoreMin}점 이상</div></div>
-        <div class="kpi"><div class="label">직무점수 기준</div><div class="value">${policy.thresholds.jobFitScoreMin}점 이상</div></div>
-        <div class="kpi"><div class="label">의미있는 근거</div><div class="value">${policy.thresholds.minMeaningfulEvidenceCount}개 이상</div></div>
-        <div class="kpi"><div class="label">하루 추천 상한</div><div class="value">${policy.dailyRecommendCapDefault}명</div><div style="font-size:11px;color:var(--sub);margin-top:4px;">절대 상한 ${policy.dailyRecommendCapAbsoluteMax}명</div></div>
-      </div>
+      ${renderThresholdsBody(view.thresholds, view.dailyRecommendCapDefault, view.dailyRecommendCapAbsoluteMax)}
       <button class="btn ghost sm" style="margin-top:10px;" onclick="openEditThresholdsModal()">수정</button>
     </div>
   `;
@@ -3140,7 +3201,6 @@ function openEditLevel1Modal(){
     <div class="field"><label>단기근속 예외사유 (쉼표로 구분)</label><input id="f-l1-exceptions" value="${escapeHtml(l1.shortTenure.exceptions.join(', '))}"></div>
     <div class="field"><label>경력 공백 — 무시 기준(개월 미만)</label><input id="f-l1-gapignore" type="number" min="1" value="${l1.careerGap.ignoreUnderMonths}"></div>
     <div class="field"><label>경력 공백 — 확인필요 기준(개월)</label><input id="f-l1-gapverify" type="number" min="1" value="${l1.careerGap.verifyUnderMonths}"></div>
-    <div class="field"><label>변경 사유</label><input id="f-l1-reason" placeholder="왜 바꾸는지 적어주세요"></div>
     <div id="l1-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveLevel1Rules()">저장</button></div>
   `);
@@ -3162,8 +3222,7 @@ async function saveLevel1Rules(){
       verifyUnderMonths: Number(document.getElementById('f-l1-gapverify').value)
     }
   };
-  const changeReason = document.getElementById('f-l1-reason').value.trim();
-  try{ await apiPatch('/talent-search-policy/level1-rules', {level1Rules, changeReason}); }
+  try{ await apiPatch('/talent-search-policy/level1-rules', {level1Rules}); }
   catch(err){
     const box = document.getElementById('l1-edit-error');
     box.textContent = err.message; box.style.display = 'block';
@@ -3182,7 +3241,6 @@ function openEditPointsListModal(config){
     <div id="pointslist-rows"></div>
     <button class="btn ghost sm" onclick="addPointsListRow()">+ 항목 추가</button>
     <div style="margin:10px 0;font-size:13px;">합계: <b id="pointslist-sum"></b>/${config.expectedSum}</div>
-    <div class="field"><label>변경 사유</label><input id="f-pointslist-reason" placeholder="왜 바꾸는지 적어주세요"></div>
     <div id="pointslist-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="savePointsList()">저장</button></div>
   `, true);
@@ -3213,8 +3271,7 @@ function addPointsListRow(){
 }
 function removePointsListRow(i){ pointsListDraft.splice(i,1); renderPointsListRows(); }
 async function savePointsList(){
-  const changeReason = document.getElementById('f-pointslist-reason').value.trim();
-  try{ await apiPatch(pointsListConfig.apiPath, {[pointsListConfig.bodyKey]: pointsListDraft, changeReason}); }
+  try{ await apiPatch(pointsListConfig.apiPath, {[pointsListConfig.bodyKey]: pointsListDraft}); }
   catch(err){
     const box = document.getElementById('pointslist-edit-error');
     box.textContent = err.message; box.style.display = 'block';
@@ -3245,7 +3302,6 @@ function openEditEvidenceModal(){
     <div class="field"><label>부분 (%)</label><input id="f-ec-partial" type="number" min="1" max="100" step="1" value="${Math.round(ec.partial*100)}"></div>
     <div class="field"><label>약함 (%)</label><input id="f-ec-weak" type="number" min="1" max="100" step="1" value="${Math.round(ec.weak*100)}"></div>
     <div class="field"><label>없음 (%)</label><input id="f-ec-none" type="number" min="1" max="100" step="1" value="${Math.round(ec.none*100)}"></div>
-    <div class="field"><label>변경 사유</label><input id="f-ec-reason" placeholder="왜 바꾸는지 적어주세요"></div>
     <div id="ec-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveEvidenceCoefficients()">저장</button></div>
   `);
@@ -3257,8 +3313,7 @@ async function saveEvidenceCoefficients(){
     partial: Number(document.getElementById('f-ec-partial').value)/100,
     clear: Number(document.getElementById('f-ec-clear').value)/100
   };
-  const changeReason = document.getElementById('f-ec-reason').value.trim();
-  try{ await apiPatch('/talent-search-policy/evidence-coefficients', {evidenceCoefficients, changeReason}); }
+  try{ await apiPatch('/talent-search-policy/evidence-coefficients', {evidenceCoefficients}); }
   catch(err){
     const box = document.getElementById('ec-edit-error');
     box.textContent = err.message; box.style.display = 'block';
@@ -3276,7 +3331,6 @@ function openEditThresholdsModal(){
     <div class="field"><label>의미있는 근거 개수 (개)</label><input id="f-th-evidence" type="number" min="1" value="${t.minMeaningfulEvidenceCount}"></div>
     <div class="field"><label>하루 추천상한 — 기본값 (명)</label><input id="f-th-capdefault" type="number" min="1" value="${tsPolicy.dailyRecommendCapDefault}"></div>
     <div class="field"><label>하루 추천상한 — 절대상한 (명)</label><input id="f-th-capmax" type="number" min="1" value="${tsPolicy.dailyRecommendCapAbsoluteMax}"></div>
-    <div class="field"><label>변경 사유</label><input id="f-th-reason" placeholder="왜 바꾸는지 적어주세요"></div>
     <div id="th-edit-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="saveThresholds()">저장</button></div>
   `);
@@ -3289,14 +3343,41 @@ async function saveThresholds(){
   };
   const dailyRecommendCapDefault = Number(document.getElementById('f-th-capdefault').value);
   const dailyRecommendCapAbsoluteMax = Number(document.getElementById('f-th-capmax').value);
-  const changeReason = document.getElementById('f-th-reason').value.trim();
-  try{ await apiPatch('/talent-search-policy/thresholds', {thresholds, dailyRecommendCapDefault, dailyRecommendCapAbsoluteMax, changeReason}); }
+  try{ await apiPatch('/talent-search-policy/thresholds', {thresholds, dailyRecommendCapDefault, dailyRecommendCapAbsoluteMax}); }
   catch(err){
     const box = document.getElementById('th-edit-error');
     box.textContent = err.message; box.style.display = 'block';
     return;
   }
   closeModal();
+  await loadAndRenderTalentSearchPolicy();
+}
+function openApplyDraftModal(){
+  showModal(`
+    <h3>초안 적용</h3>
+    <div class="field"><label>변경 사유</label><input id="f-apply-reason" placeholder="왜 바꾸는지 적어주세요"></div>
+    <div id="apply-draft-error" style="display:none;color:var(--red);font-size:12.5px;margin-bottom:10px;"></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="applyDraftNow()">적용</button></div>
+  `);
+}
+async function applyDraftNow(){
+  const changeReason = document.getElementById('f-apply-reason').value.trim();
+  try{ await apiPatch('/talent-search-policy/draft/apply', {changeReason}); }
+  catch(err){
+    const box = document.getElementById('apply-draft-error');
+    box.textContent = err.message; box.style.display = 'block';
+    return;
+  }
+  closeModal();
+  await loadAndRenderTalentSearchPolicy();
+}
+function discardDraftConfirm(){
+  if(!confirm('초안을 버릴까요? 지금까지 고친 내용이 전부 사라지고, 되돌릴 수 없어요.')) return;
+  discardDraftNow();
+}
+async function discardDraftNow(){
+  try{ await apiDelete('/talent-search-policy/draft'); }
+  catch(err){ alert(err.message); return; }
   await loadAndRenderTalentSearchPolicy();
 }
 
