@@ -61,6 +61,8 @@ import talentSearchPolicyEvidenceCoefficients from '../handlers/talent-search-po
 import talentSearchPolicyThresholds from '../handlers/talent-search-policy/thresholds.js';
 import talentSearchPolicyDraft from '../handlers/talent-search-policy/draft.js';
 import talentSearchPolicyDraftApply from '../handlers/talent-search-policy/draft/apply.js';
+import talentSearchPolicyVersions from '../handlers/talent-search-policy/versions/index.js';
+import talentSearchPolicyVersionRestore from '../handlers/talent-search-policy/versions/[id]/restore.js';
 import auditLogIndex from '../handlers/audit-log/index.js';
 import revenueIndex from '../handlers/revenue/index.js';
 import revenueTarget from '../handlers/revenue/target.js';
@@ -109,6 +111,8 @@ const ROUTES = [
   { pattern: ['talent-search-policy', 'thresholds'], handler: talentSearchPolicyThresholds },
   { pattern: ['talent-search-policy', 'draft'], handler: talentSearchPolicyDraft },
   { pattern: ['talent-search-policy', 'draft', 'apply'], handler: talentSearchPolicyDraftApply },
+  { pattern: ['talent-search-policy', 'versions'], handler: talentSearchPolicyVersions },
+  { pattern: ['talent-search-policy', 'versions', ':id', 'restore'], handler: talentSearchPolicyVersionRestore },
   { pattern: ['audit-log'], handler: auditLogIndex },
   { pattern: ['revenue'], handler: revenueIndex },
   { pattern: ['revenue', 'target'], handler: revenueTarget },

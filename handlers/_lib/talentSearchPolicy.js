@@ -6,7 +6,10 @@
  * 저장과 적용을 분리한다 -- 카드 저장은 초안(status='draft')에만 반영되고,
  * 별도의 "적용하기"를 거쳐야 실제 활성 버전이 바뀐다. 초안은 전역에서 한 번에
  * 하나만 존재한다: 이미 초안이 있으면 그 행을 그대로 UPDATE(병합)하고, 없으면
- * 활성 버전을 베이스로 새 초안 행을 만든다.
+ * 활성 버전을 베이스로 새 초안 행을 만든다. 1B-4b부터는 여기에 버전 이력
+ * 조회(listPolicyVersions)와 과거 버전 복구(restoreVersionAsDraft)가 추가된다
+ * -- 복구도 "새 초안 만들기"라 saveDraftOverrides와 INSERT 로직을 공유한다
+ * (insertNewDraft).
  */
 import { sql } from './db.js';
 import { requireTalentSearchAccess } from './accountAuth.js';
@@ -14,6 +17,7 @@ import { validateOverrideKeys } from './talentSearchPolicyValidate.js';
 
 export function policy_out(row) {
   return {
+    id: row.id,
     versionNo: row.version_no,
     level1Rules: row.level1_rules,
     commonFitWeights: row.common_fit_weights,
@@ -44,6 +48,29 @@ export async function getDraftPolicy() {
     SELECT * FROM talent_search_policy_versions WHERE status = 'draft'
     ORDER BY version_no DESC LIMIT 1`;
   return row || null;
+}
+
+// base(snake_case row 모양)의 필드값을 그대로 복사해 새 초안 행을 INSERT한다
+// (version_no는 현재 최댓값+1). saveDraftOverrides(초안이 아직 없을 때)와
+// restoreVersionAsDraft가 이 로직을 공유한다.
+async function insertNewDraft(base, actorAccountId) {
+  const [maxRow] = await sql`SELECT MAX(version_no) AS max FROM talent_search_policy_versions`;
+  const nextVersionNo = (maxRow.max || 0) + 1;
+  const [inserted] = await sql`
+    INSERT INTO talent_search_policy_versions (
+      version_no, level1_rules, common_fit_weights, evidence_coefficients,
+      job_fit_default_weights, rounding_rule, thresholds, sort_tiebreak_rules,
+      daily_recommend_cap_default, daily_recommend_cap_absolute_max,
+      data_retention_months, status, created_by
+    ) VALUES (
+      ${nextVersionNo}, ${JSON.stringify(base.level1_rules)}::jsonb,
+      ${JSON.stringify(base.common_fit_weights)}::jsonb, ${JSON.stringify(base.evidence_coefficients)}::jsonb,
+      ${JSON.stringify(base.job_fit_default_weights)}::jsonb, ${JSON.stringify(base.rounding_rule)}::jsonb,
+      ${JSON.stringify(base.thresholds)}::jsonb, ${JSON.stringify(base.sort_tiebreak_rules)}::jsonb,
+      ${base.daily_recommend_cap_default}, ${base.daily_recommend_cap_absolute_max},
+      ${base.data_retention_months}, 'draft', ${actorAccountId}
+    ) RETURNING *`;
+  return inserted;
 }
 
 // overrides: 바뀌는 필드만 snake_case 키로 담은 객체. 초안이 이미 있으면 그
@@ -77,23 +104,7 @@ export async function saveDraftOverrides(overrides, actorAccountId) {
     return updated;
   }
 
-  const [maxRow] = await sql`SELECT MAX(version_no) AS max FROM talent_search_policy_versions`;
-  const nextVersionNo = (maxRow.max || 0) + 1;
-  const [inserted] = await sql`
-    INSERT INTO talent_search_policy_versions (
-      version_no, level1_rules, common_fit_weights, evidence_coefficients,
-      job_fit_default_weights, rounding_rule, thresholds, sort_tiebreak_rules,
-      daily_recommend_cap_default, daily_recommend_cap_absolute_max,
-      data_retention_months, status, created_by
-    ) VALUES (
-      ${nextVersionNo}, ${JSON.stringify(next.level1_rules)}::jsonb,
-      ${JSON.stringify(next.common_fit_weights)}::jsonb, ${JSON.stringify(next.evidence_coefficients)}::jsonb,
-      ${JSON.stringify(next.job_fit_default_weights)}::jsonb, ${JSON.stringify(next.rounding_rule)}::jsonb,
-      ${JSON.stringify(next.thresholds)}::jsonb, ${JSON.stringify(next.sort_tiebreak_rules)}::jsonb,
-      ${next.daily_recommend_cap_default}, ${next.daily_recommend_cap_absolute_max},
-      ${next.data_retention_months}, 'draft', ${actorAccountId}
-    ) RETURNING *`;
-  return inserted;
+  return insertNewDraft(next, actorAccountId);
 }
 
 // 초안을 활성으로 승격. 기존 활성 버전은 superseded로 밀려난다.
@@ -124,6 +135,33 @@ export async function applyDraft(changeReason, actorAccountId) {
 
 export async function discardDraft() {
   await sql`DELETE FROM talent_search_policy_versions WHERE status = 'draft'`;
+}
+
+// 특정 버전(과거든 활성이든)의 값을 그대로 복구해 새 초안으로 만든다. 이미
+// 초안이 있었다면 통째로 덮어쓴다(saveDraftOverrides처럼 이어서 병합하는 게
+// 아니라, "이 시점 스냅샷으로 완전히 교체"가 목적이라서다 -- 사용자가
+// 명시적으로 확인한 동작).
+export async function restoreVersionAsDraft(versionId, actorAccountId) {
+  const [target] = await sql`SELECT * FROM talent_search_policy_versions WHERE id = ${versionId}`;
+  if (!target) throw new Error('복구할 버전을 찾을 수 없어요');
+
+  await sql`DELETE FROM talent_search_policy_versions WHERE status = 'draft'`;
+  return insertNewDraft(target, actorAccountId);
+}
+
+// 최근 limit개 버전(초안 제외)을 변경자 이름과 함께 최신순으로 조회한다.
+// 이름 조인은 handlers/audit-log/index.js가 이미 쓰는 accounts->members
+// 패턴과 동일 -- accounts에는 이름이 없고 members에 있어서 두 단계로 탄다.
+export async function listPolicyVersions(limit) {
+  const rows = await sql`
+    SELECT v.*, m.name AS created_by_name
+    FROM talent_search_policy_versions v
+    LEFT JOIN accounts a ON a.id = v.created_by
+    LEFT JOIN members m ON m.id = a.employee_id
+    WHERE v.status != 'draft'
+    ORDER BY v.version_no DESC
+    LIMIT ${limit}`;
+  return rows;
 }
 
 // validate(body): body(= req.body 그대로, 더 이상 changeReason을 따로 빼지
