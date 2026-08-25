@@ -3182,13 +3182,13 @@ function renderVirtualCandidatePreview(activePolicy, draftPolicy){
         <td>${activeResult.jobFitScore}</td>
         <td>${activeResult.totalScore}</td>
         <td><span class="${verdictBadgeClass(activeResult.verdict)}">${activeResult.verdict}</span></td>
-        ${draftPolicy ? `<td${changed ? ' style="background:#fff3cd;"' : ''}><span class="${verdictBadgeClass(draftResult.verdict)}">${draftResult.verdict}</span></td>` : ''}
+        ${draftPolicy ? `<td${changed ? ' style="background:var(--amber-light);"' : ''}><span class="${verdictBadgeClass(draftResult.verdict)}">${draftResult.verdict}</span></td>` : ''}
       </tr>
     `;
   }).join('');
   return `
     <div class="section">
-      <div class="section-head"><div><h3>가상 후보 미리보기</h3><div class="desc">실제 이력서 평가가 아니라, 지금 정책이 대략 어떻게 작동하는지 감을 잡기 위한 시뮬레이션이에요</div></div></div>
+      <div class="section-head"><div><h3>가상 후보 미리보기</h3><div class="desc">실제 이력서 평가가 아니라, 지금 정책이 대략 어떻게 작동하는지 감을 잡기 위한 시뮬레이션이에요. 이력서 업데이트 기준·단기근속 횟수 기준·경력공백 무시기준·배점·근거계수·추천임계값만 이 표에 영향을 줘요 — 나머지 항목(단기근속 예외사유, 경력공백 확인필요 기준, 하루 추천상한 등)은 이 3명의 가상 후보로는 차이가 안 나요.</div></div></div>
       <div style="overflow-x:auto;">
       <table>
         <thead><tr><th>후보</th><th>Level1</th><th>공통40점</th><th>직무60점</th><th>총점</th><th>판정${draftPolicy ? '(기존)' : ''}</th>${draftPolicy ? '<th>판정(초안)</th>' : ''}</tr></thead>
