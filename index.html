@@ -434,7 +434,7 @@
       </div>
       <div id="talentsearch-dashboard">
         <div class="section">
-          <div class="section-head"><div><h3>검색 프로젝트</h3><div class="desc">아직 화면 골격만 만든 단계라, 실제로 검색 프로젝트를 만드는 기능은 다음 단계에서 추가돼요</div></div></div>
+          <div class="section-head"><div><h3>검색 프로젝트</h3><div class="desc">"+ 새 인재검색"으로 검색 프로젝트를 만들 수 있어요 (아직 이 목록 카드에는 연동 안 됨)</div></div></div>
           <div id="talentsearch-projects"></div>
         </div>
       </div>
@@ -3065,6 +3065,7 @@ function switchTalentSearchTab(tab){
     document.getElementById('talentsearch-'+t).style.display = t===tab ? '' : 'none';
     document.getElementById('tstab-'+t).classList.toggle('active', t===tab);
   });
+  if(tab==='dashboard') renderTalentSearchDashboard();
   if(tab==='policy') loadAndRenderTalentSearchPolicy();
   if(tab==='versions') loadAndRenderTalentSearchVersions();
 }
@@ -3535,8 +3536,9 @@ function renderTalentSearchDashboard(){
     {title:'콘텐츠팀 영상PD', sub:'경력 3~5년 · 정규직 · 서울', today:0, todayCap:50, cumulative:0, target:30}
   ];
   el.innerHTML = `
+    <button class="btn primary sm" style="margin-bottom:14px;" onclick="openNewTalentSearchForm()">+ 새 인재검색</button>
     <div style="margin-bottom:14px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--sub);">
-      아직 실제 검색 프로젝트를 만드는 기능은 없어요 — 화면이 완성되면 이렇게 카드로 보이게 될 거예요. 아래 2개는 예시예요.
+      새로 만든 검색 프로젝트는 아직 이 카드 목록에 나오지 않아요(다음 단계에서 연동돼요). 아래 2개는 예시예요.
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
       ${sample.map(p=>`
@@ -3556,6 +3558,266 @@ function renderTalentSearchDashboard(){
       `).join('')}
     </div>
   `;
+}
+
+const TS_PLATFORMS = ['사람인', '잡코리아', '리멤버', '원티드'];
+let tsProjectDraft = null;
+let tsJobTemplates = [];
+
+async function openNewTalentSearchForm(){
+  tsProjectDraft = {
+    title:'', roleTitle:'', seniorityLevel:'', experienceMinYears:'', experienceMaxYears:'',
+    employmentType:'', headcount:'', location:'',
+    workConditions:{ expectedStartDate:'', salaryRange:'', workArrangement:'', requiredQualifications:'', avoidConditions:'' },
+    naturalLanguageBrief:'',
+    keywords:{ include:'', or:'', exact:'', exclude:'', preferred:'' },
+    targetRecommendCount:'', platforms:[],
+    saveAsTemplate:false, templateName:''
+  };
+  try{ const { templates } = await apiGet('/talent-search-job-templates'); tsJobTemplates = templates; }
+  catch(err){ tsJobTemplates = []; }
+  renderNewTalentSearchForm();
+}
+
+function renderNewTalentSearchForm(){
+  const d = tsProjectDraft;
+  const el = document.getElementById('talentsearch-projects');
+  if(!el) return;
+  el.innerHTML = `
+    <div class="field"><label>직무 템플릿 불러오기</label>
+      <select id="f-ts-template-load" onchange="loadTemplateIntoForm(this.value)">
+        <option value="">선택 안 함</option>
+        ${tsJobTemplates.map((t,i)=>`<option value="${i}">${escapeHtml(t.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label>검색 프로젝트명</label><input id="f-ts-title" value="${escapeHtml(d.title)}" placeholder="예: 2026년 8월 리빙MD 채용"></div>
+    <div class="form-row">
+      <div class="field"><label>채용 직무/포지션명</label><input id="f-ts-role" value="${escapeHtml(d.roleTitle)}" placeholder="예: 리빙상품 기획MD"></div>
+      <div class="field"><label>직급/역할수준</label><input id="f-ts-level" value="${escapeHtml(d.seniorityLevel)}" placeholder="예: 대리급"></div>
+    </div>
+    <div class="form-row3">
+      <div class="field"><label>희망 경력(최소, 년)</label><input id="f-ts-expmin" type="number" min="0" value="${escapeHtml(String(d.experienceMinYears))}"></div>
+      <div class="field"><label>희망 경력(최대, 년)</label><input id="f-ts-expmax" type="number" min="0" value="${escapeHtml(String(d.experienceMaxYears))}"></div>
+      <div class="field"><label>고용형태</label><input id="f-ts-employment" value="${escapeHtml(d.employmentType)}" placeholder="예: 정규직"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>채용인원</label><input id="f-ts-headcount" type="number" min="1" value="${escapeHtml(String(d.headcount))}"></div>
+      <div class="field"><label>근무지역</label><input id="f-ts-location" value="${escapeHtml(d.location)}" placeholder="예: 서울"></div>
+    </div>
+    <div class="field"><label>찾고 싶은 사람 (자연어로 설명해주세요)</label><textarea id="f-ts-brief" style="min-height:120px;" placeholder="예: 이커머스 리빙상품 기획MD 대리급을 찾는다. 시장조사만 한 사람보다 실제 상품 출시와 리오더를 끝까지 운영한 사람이 필요하다.">${escapeHtml(d.naturalLanguageBrief)}</textarea></div>
+    <div class="form-row">
+      <div class="field"><label>반드시 포함할 키워드 (쉼표로 구분)</label><input id="f-ts-kw-include" value="${escapeHtml(d.keywords.include)}"></div>
+      <div class="field"><label>OR 검색 키워드 (쉼표로 구분)</label><input id="f-ts-kw-or" value="${escapeHtml(d.keywords.or)}"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>정확히 일치할 문구 (쉼표로 구분)</label><input id="f-ts-kw-exact" value="${escapeHtml(d.keywords.exact)}"></div>
+      <div class="field"><label>제외할 키워드 (쉼표로 구분)</label><input id="f-ts-kw-exclude" value="${escapeHtml(d.keywords.exclude)}"></div>
+    </div>
+    <div class="field"><label>우대 키워드 (쉼표로 구분)</label><input id="f-ts-kw-preferred" value="${escapeHtml(d.keywords.preferred)}"></div>
+    <div class="form-row">
+      <div class="field"><label>총 적합 추천 목표 인원</label><input id="f-ts-target" type="number" min="1" value="${escapeHtml(String(d.targetRecommendCount))}"></div>
+      <div class="field"><label>검색할 플랫폼</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;">
+          ${TS_PLATFORMS.map((p,i)=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;"><input type="checkbox" id="f-ts-platform-${i}" ${d.platforms.includes(p)?'checked':''}> ${p}</label>`).join('')}
+        </div>
+      </div>
+    </div>
+    <details style="margin:14px 0;">
+      <summary style="cursor:pointer;font-weight:700;font-size:13px;">상세조건 (선택, 안 채워도 감점되지 않아요)</summary>
+      <div class="form-row" style="margin-top:10px;">
+        <div class="field"><label>희망 입사가능 시점</label><input id="f-ts-startdate" value="${escapeHtml(d.workConditions.expectedStartDate)}"></div>
+        <div class="field"><label>연봉·보상 범위</label><input id="f-ts-salary" value="${escapeHtml(d.workConditions.salaryRange)}"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>출근/재택/출장 조건</label><input id="f-ts-arrangement" value="${escapeHtml(d.workConditions.workArrangement)}"></div>
+        <div class="field"><label>필수 자격·언어·포트폴리오</label><input id="f-ts-quals" value="${escapeHtml(d.workConditions.requiredQualifications)}"></div>
+      </div>
+      <div class="field"><label>반드시 피해야 할 업무환경/경력유형</label><input id="f-ts-avoid" value="${escapeHtml(d.workConditions.avoidConditions)}"></div>
+    </details>
+    <div style="margin:10px 0;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;">
+        <input type="checkbox" id="f-ts-savetemplate" ${d.saveAsTemplate?'checked':''} onchange="tsProjectDraft.saveAsTemplate=this.checked; renderTsTemplateNameField();">
+        이 조건을 직무 템플릿으로도 저장
+      </label>
+    </div>
+    <div id="ts-template-name-field">${d.saveAsTemplate ? `<div class="field"><label>템플릿 이름</label><input id="f-ts-templatename" value="${escapeHtml(d.templateName)}" placeholder="예: 리빙MD 대리급"></div>` : ''}</div>
+    <div id="ts-form-error" style="display:none;color:var(--red);font-size:12.5px;margin:10px 0;"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn" onclick="switchTalentSearchTab('dashboard')">취소</button>
+      <button class="btn primary" onclick="submitNewTalentSearchProject()">검색기준 만들기</button>
+    </div>
+  `;
+}
+
+function renderTsTemplateNameField(){
+  const el = document.getElementById('ts-template-name-field');
+  if(!el) return;
+  el.innerHTML = tsProjectDraft.saveAsTemplate
+    ? `<div class="field"><label>템플릿 이름</label><input id="f-ts-templatename" value="${escapeHtml(tsProjectDraft.templateName)}" placeholder="예: 리빙MD 대리급"></div>`
+    : '';
+}
+
+function loadTemplateIntoForm(idxStr){
+  if(idxStr===''){ return; }
+  const t = tsJobTemplates[Number(idxStr)];
+  if(!t) return;
+  const c = t.criteria || {};
+  tsProjectDraft = {
+    ...tsProjectDraft,
+    roleTitle: c.roleTitle || '',
+    seniorityLevel: c.seniorityLevel || '',
+    experienceMinYears: c.experienceMinYears ?? '',
+    experienceMaxYears: c.experienceMaxYears ?? '',
+    employmentType: c.employmentType || '',
+    headcount: c.headcount ?? '',
+    location: c.location || '',
+    workConditions: c.workConditions || tsProjectDraft.workConditions,
+    naturalLanguageBrief: c.naturalLanguageBrief || '',
+    keywords: {
+      include: (c.keywords?.include || []).join(', '),
+      or: (c.keywords?.or || []).join(', '),
+      exact: (c.keywords?.exact || []).join(', '),
+      exclude: (c.keywords?.exclude || []).join(', '),
+      preferred: (c.keywords?.preferred || []).join(', ')
+    },
+    targetRecommendCount: c.targetRecommendCount ?? '',
+    platforms: c.platforms || []
+  };
+  renderNewTalentSearchForm();
+}
+
+function captureNewTalentSearchForm(){
+  const d = tsProjectDraft;
+  d.title = document.getElementById('f-ts-title').value;
+  d.roleTitle = document.getElementById('f-ts-role').value;
+  d.seniorityLevel = document.getElementById('f-ts-level').value;
+  d.experienceMinYears = document.getElementById('f-ts-expmin').value;
+  d.experienceMaxYears = document.getElementById('f-ts-expmax').value;
+  d.employmentType = document.getElementById('f-ts-employment').value;
+  d.headcount = document.getElementById('f-ts-headcount').value;
+  d.location = document.getElementById('f-ts-location').value;
+  d.naturalLanguageBrief = document.getElementById('f-ts-brief').value;
+  d.keywords.include = document.getElementById('f-ts-kw-include').value;
+  d.keywords.or = document.getElementById('f-ts-kw-or').value;
+  d.keywords.exact = document.getElementById('f-ts-kw-exact').value;
+  d.keywords.exclude = document.getElementById('f-ts-kw-exclude').value;
+  d.keywords.preferred = document.getElementById('f-ts-kw-preferred').value;
+  d.targetRecommendCount = document.getElementById('f-ts-target').value;
+  d.platforms = TS_PLATFORMS.filter((p,i)=>document.getElementById('f-ts-platform-'+i).checked);
+  d.workConditions = {
+    expectedStartDate: document.getElementById('f-ts-startdate').value,
+    salaryRange: document.getElementById('f-ts-salary').value,
+    workArrangement: document.getElementById('f-ts-arrangement').value,
+    requiredQualifications: document.getElementById('f-ts-quals').value,
+    avoidConditions: document.getElementById('f-ts-avoid').value
+  };
+  d.saveAsTemplate = document.getElementById('f-ts-savetemplate').checked;
+  const nameEl = document.getElementById('f-ts-templatename');
+  d.templateName = nameEl ? nameEl.value : '';
+}
+
+function showTsFormError(msg){
+  const box = document.getElementById('ts-form-error');
+  if(!box){ alert(msg); return; }
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+
+function splitKeywords(s){
+  return String(s||'').split(',').map(x=>x.trim()).filter(Boolean);
+}
+
+// 원본 명세: "핵심 정보가 빠져 직무 기준을 만들 수 없을 때만 추가 질문을
+// 한다... 최대 3개로 제한한다." 로컬 모델(Phase 2, 아직 없음) 없이 이
+// 조건들을 규칙으로만 흉내낸다 -- 실제 AI 판단이 아니라 화면 흐름
+// 시뮬레이션이다.
+function computeClarificationQuestions(d){
+  const qs = [];
+  if(!d.naturalLanguageBrief || d.naturalLanguageBrief.trim().length < 30){
+    qs.push('이 직무에서 반드시 확인해야 할 과거 성과나 경험이 있다면 설명해주세요');
+  }
+  if(!splitKeywords(d.keywords.include).length){
+    qs.push('반드시 포함되어야 할 키워드가 있다면 알려주세요');
+  }
+  if(!splitKeywords(d.keywords.exclude).length){
+    qs.push('반드시 피해야 할 경력유형이나 업무환경이 있나요?');
+  }
+  return qs.slice(0, 3);
+}
+
+let tsClarifyQuestions = [];
+
+function submitNewTalentSearchProject(){
+  captureNewTalentSearchForm();
+  const d = tsProjectDraft;
+  if(!d.title.trim()) return showTsFormError('검색 프로젝트명을 입력해주세요');
+  if(!d.roleTitle.trim()) return showTsFormError('채용 직무/포지션명을 입력해주세요');
+  if(!d.employmentType.trim()) return showTsFormError('고용형태를 입력해주세요');
+  if(!d.headcount || Number(d.headcount) < 1) return showTsFormError('채용인원을 1명 이상 입력해주세요');
+  if(!d.targetRecommendCount || Number(d.targetRecommendCount) < 1) return showTsFormError('총 적합 추천 목표 인원을 1명 이상 입력해주세요');
+  if(!d.platforms.length) return showTsFormError('검색할 플랫폼을 1개 이상 선택해주세요');
+  if(d.saveAsTemplate && !d.templateName.trim()) return showTsFormError('템플릿 이름을 입력해주세요');
+
+  tsClarifyQuestions = computeClarificationQuestions(d);
+  if(tsClarifyQuestions.length){
+    showModal(`
+      <h3>몇 가지만 더 확인할게요</h3>
+      <div class="modal-sub">입력한 내용만으로는 직무 기준을 만들기에 정보가 조금 부족해요 — 답하지 않고 넘어가도 괜찮아요</div>
+      ${tsClarifyQuestions.map((q,i)=>`<div class="field"><label>${escapeHtml(q)}</label><input id="f-ts-clarify-${i}" placeholder="답하지 않아도 괜찮아요"></div>`).join('')}
+      <div class="modal-actions"><button class="btn" onclick="closeModal()">뒤로</button><button class="btn primary" onclick="confirmClarificationAndSave()">확인하고 저장</button></div>
+    `);
+    return;
+  }
+  saveNewTalentSearchProject([]);
+}
+
+function confirmClarificationAndSave(){
+  const notes = tsClarifyQuestions.map((q,i)=>({
+    question: q,
+    answer: document.getElementById('f-ts-clarify-'+i).value.trim()
+  }));
+  closeModal();
+  saveNewTalentSearchProject(notes);
+}
+
+async function saveNewTalentSearchProject(clarificationNotes){
+  const d = tsProjectDraft;
+  const criteria = {
+    roleTitle: d.roleTitle.trim(),
+    seniorityLevel: d.seniorityLevel.trim() || null,
+    experienceMinYears: d.experienceMinYears ? Number(d.experienceMinYears) : null,
+    experienceMaxYears: d.experienceMaxYears ? Number(d.experienceMaxYears) : null,
+    employmentType: d.employmentType.trim(),
+    headcount: Number(d.headcount),
+    location: d.location.trim() || null,
+    workConditions: d.workConditions,
+    naturalLanguageBrief: d.naturalLanguageBrief.trim() || null,
+    keywords: {
+      include: splitKeywords(d.keywords.include),
+      or: splitKeywords(d.keywords.or),
+      exact: splitKeywords(d.keywords.exact),
+      exclude: splitKeywords(d.keywords.exclude),
+      preferred: splitKeywords(d.keywords.preferred)
+    },
+    targetRecommendCount: Number(d.targetRecommendCount),
+    platforms: d.platforms
+  };
+  const payload = { title: d.title.trim(), ...criteria, clarificationNotes };
+
+  try{
+    await apiPost('/talent-search-projects', payload);
+  }catch(err){
+    showTsFormError(err.message);
+    return;
+  }
+
+  if(d.saveAsTemplate){
+    try{ await apiPost('/talent-search-job-templates', { name: d.templateName.trim(), criteria }); }
+    catch(err){ /* 템플릿 저장 실패는 이미 만들어진 검색 프로젝트를 되돌리지 않음 */ }
+  }
+
+  alert('검색 프로젝트가 만들어졌어요. 검색기준 확인·승인 화면은 다음 단계에서 만들 예정이에요.');
+  switchTalentSearchTab('dashboard');
 }
 
 /* ---------- RECRUIT RENDER ---------- */
