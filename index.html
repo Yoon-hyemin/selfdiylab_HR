@@ -3575,7 +3575,7 @@ async function openNewTalentSearchForm(){
     saveAsTemplate:false, templateName:''
   };
   try{ const { templates } = await apiGet('/talent-search-job-templates'); tsJobTemplates = templates; }
-  catch(err){ tsJobTemplates = []; }
+  catch(err){ tsJobTemplates = []; console.warn('템플릿 목록을 불러오지 못했어요', err); }
   renderNewTalentSearchForm();
 }
 
@@ -3661,6 +3661,12 @@ function loadTemplateIntoForm(idxStr){
   if(idxStr===''){ return; }
   const t = tsJobTemplates[Number(idxStr)];
   if(!t) return;
+  // 템플릿을 고르기 전, 지금 화면에 이미 입력돼 있는 값(예: 검색
+  // 프로젝트명 — 템플릿이 절대 안 채우는 필드)을 tsProjectDraft에 먼저
+  // 담아둔다. 이걸 안 하면 아래 스프레드가 화면이 아니라 마지막으로
+  // 렌더링됐을 때의 낡은 draft 값을 베이스로 써서, 사용자가 그 사이에
+  // 입력한 내용이 템플릿 적용과 함께 조용히 사라진다.
+  captureNewTalentSearchForm();
   const c = t.criteria || {};
   tsProjectDraft = {
     ...tsProjectDraft,
@@ -3811,12 +3817,20 @@ async function saveNewTalentSearchProject(clarificationNotes){
     return;
   }
 
+  let templateSaveFailed = false;
   if(d.saveAsTemplate){
     try{ await apiPost('/talent-search-job-templates', { name: d.templateName.trim(), criteria }); }
-    catch(err){ /* 템플릿 저장 실패는 이미 만들어진 검색 프로젝트를 되돌리지 않음 */ }
+    catch(err){
+      // 템플릿 저장 실패는 이미 만들어진 검색 프로젝트를 되돌리지 않음 —
+      // 다만 아래 성공 알림에서 이 사실은 알려준다(사용자가 "템플릿도
+      // 잘 저장됐다"고 착각하지 않도록).
+      templateSaveFailed = true;
+      console.warn('직무 템플릿 저장에 실패했어요', err);
+    }
   }
 
-  alert('검색 프로젝트가 만들어졌어요. 검색기준 확인·승인 화면은 다음 단계에서 만들 예정이에요.');
+  alert('검색 프로젝트가 만들어졌어요. 검색기준 확인·승인 화면은 다음 단계에서 만들 예정이에요.'
+    + (templateSaveFailed ? ' 다만 직무 템플릿 저장에는 실패했어요.' : ''));
   switchTalentSearchTab('dashboard');
 }
 
