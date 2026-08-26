@@ -164,7 +164,7 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - `talent_search_policy_versions`(`sql/016_talent_search_policy.sql`) — 회사 전체 공용 채점 정책(Level1 문턱값, 공통 40점 배점, 근거계수, 직무 60점 기본 배점, 추천 임계값, 하루 추천상한, 데이터 보관기간)을 JSONB로 저장. `talent_search_projects`와 달리 프로젝트와 무관한 공용 설정이라 `project_id`가 없다. 원본 명세서 초기값 그대로 `version_no=1, status='active'`로 시드해뒀다. `status`는 `okrs.status`와 같은 컨벤션으로 DB CHECK 없이 앱 레벨에서만 관리(draft/active/superseded 전환 로직은 1B-4에서 추가).
 - `GET /api/talent-search-policy`(`handlers/talent-search-policy/index.js`) — 지금 `status='active'`인 정책 1건을 camelCase로 반환. `requireTalentSearchAccess`로 보호. 이번엔 조회만 있고 수정(POST/PATCH)은 1B-2/1B-3에서 추가.
 - 화면: "인재검색" 뷰에 서브탭("대시보드"/"기준 관리센터") 추가. 기준 관리센터는 지금 적용 중인 정책값을 그룹별 카드(1차필터/공통40점/직무60점/근거수준/임계값·하루상한)로 보여준다 — Phase 1B-1 시점엔 전부 읽기 전용이었고, **1차필터·공통40점은 1B-2에서, 직무60점·근거수준·임계값·하루상한은 1B-3에서 실제 수정 가능하게 바뀌어 지금은 5개 카드 전부 수정 가능하다**(아래 두 절 참고). (1B-4c에서 이 5개 카드 아래에 편집 대상이 아닌 6번째 섹션 "가상 후보 미리보기"가 추가됐다 — 카드 개수 자체는 그대로 5개다.)
-- **프로덕션 마이그레이션 미적용**: `sql/015_talent_search.sql`(Phase 1A), `sql/016_talent_search_policy.sql`(Phase 1B-1), `sql/017_talent_search_project_input.sql`(Phase 1C)은 아직 `development` 브랜치에만 적용돼 있다. `master`에 머지해서 배포하기 전에 반드시 같은 파일들을 프로덕션 브랜치의 connection string으로도 실행해야 한다(사용자 확인 후 진행 — 위 "Neon 브랜치 분리" 절 참고). 안 하면 인재검색 메뉴/기준 관리센터 탭이 500 에러를 낸다.
+- **프로덕션 마이그레이션 미적용**: `sql/015_talent_search.sql`(Phase 1A), `sql/016_talent_search_policy.sql`(Phase 1B-1), `sql/017_talent_search_project_input.sql`(Phase 1C)은 아직 `development` 브랜치에만 적용돼 있다. `master`에 머지해서 배포하기 전에 반드시 같은 파일들을 프로덕션 브랜치의 connection string으로도 실행해야 한다(사용자 확인 후 진행 — 위 "Neon 브랜치 분리" 절 참고). 안 하면 인재검색 메뉴/기준 관리센터 탭이 500 에러를 낸다. **(2026-08-26 정정)** — 이 기록과 달리 `sql/015`·`sql/016`은 실제로는 이미 이 시점 근처에 production에 적용돼 있었던 것으로 뒤늦게 확인됨(누가 언제 반영했는지는 기록이 없음). 아래 Phase 1C 절의 "프로덕션 마이그레이션 반영 완료" 참고.
 
 ### Phase 1B-2 — Level1 + 공통 40점 실제 수정 가능하게 (2026-08-19)
 
@@ -204,7 +204,7 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - 화면: 초안이 있으면 배너가 뜨고 "적용하기"(모달에서 변경사유 입력) / "초안 버리기" 버튼과 "기존 → 초안" 비교(바뀐 항목만)가 보인다. 초안이 있는 동안 카드들은 초안 값을 보여주고, 카드 수정도 초안 위에 계속 쌓인다.
 - 이 프로젝트가 이미 따르는 "내부 소규모 도구라 낙관적 동시성 제어는 넣지 않는다" 원칙을 여기도 그대로 적용했다 — `saveDraftOverrides`는 초안 존재 여부를 조회한 뒤 UPDATE/INSERT를 결정하는 check-then-act라, 이론상 동시에 첫 저장이 두 번 들어오면 초안 행이 두 개 생길 수 있다(이 내부 단일팀 도구에서 실제로 일어나기 극히 어려운 경합). DB 레벨 유니크 제약 등으로 막지는 않았다 — 다만 `applyDraft`에 초안 승격 뒤 "그 외 남은 draft 행 삭제" 문을 하나 추가해서, 혹시 그런 상태가 생겨도 적용 시점에 정리되게는 해뒀다.
 - **스키마 변경 없음** — `talent_search_policy_versions.status`는 1B-1 설계 때부터 이미 DB CHECK 없는 자유 텍스트 컬럼이라 `draft`/`active`/`superseded` 세 값을 앱 레벨에서만 관리한다. 새 마이그레이션 파일이 없다.
-- **프로덕션 마이그레이션 미적용 상태는 그대로**: `sql/015_talent_search.sql`(Phase 1A), `sql/016_talent_search_policy.sql`(Phase 1B-1), `sql/017_talent_search_project_input.sql`(Phase 1C)은 여전히 `development` 브랜치에만 적용돼 있다(1B-4a는 이 상태를 바꾸지 않았다 — 스키마 변경이 없어서). `master` 배포 전 프로덕션 브랜치에도 실행 필요(사용자 확인 후).
+- **프로덕션 마이그레이션 미적용 상태는 그대로**: `sql/015_talent_search.sql`(Phase 1A), `sql/016_talent_search_policy.sql`(Phase 1B-1), `sql/017_talent_search_project_input.sql`(Phase 1C)은 여전히 `development` 브랜치에만 적용돼 있다(1B-4a는 이 상태를 바꾸지 않았다 — 스키마 변경이 없어서). `master` 배포 전 프로덕션 브랜치에도 실행 필요(사용자 확인 후). **(2026-08-26 정정)** — 아래 Phase 1C 절 참고, 실제로는 이미 이 무렵 `sql/015`·`sql/016`이 production에 적용돼 있었던 것으로 뒤늦게 확인됨.
 
 **비개발자 운영 메모**: 기준 관리센터에서 카드를 "수정"할 때 더 이상 그 자리에서 사유를 적지 않는다 — 카드 저장은 일단 "초안"에 쌓이고, 화면 위쪽에 뜨는 배너의 "적용하기" 버튼을 눌러야 실제로 반영된다(이때 딱 한 번 사유를 적는다). 여러 카드를 고친 뒤 한 번에 적용해도 되고, 마음이 바뀌면 "초안 버리기"로 지금까지 고친 걸 통째로 취소할 수 있다. 배너에는 "기존 → 초안" 비교표가 같이 떠서 뭐가 바뀌는지 미리 확인할 수 있다.
 
@@ -217,7 +217,7 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - **복구는 진행 중이던 초안을 병합이 아니라 통째로 대체한다** — 카드별 5개 수정 모달(1B-2/1B-3에서 추가)은 기존 초안에 그 필드만 이어붙이지만, 복구는 그 시점 스냅샷으로 완전히 갈아치우는 동작이라 성격이 다르다. 수정 중이던 초안이 있는 상태에서 "복구"를 누르면 그 작업 내용은 사라지고 복구한 버전의 값으로 바뀐다 — 화면에서 이 사실을 확인창(confirm)으로 미리 경고한다.
 - `handlers/_lib/talentSearchPolicy.js`에 `listPolicyVersions(limit)`과 `restoreVersionAsDraft(versionId, actorAccountId)`을 추가했고, `policy_out(row)`이 이제 `id` 필드도 내려준다(복구 버튼이 어느 행을 대상으로 할지 알아야 해서 추가— 기존 응답 필드는 그대로라 하위호환).
 - **스키마 변경 없음** — 이번 단계는 새 컬럼·테이블이 없다.
-- **프로덕션 마이그레이션 미적용 상태는 그대로**: `sql/015_talent_search.sql`(Phase 1A), `sql/016_talent_search_policy.sql`(Phase 1B-1), `sql/017_talent_search_project_input.sql`(Phase 1C)은 여전히 `development` 브랜치에만 적용돼 있다 — 이번 단계와는 무관하게 계속 미적용이다. `master` 배포 전 프로덕션 브랜치에도 실행 필요(사용자 확인 후).
+- **프로덕션 마이그레이션 미적용 상태는 그대로**: `sql/015_talent_search.sql`(Phase 1A), `sql/016_talent_search_policy.sql`(Phase 1B-1), `sql/017_talent_search_project_input.sql`(Phase 1C)은 여전히 `development` 브랜치에만 적용돼 있다 — 이번 단계와는 무관하게 계속 미적용이다. `master` 배포 전 프로덕션 브랜치에도 실행 필요(사용자 확인 후). **(2026-08-26 정정)** — 아래 Phase 1C 절 참고, 실제로는 이미 이 무렵 `sql/015`·`sql/016`이 production에 적용돼 있었던 것으로 뒤늦게 확인됨.
 
 **비개발자 운영 메모**: "버전 이력" 탭에서 예전에 적용했던 기준으로 되돌아갈 수 있다 — 원하는 버전 줄의 "복구"를 누르면 그 값이 초안으로 불러와지고, 기준 관리센터로 이동해서 "적용하기"를 눌러야 실제로 반영된다(눌러보고 마음에 안 들면 "초안 버리기"로 취소해도 된다). 단, 지금 다른 걸 수정하다 만든 초안이 있는 상태에서 복구를 누르면 그 작업 내용은 사라지고 복구한 버전으로 완전히 바뀐다 — 화면이 이걸 미리 경고해준다.
 
@@ -231,7 +231,7 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - **Level1 시뮬레이션은 단순화됐다**: "이력서 업데이트일" 기준만 FAIL을 낼 수 있다(원본 명세가 "180일 초과=자동 제외"라고 명시한 유일한 경우라서). 단기근속·경력공백은 이 시뮬레이션에서 VERIFY 또는 PASS만 나온다 — 원본 명세가 이 둘을 "제외 검토"/"설명 필요"라는 판단 영역으로 두지, 자동 제외로 못박지 않기 때문이다.
 - **초안이 있으면 활성 정책 판정과 초안 판정을 나란히** 보여주고, 둘이 다른 셀만 강조 표시한다 — 관리자가 "적용하기"를 누르기 전에 지금 고치고 있는 내용이 실제로 결과를 바꾸는지 미리 확인하는 용도다.
 - **Phase 1B(1B-1~1B-4c) 전체가 이걸로 코드 완성됐다** — 데이터구조, Level1+공통40점 편집, 직무60점+임계값 편집, 초안 상태, 버전이력+복구, 가상후보 미리보기까지 전부 구현·리뷰 완료.
-- **⚠️ 프로덕션 배포는 아직 불가**: Phase 1B가 코드로는 완성됐고 `development` 브랜치에서 검증도 끝났지만, `sql/015_talent_search.sql`, `sql/016_talent_search_policy.sql`, (이후 Phase 1C가 추가한) `sql/017_talent_search_project_input.sql`을 아직 `production` 브랜치의 connection string으로 실행하지 않았다(위 "Neon 브랜치 분리" 절의 규칙 그대로 — 프로덕션 스키마 반영은 항상 사용자 확인 후 별도 진행). 이 마이그레이션 없이 이 브랜치를 `master`에 push하면 실제 서비스에서 인재검색 메뉴·기준 관리센터 화면이 전부 500 에러가 난다. Phase 1B가 완료된 지금이 바로 그 결정(프로덕션에 마이그레이션을 반영할지)을 사용자에게 물어봐야 하는 시점이다.
+- **프로덕션 마이그레이션 상태 (2026-08-26 최종 확인)**: 이 문서엔 최근까지 `sql/015`~`sql/017` 전부 production 미적용이라고 적혀 있었는데, Phase 1C 세션에서 production 브랜치에 직접 접속해 확인해보니 **`sql/015_talent_search.sql`과 `sql/016_talent_search_policy.sql`은 이미 production에 적용돼 있었다**(언제 누가 반영했는지 기록이 없음 — 이 문서가 그동안 실제 상태를 못 따라간 것). `sql/017_talent_search_project_input.sql`만 그 시점까지 미적용이었고, 같은 날 production에 적용해서 **이제 세 마이그레이션 모두 production에 반영 완료**됐다. 인재검색 메뉴·기준 관리센터·새 인재검색 입력 화면(아래 Phase 1C 절) 전부 실제 서비스에서 정상 동작할 수 있는 상태다. (교훈: 프로덕션 스키마 상태는 이 문서만 믿지 말고, 의심스러우면 `information_schema`로 직접 확인할 것.)
 
 **비개발자 운영 메모**: 기준 관리센터 맨 아래에 "가상 후보 미리보기" 표가 생겼다 — 실제 지원자가 아니라 미리 정해둔 가상의 후보 3명(강함/애매함/약함)에게 지금 기준을 적용해보면 어떤 판정이 나오는지 보여주는 참고용 표다. 카드를 수정해서 초안을 만든 상태라면 "기존 기준으로는 이 판정, 초안대로 바꾸면 이 판정"을 나란히 보여주고 달라지는 칸만 색으로 표시해준다 — "적용하기"를 누르기 전에 결과가 어떻게 바뀌는지 미리 볼 수 있다.
 
@@ -246,7 +246,7 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
   - `GET`/`POST /api/talent-search-job-templates`(`handlers/talent-search-job-templates/index.js`) — GET은 최신순 전체 목록(만든 사람 무관 — 기준 관리센터 정책과 같은 공유 모델), POST는 `{ name, criteria }`로 저장. `validateJobTemplateInput`이 검증.
 - **"추가질문 시뮬레이션"은 진짜 AI가 아니라 순수 규칙 기반이다** — 자연어 설명이 30자 미만이거나, 포함 키워드가 비어있거나, 제외 키워드가 비어있으면(최대 3개까지) 저장 직전에 모달로 물어보고, 답변은 빈 답변도 포함해서 `clarification_notes`에 그대로 저장한다. 원본 명세가 이 구조화를 "로컬 모델"(Phase 2, 아직 없음)의 일로 정의해뒀기 때문에, Phase 1은 그 자리에 규칙 기반 흉내만 넣어 화면 흐름을 먼저 검증하는 단계다 — 실제 AI 연결은 아직 안 됐다.
 - **이번 범위에 명시적으로 안 넣은 것들**(다음 슬라이스가 이걸 있는 것처럼 오해하지 않도록): 방금 만든 프로젝트는 대시보드의 카드 목록에는 아직 연결되지 않는다(카드 2개는 여전히 "예시" 배지가 붙은 고정 데이터). 프로젝트 목록/상세 조회(GET)도 아직 없다 — 저장 확인은 SQL로 직접 했다. 검색기준 확인·승인(1D)과 검색 진행(1E)은 이번과 무관한 별도의 다음 단계다.
-- **프로덕션 마이그레이션 미적용 상태는 그대로**: `sql/015_talent_search.sql`(Phase 1A), `sql/016_talent_search_policy.sql`(Phase 1B-1)에 이어 이번에 추가한 `sql/017_talent_search_project_input.sql`도 아직 `development` 브랜치에만 적용돼 있다 — 셋 다 `production` 브랜치에는 반영 안 됨(사용자 확인 후 별도 진행, 위 "Neon 브랜치 분리" 절 참고).
+- **프로덕션 마이그레이션 반영 완료 (2026-08-26)**: 이 절을 쓸 당시엔 `sql/015`~`sql/017` 셋 다 production 미적용이라고 적었지만, 실제로 production에 접속해서 확인해보니 **`sql/015`·`sql/016`은 이미 그 전에 production에 적용돼 있었다**(이 문서에 기록이 안 남아있던 상태 변경 — 언제 누가 반영했는지 불명). `sql/017`만 그때까지 미적용이었고, 사용자 확인 후 production 브랜치의 connection string으로 실행해서 반영했다 — `information_schema`로 `talent_search_projects.keywords`/`clarification_notes` 컬럼과 `talent_search_job_templates` 테이블이 production에 실제로 생겼는지까지 확인함. **이제 sql/015~017 전부 production에 적용된 상태**라, 이 브랜치를 `master`에 머지해서 배포해도 인재검색 관련 화면이 스키마 문제로 500 에러가 나지는 않는다(다만 머지·배포 자체는 이 작업과 별개로 다시 확인받을 것).
 
 **비개발자 운영 메모**: 이제 "인재검색 → 대시보드"에서 "+ 새 인재검색" 버튼을 누르면 실제로 검색 프로젝트를 만들 수 있다. 만들면서 자연어 설명이나 키워드를 충분히 안 채우면 몇 가지 추가 질문이 뜰 수 있는데, 이건 AI가 판단하는 게 아니라 정해진 규칙(설명이 너무 짧다, 포함/제외 키워드가 비어있다 등)에 따라 뜨는 것이다 — 답하지 않고 넘어가도 된다. 자주 쓰는 조건은 "직무 템플릿으로도 저장" 체크박스로 저장해두면 다음 번 새 인재검색을 만들 때 드롭다운에서 불러와 바로 채울 수 있다. 다만 지금 만든 검색 프로젝트는 아직 대시보드의 카드 목록에는 안 보인다 — 그 연동은 다음 단계에서 한다.
 
