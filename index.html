@@ -3528,7 +3528,7 @@ async function restoreVersionNow(id){
   switchTalentSearchTab('policy');
 }
 
-const TS_STATUS_LABEL = { draft: '작성중' };
+const TS_STATUS_LABEL = { draft: '작성중', approved: '승인됨' };
 
 async function renderTalentSearchDashboard(){
   const el = document.getElementById('talentsearch-projects');
@@ -3580,20 +3580,50 @@ function tsTagChips(arr){
   return arr.map(k=>`<span class="badge grey" style="margin:2px 4px 2px 0;display:inline-block;">${escapeHtml(k)}</span>`).join('');
 }
 
+function buildTalentSearchQueryString(keywords){
+  const parts = [];
+  if(keywords?.include?.length) parts.push(keywords.include.join(' '));
+  if(keywords?.or?.length) parts.push('('+keywords.or.join('|')+')');
+  if(keywords?.exact?.length) parts.push(keywords.exact.map(k=>'"'+k+'"').join(' '));
+  if(keywords?.exclude?.length) parts.push(keywords.exclude.map(k=>'-'+k).join(' '));
+  return parts.join(' ').trim();
+}
+
+async function approveTalentSearchProject(id){
+  if(!confirm('이 조건으로 승인할까요? 승인하면 지금 채점 기준이 고정되고, 나중에 되돌릴 수 없어요.')) return;
+  try{
+    await apiPatch('/talent-search-projects/'+id+'/approve', {});
+  }catch(err){
+    alert(err.message);
+    return;
+  }
+  await openTalentSearchProjectDetail(id);
+}
+
 async function openTalentSearchProjectDetail(id){
   const el = document.getElementById('talentsearch-projects');
   if(!el) return;
   el.innerHTML = `<button class="btn ghost sm" style="margin-bottom:14px;" onclick="switchTalentSearchTab('dashboard')">← 목록으로</button><div style="color:var(--sub);font-size:13px;">불러오는 중...</div>`;
 
-  let project, policy;
+  let project;
   try{
-    [project, policy] = await Promise.all([
-      apiGet('/talent-search-projects/'+id),
-      apiGet('/talent-search-policy')
-    ]);
+    project = await apiGet('/talent-search-projects/'+id);
   }catch(err){
     el.innerHTML = `<button class="btn ghost sm" style="margin-bottom:14px;" onclick="switchTalentSearchTab('dashboard')">← 목록으로</button><div class="section">${escapeHtml(err.message)}</div>`;
     return;
+  }
+
+  let policy = null, policyLoadError = '';
+  try{
+    if(project.status === 'approved' && project.policyVersionId){
+      const { versions } = await apiGet('/talent-search-policy/versions');
+      policy = versions.find(v=>v.id===project.policyVersionId) || null;
+      if(!policy) policyLoadError = '승인 당시 버전을 더 이상 찾을 수 없어요';
+    }else{
+      policy = await apiGet('/talent-search-policy');
+    }
+  }catch(err){
+    policyLoadError = err.message;
   }
 
   const p = project;
@@ -3611,8 +3641,38 @@ async function openTalentSearchProjectDetail(id){
     </div>
   `).join('') : '<div style="font-size:13px;color:var(--sub);">추가질문이 없었어요</div>';
 
-  const commonSum = policy.commonFitWeights.reduce((s,w)=>s+w.points,0);
-  const jobFitSum = policy.jobFitDefaultWeights.reduce((s,w)=>s+w.points,0);
+  const queryString = buildTalentSearchQueryString(p.keywords);
+  const searchTermsHtml = queryString
+    ? p.platforms.map(pl=>`<div style="font-size:13px;margin-bottom:6px;"><b>${escapeHtml(pl)}</b>: <code>${escapeHtml(queryString)}</code></div>`).join('')
+    : '<div style="font-size:13px;color:var(--sub);">검색어를 만들 수 없어요 — 필수 조건이나 키워드가 있어야 해요</div>';
+
+  const policyBodyHtml = policy ? `
+    <div class="section">
+      <div class="section-head"><h3>1차 필터(Level 1) 기준</h3></div>
+      <div style="font-size:13px;line-height:1.8;">${renderLevel1Body(policy.level1Rules)}</div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>공통 적합도 40점 (합계 ${policy.commonFitWeights.reduce((s,w)=>s+w.points,0)}점)</h3></div>
+      ${renderPointsListBody(policy.commonFitWeights)}
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>직무 적합도 60점 기본 배점 (합계 ${policy.jobFitDefaultWeights.reduce((s,w)=>s+w.points,0)}점)</h3></div>
+      ${renderPointsListBody(policy.jobFitDefaultWeights)}
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>근거수준별 점수</h3></div>
+      ${renderEvidenceBody(policy.evidenceCoefficients)}
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>추천 임계값 · 하루 추천 상한</h3></div>
+      ${renderThresholdsBody(policy.thresholds, policy.dailyRecommendCapDefault, policy.dailyRecommendCapAbsoluteMax)}
+    </div>
+  ` : `<div class="section">${escapeHtml(policyLoadError || '채점 기준을 불러오지 못했어요')}</div>`;
+
+  const policyHeaderHtml = p.status === 'approved'
+    ? `<div class="section-head"><div><h3>승인 당시 채점 기준${policy ? ' · 버전 '+policy.versionNo : ''}(고정됨)</h3><div class="desc">이 값은 승인 시점에 고정돼서 이후 기준이 바뀌어도 안 바뀌어요</div></div><span class="badge grey">✅ 승인됨</span></div>`
+    : `<div class="section-head"><div><h3>지금 적용 중인 채점 기준${policy ? ' · 버전 '+policy.versionNo : ''}</h3><div class="desc">승인하면 이 시점의 버전으로 고정돼요</div></div></div>
+       <button class="btn primary sm" style="margin-top:10px;" onclick="approveTalentSearchProject('${p.id}')">이 조건으로 검색</button>`;
 
   el.innerHTML = `
     <button class="btn ghost sm" style="margin-bottom:14px;" onclick="switchTalentSearchTab('dashboard')">← 목록으로</button>
@@ -3650,28 +3710,14 @@ async function openTalentSearchProjectDetail(id){
       ${tsTagChips(p.platforms)}
     </div>
     <div class="section">
-      <div class="section-head"><div><h3>지금 적용 중인 채점 기준 · 버전 ${policy.versionNo}</h3><div class="desc">이 프로젝트를 승인하는 시점의 버전으로 고정됩니다 — 승인 기능은 다음 단계에서 추가돼요</div></div></div>
+      <div class="section-head"><h3>플랫폼별 검색어</h3></div>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">지금은 플랫폼마다 검색 문법 차이 없이 같은 규칙으로 만들어져요 — 실제 플랫폼 연동에서 플랫폼별 문법에 맞게 다듬을 예정이에요</div>
+      ${searchTermsHtml}
     </div>
     <div class="section">
-      <div class="section-head"><h3>1차 필터(Level 1) 기준</h3></div>
-      <div style="font-size:13px;line-height:1.8;">${renderLevel1Body(policy.level1Rules)}</div>
+      ${policyHeaderHtml}
     </div>
-    <div class="section">
-      <div class="section-head"><h3>공통 적합도 40점 (합계 ${commonSum}점)</h3></div>
-      ${renderPointsListBody(policy.commonFitWeights)}
-    </div>
-    <div class="section">
-      <div class="section-head"><h3>직무 적합도 60점 기본 배점 (합계 ${jobFitSum}점)</h3></div>
-      ${renderPointsListBody(policy.jobFitDefaultWeights)}
-    </div>
-    <div class="section">
-      <div class="section-head"><h3>근거수준별 점수</h3></div>
-      ${renderEvidenceBody(policy.evidenceCoefficients)}
-    </div>
-    <div class="section">
-      <div class="section-head"><h3>추천 임계값 · 하루 추천 상한</h3></div>
-      ${renderThresholdsBody(policy.thresholds, policy.dailyRecommendCapDefault, policy.dailyRecommendCapAbsoluteMax)}
-    </div>
+    ${policyBodyHtml}
   `;
 }
 
