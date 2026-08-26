@@ -245,10 +245,25 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
   - `POST /api/talent-search-projects`(`handlers/talent-search-projects/index.js`) — 폼 전체 필드를 받아 `201 { id }`. 검증(`title`/`roleTitle`/`employmentType` 필수, `headcount`/`targetRecommendCount`는 1 이상 정수, `platforms` 최소 1개 등)은 `handlers/_lib/talentSearchProjectValidate.js`의 `validateTalentSearchProjectInput`이 맡고, 이 파일은 `db.js`를 import하지 않아 `DATABASE_URL` 없이도 `node --test`가 돈다(1B-3에서 정착시킨 패턴을 그대로 따름).
   - `GET`/`POST /api/talent-search-job-templates`(`handlers/talent-search-job-templates/index.js`) — GET은 최신순 전체 목록(만든 사람 무관 — 기준 관리센터 정책과 같은 공유 모델), POST는 `{ name, criteria }`로 저장. `validateJobTemplateInput`이 검증.
 - **"추가질문 시뮬레이션"은 진짜 AI가 아니라 순수 규칙 기반이다** — 자연어 설명이 30자 미만이거나, 포함 키워드가 비어있거나, 제외 키워드가 비어있으면(최대 3개까지) 저장 직전에 모달로 물어보고, 답변은 빈 답변도 포함해서 `clarification_notes`에 그대로 저장한다. 원본 명세가 이 구조화를 "로컬 모델"(Phase 2, 아직 없음)의 일로 정의해뒀기 때문에, Phase 1은 그 자리에 규칙 기반 흉내만 넣어 화면 흐름을 먼저 검증하는 단계다 — 실제 AI 연결은 아직 안 됐다.
-- **이번 범위에 명시적으로 안 넣은 것들**(다음 슬라이스가 이걸 있는 것처럼 오해하지 않도록): 방금 만든 프로젝트는 대시보드의 카드 목록에는 아직 연결되지 않는다(카드 2개는 여전히 "예시" 배지가 붙은 고정 데이터). 프로젝트 목록/상세 조회(GET)도 아직 없다 — 저장 확인은 SQL로 직접 했다. 검색기준 확인·승인(1D)과 검색 진행(1E)은 이번과 무관한 별도의 다음 단계다.
+- **이번 범위에 명시적으로 안 넣은 것들**(다음 슬라이스가 이걸 있는 것처럼 오해하지 않도록): 방금 만든 프로젝트는 대시보드의 카드 목록에는 아직 연결되지 않는다(카드 2개는 여전히 "예시" 배지가 붙은 고정 데이터). 프로젝트 목록/상세 조회(GET)도 아직 없다 — 저장 확인은 SQL로 직접 했다. 검색기준 확인·승인(1D)과 검색 진행(1E)은 이번과 무관한 별도의 다음 단계다. **(2026-08-26, Phase 1D-1에서 대체)** — 이 두 문장은 더 이상 맞지 않다. 목록/상세 조회(GET)가 추가됐고, 대시보드 카드도 실제 프로젝트 목록으로 교체됐다. 아래 Phase 1D-1 절 참고.
 - **프로덕션 마이그레이션 반영 완료 (2026-08-26)**: 이 절을 쓸 당시엔 `sql/015`~`sql/017` 셋 다 production 미적용이라고 적었지만, 실제로 production에 접속해서 확인해보니 **`sql/015`·`sql/016`은 이미 그 전에 production에 적용돼 있었다**(이 문서에 기록이 안 남아있던 상태 변경 — 언제 누가 반영했는지 불명). `sql/017`만 그때까지 미적용이었고, 사용자 확인 후 production 브랜치의 connection string으로 실행해서 반영했다 — `information_schema`로 `talent_search_projects.keywords`/`clarification_notes` 컬럼과 `talent_search_job_templates` 테이블이 production에 실제로 생겼는지까지 확인함. **이제 sql/015~017 전부 production에 적용된 상태**라, 이 브랜치를 `master`에 머지해서 배포해도 인재검색 관련 화면이 스키마 문제로 500 에러가 나지는 않는다(다만 머지·배포 자체는 이 작업과 별개로 다시 확인받을 것).
 
 **비개발자 운영 메모**: 이제 "인재검색 → 대시보드"에서 "+ 새 인재검색" 버튼을 누르면 실제로 검색 프로젝트를 만들 수 있다. 만들면서 자연어 설명이나 키워드를 충분히 안 채우면 몇 가지 추가 질문이 뜰 수 있는데, 이건 AI가 판단하는 게 아니라 정해진 규칙(설명이 너무 짧다, 포함/제외 키워드가 비어있다 등)에 따라 뜨는 것이다 — 답하지 않고 넘어가도 된다. 자주 쓰는 조건은 "직무 템플릿으로도 저장" 체크박스로 저장해두면 다음 번 새 인재검색을 만들 때 드롭다운에서 불러와 바로 채울 수 있다. 다만 지금 만든 검색 프로젝트는 아직 대시보드의 카드 목록에는 안 보인다 — 그 연동은 다음 단계에서 한다.
+
+### Phase 1D-1 — 검색 프로젝트 목록/상세 조회 + 대시보드 연동 + 검토화면 (2026-08-26)
+
+`docs/superpowers/specs/2026-08-26-talent-search-phase1d1-design.md`, `docs/superpowers/plans/2026-08-26-talent-search-phase1d1.md`에 전체 배경이 있다. Phase 1C에서 검색 프로젝트를 실제로 만들 수는 있게 됐지만 만든 프로젝트를 다시 볼 방법이 없었다(대시보드는 여전히 "예시" 배지 카드 2개, GET 엔드포인트 없음) — 이번 슬라이스가 그 간극을 메웠다. 로드맵상 다음 단계인 "검색기준 확인·승인"(1D) 중 조회 부분만 먼저 하고, 승인 액션과 플랫폼별 검색어 생성은 1D-2로 미뤘다.
+
+- **새 엔드포인트 2개**, 둘 다 `requireTalentSearchAccess`로 보호(이 기능 전체와 동일하게 ADMIN 전용이 아니다):
+  - `GET /api/talent-search-projects`(목록, `handlers/talent-search-projects/index.js`에 GET 분기 추가) — 최신순 전체, 카드 렌더링에 필요한 가벼운 필드만(`keywords`/`workConditions`/`naturalLanguageBrief`/`clarificationNotes`는 무거워서 목록에서 뺐다 — 상세 조회에서만 내려줌).
+  - `GET /api/talent-search-projects/:id`(상세, 새 파일 `handlers/talent-search-projects/[id].js`) — 1C의 POST가 받는 필드 전부를 그대로 돌려준다. 없는 id면 404.
+- **대시보드의 "예시" 고정 카드 2개가 실제 프로젝트 목록으로 교체됐다** — `renderTalentSearchDashboard()`가 이제 `GET /api/talent-search-projects`를 호출하는 비동기 함수다. 목록이 비어있으면 "아직 만든 검색 프로젝트가 없어요" 안내만 보여준다. 카드를 클릭하면 새 함수 `openTalentSearchProjectDetail(id)`가 상세+정책을 동시에 불러와 같은 컨테이너를 검토 화면으로 갈아치운다(1C의 "새 인재검색" 폼이 쓰던 컨테이너 교체 패턴 재사용).
+- **검토 화면**: 요약 문장(직무·직급·경력·고용형태·인원·지역을 필드 그대로 이어붙인 것, AI 요약 아님) + 자연어 설명 원문, 키워드 5종(필수/핵심/정확일치/우대/제외, `keywords.include`/`or`/`exact`/`preferred`/`exclude`를 1:1 매핑), 상세조건(`workConditions` 5개 키), 추가질문 답변, 그리고 "지금 적용 중인 채점 기준"(1차필터/공통40점/직무60점/근거수준/임계값·하루상한) — 이 프로젝트에 고정된 버전이 아니라 활성 버전을 그대로 보여주는 것이라는 안내 문구를 붙였다(실제 버전 고정은 1D-2가 승인 액션을 만들 때 다룬다).
+- **정책 카드는 기준 관리센터가 이미 쓰는 렌더 함수를 그대로 재사용**했다 — `renderLevel1Body`/`renderPointsListBody`/`renderEvidenceBody`/`renderThresholdsBody`(모두 `index.html`에 기존부터 있던 함수). 검토 화면 전용으로 새로 만든 렌더 함수는 없다.
+- **이번 범위에 명시적으로 안 넣은 것들**: "이 조건으로 검색" 승인 버튼과 `status` 전환, 플랫폼별 검색어 생성, 자동 확장된 유사어/직무 동의어(Phase 2, 로컬 모델 필요), 직무별로 커스터마이즈된 60점 생성(Phase 2 — 이번엔 회사 공용 기본 배점을 그대로 보여줌), 프로젝트 수정/삭제, 검색 진행(1E)·추천목록(1F). 이 중 승인 액션과 플랫폼별 검색어 생성은 1D-2에서 다룬다.
+- **새 마이그레이션 없음** — `sql/017`까지의 스키마를 그대로 조회만 한다(스키마 변경 없음). 새 GET 엔드포인트(`:id` 라우트)는 `api/[...path].js`의 import + `ROUTES` 배열에 등록했다(목록 GET은 기존 `talent-search-projects` 라우트를 그대로 쓰므로 라우트 등록 불필요).
+
+**비개발자 운영 메모**: 이제 "인재검색 → 대시보드"에서 실제로 만든 검색 프로젝트가 카드로 보인다(더 이상 "예시" 카드가 아니다). 카드를 클릭하면 그 프로젝트의 조건(필수/핵심/정확일치/우대/제외 키워드, 상세조건, 추가질문 답변)과 지금 적용 중인 채점 기준을 함께 볼 수 있다. 다만 아직 "이 조건으로 검색 시작" 버튼은 없다 — 그건 다음 단계(1D-2)에서 추가된다.
 
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 

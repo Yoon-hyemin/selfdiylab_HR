@@ -3597,7 +3597,7 @@ async function openTalentSearchProjectDetail(id){
   }
 
   const p = project;
-  const summarySentence = `${escapeHtml(p.roleTitle)}${p.seniorityLevel ? ' · '+escapeHtml(p.seniorityLevel) : ''}${(p.experienceMinYears||p.experienceMaxYears) ? ' · 경력 '+(p.experienceMinYears??'?')+'~'+(p.experienceMaxYears??'?')+'년' : ''} · ${escapeHtml(p.employmentType)} · ${p.headcount}명`;
+  const summarySentence = `${escapeHtml(p.roleTitle)}${p.seniorityLevel ? ' · '+escapeHtml(p.seniorityLevel) : ''}${(p.experienceMinYears||p.experienceMaxYears) ? ' · 경력 '+(p.experienceMinYears??'?')+'~'+(p.experienceMaxYears??'?')+'년' : ''} · ${escapeHtml(p.employmentType)} · ${p.headcount}명${p.location ? ' · '+escapeHtml(p.location) : ''}`;
 
   const workConditionRows = Object.keys(TS_WORK_CONDITION_LABELS)
     .filter(k => p.workConditions && p.workConditions[k])
@@ -3622,19 +3622,23 @@ async function openTalentSearchProjectDetail(id){
     </div>
     <div class="section">
       <div class="section-head"><h3>필수 조건</h3></div>
-      ${tsTagChips(p.keywords.include)}
+      ${tsTagChips(p.keywords?.include)}
     </div>
     <div class="section">
       <div class="section-head"><h3>핵심 조건 (OR)</h3></div>
-      ${tsTagChips(p.keywords.or)}
+      ${tsTagChips(p.keywords?.or)}
+    </div>
+    <div class="section">
+      <div class="section-head"><h3>정확일치 문구</h3></div>
+      ${tsTagChips(p.keywords?.exact)}
     </div>
     <div class="section">
       <div class="section-head"><h3>우대 조건</h3></div>
-      ${tsTagChips(p.keywords.preferred)}
+      ${tsTagChips(p.keywords?.preferred)}
     </div>
     <div class="section">
       <div class="section-head"><h3>제외 조건</h3></div>
-      ${tsTagChips(p.keywords.exclude)}
+      ${tsTagChips(p.keywords?.exclude)}
     </div>
     ${workConditionRows ? `<div class="section"><div class="section-head"><h3>상세조건</h3></div>${workConditionRows}</div>` : ''}
     <div class="section">
@@ -3940,7 +3944,7 @@ async function saveNewTalentSearchProject(clarificationNotes){
     }
   }
 
-  alert('검색 프로젝트가 만들어졌어요. 검색기준 확인·승인 화면은 다음 단계에서 만들 예정이에요.'
+  alert('검색 프로젝트가 만들어졌어요. 방금 만든 프로젝트는 대시보드 카드에서 바로 확인할 수 있어요. 승인 기능은 다음 단계에서 추가돼요.'
     + (templateSaveFailed ? ' 다만 직무 템플릿 저장에는 실패했어요.' : ''));
   switchTalentSearchTab('dashboard');
 }
@@ -4451,7 +4455,15 @@ function renderAll(){
   renderOkrDept();
   renderOkrPersonal();
   renderRevenue();
-  renderTalentSearchDashboard();
+  // 2026-08-26: 인재검색 대시보드는 Phase 1C까지는 순수 로컬(고정 예시
+  // 2개 렌더)이라 무조건 호출해도 비용이 없었지만, Phase 1D-1부터
+  // GET /api/talent-search-projects를 호출하는 비동기 함수가 됐다 --
+  // 인재검색 권한(canUseTalentSearch)이 없는 계정은 이 메뉴 자체를 못
+  // 보는데도 renderAll()이 nav마다 무조건 이걸 불러서 매번 403을 쏘고
+  // 있었다(숨은 컨테이너에 조용히 삼켜져서 화면은 안 깨졌지만 불필요한
+  // 네트워크/콘솔 노이즈). index.html:610의 canSeeTalentSearch와 같은
+  // 조건으로 가드한다.
+  if(me && (me.systemRole==='ADMIN' || !!me.canUseTalentSearch)) renderTalentSearchDashboard();
   renderMyPage();
 }
 // 2026-08-11: 예전엔 로그인 여부와 무관하게 페이지 로드 즉시 한 번 그려서
