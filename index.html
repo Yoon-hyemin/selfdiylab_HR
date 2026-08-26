@@ -3718,7 +3718,124 @@ async function openTalentSearchProjectDetail(id){
       ${policyHeaderHtml}
     </div>
     ${policyBodyHtml}
+    ${p.status === 'approved' ? `
+    <div class="section">
+      <div class="section-head"><h3>검색 진행</h3></div>
+      <button class="btn primary sm" onclick="openTalentSearchCandidates('${p.id}')">검색 진행 보기</button>
+    </div>` : ''}
   `;
+}
+
+async function openTalentSearchCandidates(projectId){
+  const el = document.getElementById('talentsearch-projects');
+  if(!el) return;
+  el.innerHTML = `<button class="btn ghost sm" style="margin-bottom:14px;" onclick="openTalentSearchProjectDetail('${projectId}')">← 뒤로</button><div style="color:var(--sub);font-size:13px;">불러오는 중...</div>`;
+
+  let project, candidatesRes;
+  try{
+    [project, candidatesRes] = await Promise.all([
+      apiGet('/talent-search-projects/'+projectId),
+      apiGet('/talent-search-projects/'+projectId+'/candidates')
+    ]);
+  }catch(err){
+    el.innerHTML = `<button class="btn ghost sm" style="margin-bottom:14px;" onclick="switchTalentSearchTab('dashboard')">← 목록으로</button><div class="section">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  const candidates = candidatesRes.candidates;
+
+  let policy = null, policyLoadError = '';
+  if(candidates.length){
+    if(project.policyVersionId){
+      try{
+        const { versions } = await apiGet('/talent-search-policy/versions');
+        policy = versions.find(v=>v.id===project.policyVersionId) || null;
+        if(!policy) policyLoadError = '승인 당시 버전을 더 이상 찾을 수 없어요';
+      }catch(err){ policyLoadError = err.message; }
+    }else{
+      policyLoadError = '이 프로젝트는 아직 채점 기준이 고정되지 않았어요';
+    }
+  }
+
+  renderTalentSearchCandidatesScreen(projectId, project, candidates, policy, policyLoadError);
+}
+
+function renderTalentSearchCandidatesScreen(projectId, project, candidates, policy, policyLoadError){
+  const el = document.getElementById('talentsearch-projects');
+  if(!el) return;
+
+  const backBtn = `<button class="btn ghost sm" style="margin-bottom:14px;" onclick="openTalentSearchProjectDetail('${projectId}')">← 뒤로</button>`;
+
+  if(!candidates.length){
+    el.innerHTML = `
+      ${backBtn}
+      <div class="section">
+        <div class="section-head"><div><h3>${escapeHtml(project.title)} — 검색 진행</h3><div class="desc">아직 가상 후보를 생성하지 않았어요</div></div></div>
+        <div style="font-size:12.5px;color:var(--sub);margin-bottom:10px;">가상 시뮬레이션이라 다시 생성할 때마다 결과가 달라져요.</div>
+        <button class="btn primary sm" onclick="generateTalentSearchCandidates('${projectId}')">가상 후보 생성하기</button>
+      </div>
+    `;
+    return;
+  }
+
+  if(!policy){
+    el.innerHTML = `${backBtn}<div class="section">${escapeHtml(policyLoadError || '채점 기준을 불러오지 못했어요')}</div>`;
+    return;
+  }
+
+  const results = candidates.map(c => ({ c, r: simulateCandidate(c, policy) }));
+  results.sort((a,b) => b.r.totalScore - a.r.totalScore);
+
+  const counts = { '추천':0, '확인 필요':0, '제외':0 };
+  results.forEach(({r}) => { counts[r.verdict] = (counts[r.verdict]||0) + 1; });
+
+  const rowsHtml = results.map(({c, r}) => `
+    <tr>
+      <td>${escapeHtml(c.name)}</td>
+      <td>${escapeHtml(c.platform)}</td>
+      <td>${r.level1Status}</td>
+      <td>${r.totalScore}</td>
+      <td><span class="${verdictBadgeClass(r.verdict)}">${r.verdict}</span></td>
+    </tr>
+  `).join('');
+
+  el.innerHTML = `
+    ${backBtn}
+    <div class="section">
+      <div class="section-head"><div><h3>${escapeHtml(project.title)} — 검색 진행</h3><div class="desc">가상 시뮬레이션이라 다시 생성할 때마다 결과가 달라져요</div></div></div>
+      <div class="grid4">
+        <div class="kpi"><div class="label">총 후보</div><div class="value">${results.length}명</div></div>
+        <div class="kpi"><div class="label">추천</div><div class="value">${counts['추천']}명</div></div>
+        <div class="kpi"><div class="label">확인 필요</div><div class="value">${counts['확인 필요']}명</div></div>
+        <div class="kpi"><div class="label">제외</div><div class="value">${counts['제외']}명</div></div>
+      </div>
+      <button class="btn ghost sm" style="margin-top:10px;" onclick="regenerateTalentSearchCandidatesConfirm('${projectId}')">다시 생성</button>
+    </div>
+    <div class="section">
+      <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>가상후보</th><th>플랫폼</th><th>Level1</th><th>총점</th><th>판정</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      </div>
+    </div>
+  `;
+}
+
+async function generateTalentSearchCandidates(projectId){
+  const el = document.getElementById('talentsearch-projects');
+  if(el) el.innerHTML = `<div style="color:var(--sub);font-size:13px;">가상 후보를 생성하는 중...</div>`;
+  try{
+    await apiPost('/talent-search-projects/'+projectId+'/candidates', {});
+  }catch(err){
+    alert(err.message);
+  }
+  await openTalentSearchCandidates(projectId);
+}
+
+function regenerateTalentSearchCandidatesConfirm(projectId){
+  if(!confirm('다시 생성하면 지금 목록은 사라지고 새 가상 후보로 바뀌어요. 계속할까요?')) return;
+  generateTalentSearchCandidates(projectId);
 }
 
 const TS_PLATFORMS = ['사람인', '잡코리아', '리멤버', '원티드'];
