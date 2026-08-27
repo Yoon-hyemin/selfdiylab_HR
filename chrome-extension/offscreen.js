@@ -12,7 +12,12 @@ function getWorker() {
       workerPath: chrome.runtime.getURL('vendor/worker.min.js'),
       corePath: chrome.runtime.getURL('vendor/tesseract-core-simd-lstm.wasm.js'),
       langPath: chrome.runtime.getURL('vendor/lang-data'),
-      gzip: true
+      gzip: true,
+      // Tesseract.js 기본값(workerBlobURL:true)은 new Blob()+createObjectURL로
+      // blob: 워커를 띄우는데, MV3 기본 CSP(script-src 'self')는 blob: 스크립트를
+      // 허용하지 않는다. worker.min.js가 이미 확장 내부(same-origin) 리소스로
+      // 벤더링돼 있으니 blob 우회가 필요 없다 -- 바로 workerPath를 로드하게 한다.
+      workerBlobURL: false
     });
   }
   return workerPromise;
