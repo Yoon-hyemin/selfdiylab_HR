@@ -16,6 +16,8 @@
 
 브랜치: `claude/talent-search-automation-6d8ced` (worktree, `master`에 아직 머지 안 함 — 사용자가 "지금은 다음 단계 진행"을 매번 선택해왔음). `git status` 클린, 최신 커밋 `a4be354`.
 
+이 문서는 웹앱(1A~1E) 브랜치 기준이다 — 이후 별도로 `chrome-extension/`(Manifest V3, 사람인 이력서 OCR 추출 실행엔진 MVP)이 추가됐다. 배경/설치 방법은 CLAUDE.md의 "실행엔진" 절, 설계는 `docs/superpowers/specs/2026-08-27-talent-search-execution-engine-ocr-mvp-design.md`, 구현계획은 `docs/superpowers/plans/2026-08-27-talent-search-execution-engine-ocr-mvp.md` 참고.
+
 ## 2. 작업 방식 (이 세션 내내 그대로 유지됨)
 
 매 서브 단계마다: **brainstorming 스킬(설계 문서 → `docs/superpowers/specs/`) → writing-plans 스킬(구현계획 → `docs/superpowers/plans/`) → subagent-driven-development 스킬(Task별 fresh subagent 구현 + task review + 최종 whole-branch review + fix wave + scoped re-review)** 순서를 반복해왔다. 새 세션도 이 패턴을 그대로 따르면 된다.
