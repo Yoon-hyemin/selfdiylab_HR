@@ -10,6 +10,14 @@ export function isBlockedPage(url, pageTitle) {
   return BLOCKED_TITLE_MARKERS.some(marker => pageTitle.includes(marker));
 }
 
+export function pickScrollTarget(mainScrollHeight, mainClientHeight, docScrollHeight, viewportHeight) {
+  const mainIsScrollable = mainScrollHeight > mainClientHeight + 1;
+  if (mainIsScrollable) return 'main';
+  const docIsScrollable = docScrollHeight > viewportHeight + 1;
+  if (docIsScrollable) return 'document';
+  return null; // 이력서가 뷰포트 안에 다 들어와서 스크롤이 필요 없는 경우
+}
+
 export function computeScrollSteps(scrollHeight, viewportHeight) {
   if (!Number.isFinite(scrollHeight) || !Number.isFinite(viewportHeight) || viewportHeight <= 0) {
     return [0];

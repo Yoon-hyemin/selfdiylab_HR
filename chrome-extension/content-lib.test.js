@@ -1,7 +1,7 @@
 // chrome-extension/content-lib.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isBlockedPage, computeScrollSteps } from './content-lib.js';
+import { isBlockedPage, computeScrollSteps, pickScrollTarget } from './content-lib.js';
 
 test('isBlockedPage: 인증 경로 URL이면 true', () => {
   assert.equal(
@@ -40,4 +40,16 @@ test('computeScrollSteps: 나눠떨어지지 않는 경우 마지막 스텝은 �
 test('computeScrollSteps: 잘못된 입력이면 [0]으로 안전하게 처리', () => {
   assert.deepEqual(computeScrollSteps(NaN, 1000), [0]);
   assert.deepEqual(computeScrollSteps(3000, 0), [0]);
+});
+
+test('pickScrollTarget: main 자체가 스크롤 가능하면 "main"', () => {
+  assert.equal(pickScrollTarget(3000, 1000, 3000, 1000), 'main');
+});
+
+test('pickScrollTarget: main은 스크롤 불가지만 문서 레벨은 스크롤 가능하면 "document"', () => {
+  assert.equal(pickScrollTarget(1000, 1000, 3000, 1000), 'document');
+});
+
+test('pickScrollTarget: 둘 다 스크롤 불가면 null (짧은 이력서, 한 화면에 다 들어옴)', () => {
+  assert.equal(pickScrollTarget(1000, 1000, 1000, 1000), null);
 });

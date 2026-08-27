@@ -22,7 +22,7 @@ function findResumeContainer() {
 }
 
 async function runExtraction(sendResponse) {
-  const { isBlockedPage, computeScrollSteps } = await getLib();
+  const { isBlockedPage, computeScrollSteps, pickScrollTarget } = await getLib();
 
   if (isBlockedPage(location.href, document.title)) {
     sendResponse({ ok: false, reason: '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요' });
@@ -35,17 +35,57 @@ async function runExtraction(sendResponse) {
     return;
   }
 
-  const steps = computeScrollSteps(container.scrollHeight, window.innerHeight);
+  // <main>이 자체 스크롤바를 갖고 있는 레이아웃도 있고, <main>은 콘텐츠
+  // 높이만큼 늘어나고 실제 스크롤은 문서(body/html) 레벨에서 일어나는
+  // 레이아웃도 있다 -- 후자인데 <main> 기준으로만 스크롤 스텝을 계산하면
+  // maxScrollTop이 0으로 나와서 첫 화면 한 장만 캡처하고 "완료"로 조용히
+  // 끝나버린다(이 프로젝트의 fail-closed 원칙 위반). pickScrollTarget으로
+  // 실제 스크롤 가능한 대상을 먼저 판별한다.
+  const scrollTarget = pickScrollTarget(
+    container.scrollHeight,
+    container.clientHeight,
+    document.scrollingElement.scrollHeight,
+    window.innerHeight
+  );
+
+  let steps;
+  let scrollTo;
+  if (scrollTarget === 'main') {
+    steps = computeScrollSteps(container.scrollHeight, container.clientHeight);
+    scrollTo = top => container.scrollTo({ top, behavior: 'instant' });
+  } else if (scrollTarget === 'document') {
+    steps = computeScrollSteps(document.scrollingElement.scrollHeight, window.innerHeight);
+    scrollTo = top => document.scrollingElement.scrollTo({ top, behavior: 'instant' });
+  } else {
+    // 스크롤할 대상이 없다 -- 이력서가 이미 한 화면 안에 다 들어와 있는
+    // 경우로, computeScrollSteps가 이런 입력에도 [0] 하나만 돌려주는
+    // 경로를 그대로 재사용한다(스크롤 호출은 생략).
+    steps = [0];
+    scrollTo = null;
+  }
+
   const segments = [];
 
   for (let i = 0; i < steps.length; i++) {
-    container.scrollTo({ top: steps[i], behavior: 'instant' });
-    await new Promise(resolve => setTimeout(resolve, 400)); // 스크롤 후 렌더링 안정화 대기
+    if (scrollTo) {
+      scrollTo(steps[i]);
+      await new Promise(resolve => setTimeout(resolve, 400)); // 스크롤 후 렌더링 안정화 대기
+    }
 
     const captureResult = await chrome.runtime.sendMessage({ type: 'CAPTURE_AND_OCR' });
+    if (captureResult && captureResult.error) {
+      // background.js가 캡처/OCR 실패를 {error}로 돌려준 경우 -- 실패한
+      // 세그먼트를 조용히 건너뛰지 않고 즉시 중단해서 부분 성공을 "완료"로
+      // 잘못 보고하지 않는다.
+      sendResponse({ ok: false, reason: captureResult.error });
+      return;
+    }
     segments.push(captureResult.text);
 
-    chrome.runtime.sendMessage({ type: 'PROGRESS', current: i + 1, total: steps.length });
+    // 팝업이 응답을 안 받아도(닫혀 있어도) 실패로 취급하지 않는다 --
+    // 진행률 알림은 받는 쪽이 없어도 흐름에 영향이 없어야 하는
+    // fire-and-forget이라 처리되지 않은 프라미스 거부만 조용히 삼킨다.
+    chrome.runtime.sendMessage({ type: 'PROGRESS', current: i + 1, total: steps.length }).catch(() => {});
   }
 
   const { stitchText } = await import(chrome.runtime.getURL('ocr-lib.js'));
