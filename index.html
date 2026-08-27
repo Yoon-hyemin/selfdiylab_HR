@@ -3824,7 +3824,7 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
 
 async function generateTalentSearchCandidates(projectId){
   const el = document.getElementById('talentsearch-projects');
-  if(el) el.innerHTML = `<div style="color:var(--sub);font-size:13px;">가상 후보를 생성하는 중...</div>`;
+  if(el) el.innerHTML = `<button class="btn ghost sm" style="margin-bottom:14px;" onclick="openTalentSearchProjectDetail('${projectId}')">← 뒤로</button><div style="color:var(--sub);font-size:13px;">가상 후보를 생성하는 중...</div>`;
   try{
     await apiPost('/talent-search-projects/'+projectId+'/candidates', {});
   }catch(err){

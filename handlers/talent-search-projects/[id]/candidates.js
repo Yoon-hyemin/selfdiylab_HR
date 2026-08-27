@@ -70,7 +70,12 @@ export default async function handler(req, res) {
       const [project] = await sql`SELECT id FROM talent_search_projects WHERE id = ${id}`;
       if (!project) return res.status(404).json({ error: '검색 프로젝트를 찾을 수 없어요' });
 
-      const rows = await sql`SELECT * FROM talent_search_candidates WHERE project_id = ${id} ORDER BY created_at`;
+      // 한 배치의 모든 INSERT가 같은 트랜잭션 안에서 실행되고 Postgres now()는
+      // 트랜잭션 시작 시각으로 고정되므로, created_at만으로는 배치 내 순서가
+      // 보장되지 않는다(전부 동일 값). name은 `가상후보-NNN`로 3자리
+      // zero-pad돼 있어 문자열 정렬이 곧 생성 순서와 일치한다 -- 그래서
+      // 보조 정렬키로 추가해 실제 생성순(created_at, name)을 보장한다.
+      const rows = await sql`SELECT * FROM talent_search_candidates WHERE project_id = ${id} ORDER BY created_at, name`;
       return res.status(200).json({ candidates: rows.map(candidate_out) });
     } catch (err) {
       console.error(err);
@@ -84,6 +89,13 @@ export default async function handler(req, res) {
       if (!project) return res.status(404).json({ error: '검색 프로젝트를 찾을 수 없어요' });
       if (project.status !== 'approved') {
         return res.status(400).json({ error: '승인된 프로젝트만 가상 후보를 생성할 수 있어요' });
+      }
+      // 방어적 가드: 프로젝트 생성 검증(validateTalentSearchProjectInput)이 플랫폼
+      // 최소 1개를 이미 강제하므로 지금은 도달 불가능하지만, platforms가 비어있으면
+      // randomInt(0, -1)이 undefined를 골라 NOT NULL 제약 위반으로 일반 500이
+      // 나는 걸 막기 위해 명시적으로 막아둔다.
+      if (!Array.isArray(project.platforms) || project.platforms.length === 0) {
+        return res.status(400).json({ error: '이 프로젝트에 선택된 플랫폼이 없어요' });
       }
 
       const count = Math.min(300, Math.max(100, project.target_recommend_count * 3));
