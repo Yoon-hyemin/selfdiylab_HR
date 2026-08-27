@@ -299,11 +299,22 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 - 새 컬럼 `talent_search_candidates.manual_status`(`sql/020_talent_search_candidate_manual_status.sql`, nullable text, 값은 `NULL`/`'insufficient_info'`/`'duplicate'`) — 1E-1이 "점수·판정은 저장하지 않는다"고 못박은 원칙의 예외다. 사람이 후보를 열어보고 내린 판단 자체가 원본 데이터라서, 다시 계산해서 복원할 수 있는 값이 아니기 때문에 이것만 예외적으로 DB에 저장한다.
 - `PATCH /api/talent-search-projects/:id/candidates/:candidateId`(`handlers/talent-search-projects/[id]/candidates/[candidateId].js`) — `requireTalentSearchAccess`로 보호(이 기능 전체와 동일하게 ADMIN 전용이 아니다). 바디 `{ manualStatus }`는 `null`/`'insufficient_info'`/`'duplicate'`만 허용하고 그 외 값은 400. 대상 후보가 그 프로젝트 소속이 아니면 404.
 - 검색 진행 화면의 후보 행을 클릭하면 상세 모달이 열린다(raw 속성인 이력서 최신성/단기근속 횟수/경력 공백 + 채점 세부내역인 공통40점/직무60점/총점 + 자동판정 + 수동 상태를 고르는 셀렉트). **수동 상태가 있으면 자동판정보다 우선**해서 판정 배지와 요약 카운트에 반영된다 — 카운트는 이제 5개(추천/확인필요/제외/정보부족/중복)이고, 수동 상태가 있는 후보는 자동판정 카운트에서 빠지고 정보부족/중복 카운트로만 잡힌다.
-- 이번 범위에 명시적으로 안 넣은 것: 후보 삭제, 일괄 처리, 대시보드 연동, 실제 이력서 원문(가상 후보라 애초에 없음).
+- 이번 범위에 명시적으로 안 넣은 것: 후보 삭제, 일괄 처리, 대시보드 연동, 실제 이력서 원문(가상 후보라 애초에 없음). **(2026-08-26, Phase 1E-3에서 대체)** — 대시보드 연동(누적 추천 숫자) 은 구현됐다. 아래 Phase 1E-3 절 참고.
 - **재생성("다시 생성")하면 수동 상태도 자연히 초기화된다** — 1E-1의 재생성이 기존 후보를 DELETE하고 새로 INSERT하는 방식이라, `manual_status`를 별도로 지우는 코드 없이도 새로 생성된 후보는 전부 `manual_status=NULL`로 시작한다.
 - **프로덕션 마이그레이션 미적용**: 앞서 1D-2·1E-1의 `sql/018_talent_search_project_approval.sql`·`sql/019_talent_search_candidates.sql`에 이어, 이번에 추가한 `sql/020_talent_search_candidate_manual_status.sql`도 아직 `development` 브랜치에만 적용돼 있다 — 셋 다 production 반영은 사용자 확인 후 별도 진행. `sql/020`을 안 넣은 채 배포하면 이 화면의 상세 모달에서 수동 상태 저장이 500 에러를 낸다는 점은 눈에 띄지만, **더 헷갈리는 함정은 GET 쪽이다** — `SELECT *`로 읽는 조회는 컬럼이 없어도 에러 없이 `manual_status`가 그냥 안 잡혀서 `manualStatus:undefined`로 조용히 내려간다. 즉 저장(PATCH)은 실패하는데 화면을 새로고침하면 에러 메시지도 없이 그냥 원래 상태로 보여서, "왜 저장이 안 됐지" 원인 파악이 늦어질 수 있다 — production 반영 여부를 `information_schema`로 직접 확인할 것.
 
 **비개발자 운영 메모**: 검색 진행 화면에서 이제 후보 행을 클릭하면 자세한 내용(원본 속성, 채점 세부, 자동판정)을 볼 수 있다. 실제로 열어보고 판단해서 "정보 부족"이나 "중복"으로 표시해두면 목록의 판정 칸과 상단 요약 숫자에 바로 반영된다. 다만 "다시 생성"을 누르면 새 가상 후보로 통째로 바뀌기 때문에, 그때까지 표시해뒀던 정보부족/중복 표시도 같이 초기화된다.
+
+### Phase 1E-3 — 대시보드 누적 추천 숫자 연동 (2026-08-26)
+
+`docs/superpowers/plans/2026-08-26-talent-search-phase1e3.md`에 전체 배경이 있다. 인재검색 대시보드의 프로젝트 카드가 Phase 1A 이후로 계속 "누적 추천 0 / 목표"를 하드코딩해서 보여주고 있었는데, 이번에 실제 가상 후보 데이터로 계산하게 바꿨다.
+
+- 새 API·스키마 없음 — 이미 있는 `GET /talent-search-projects/:id/candidates`, `GET /talent-search-policy/versions`와 1B-4c의 `simulateCandidate`를 그대로 재사용해서 대시보드 렌더링 시점에 클라이언트에서 계산한다(`computeTalentSearchDashboardCounts`, `index.html`). 승인된(`status='approved'`) 프로젝트마다 후보 목록을 불러와 그 프로젝트가 승인 시점에 고정해 둔 채점 기준으로 채점하고, `추천` 판정 수를 센다 — Phase 1E-2에서 "정보 부족"/"중복"으로 수동 표시된 후보는 이 카운트에서 제외한다(수동 상태가 자동판정보다 우선한다는 1E-2 원칙 그대로).
+- **버그로 발견/수정**: 목록 조회(`GET /api/talent-search-projects`, Phase 1D-1에서 만듦)가 애초에 `policy_version_id` 컬럼을 안 내려주고 있었다 — 상세 조회(`GET .../:id`)만 그 필드를 갖고 있었다. 이 값이 없으면 대시보드 계산 로직의 "승인된 프로젝트만 필터링" 조건이 항상 빈 배열이 돼서 누적 추천이 영원히 0으로만 보이는 상태였다. `handlers/talent-search-projects/index.js`의 목록 SELECT와 응답 변환에 `policyVersionId`를 추가해서 고쳤다(새 컬럼 아님, 이미 sql/018에 있던 컬럼을 목록 응답에도 포함시킨 것뿐).
+- **"오늘 추천"은 여전히 하드코딩된 0이다** — 의도적이다. 지금 검색 진행 화면은 "한 번에 가상 후보를 생성"하는 단발성 모델이라 "그날 몇 명"이라는 배치 개념 자체가 없다. 실제 하루 단위 배치 스케줄링이 생기기 전까지는 억지로 숫자를 만들어내지 않는다.
+- **이번 범위에 명시적으로 안 넣은 것들**: 일시정지·안전종료·이어서 검색, 체크포인트 저장과 복구, 검색배치 시뮬레이션(하루 단위 진행), 플랫폼 순서 제안, 검색범위·인재풀 소진 보고서 — 전부 지금의 "한 번에 생성" 모델과 다른 데이터 모델이 필요해서 별도 단계로 미룸.
+
+**비개발자 운영 메모**: 이제 인재검색 대시보드의 각 프로젝트 카드에서 "누적 추천" 숫자가 실제로 그 프로젝트에서 몇 명이 추천 판정을 받았는지 보여준다(전에는 항상 0이었다). "오늘 추천"은 아직 하루 단위로 검색을 나눠서 진행하는 기능 자체가 없어서 그대로 0으로 보인다.
 
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 
