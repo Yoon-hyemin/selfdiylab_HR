@@ -3,7 +3,8 @@
  *
  * GET  -> 200 { projects: [{ id, title, roleTitle, seniorityLevel,
  *              employmentType, headcount, location, targetRecommendCount,
- *              dailyRecommendCap, platforms, status, createdAt }] } (최신순 전체)
+ *              dailyRecommendCap, platforms, status, policyVersionId,
+ *              createdAt }] } (최신순 전체)
  * POST { title, roleTitle, seniorityLevel?, experienceMinYears?, experienceMaxYears?,
  *        employmentType, headcount, location?, workConditions?, naturalLanguageBrief?,
  *        keywords?: {include,or,exact,exclude,preferred}, targetRecommendCount,
@@ -15,6 +16,14 @@
  * 추가한다 -- 대시보드 카드 목록용으로 가벼운 필드만 내려준다(keywords/
  * workConditions/naturalLanguageBrief/clarificationNotes 같은 무거운 필드는
  * 상세 조회, handlers/talent-search-projects/[id].js에서만 내려줌).
+ *
+ * Phase 1E-3에서 policyVersionId를 이 목록 응답에 추가했다 -- 대시보드가
+ * "누적 추천" 숫자를 계산하려면 승인된 프로젝트가 어느 채점 기준 버전에
+ * 고정됐는지를 목록 단계에서부터 알아야 하는데(승인된 프로젝트만 골라서
+ * GET .../candidates를 호출해야 하므로), 원래 이 필드가 목록 응답에
+ * 빠져 있어서 승인된 프로젝트를 하나도 못 찾아 "누적 추천"이 항상 0으로
+ * 나오는 버그가 있었다(수동 검증 중 발견). 이미 존재하는 컬럼(sql/018)을
+ * 목록에도 내려주는 것뿐이라 스키마 변경이나 새 엔드포인트는 아니다.
  */
 import { sql } from '../_lib/db.js';
 import { requireTalentSearchAccess } from '../_lib/accountAuth.js';
@@ -33,6 +42,7 @@ function project_summary_out(row) {
     dailyRecommendCap: row.daily_recommend_cap,
     platforms: row.platforms,
     status: row.status,
+    policyVersionId: row.policy_version_id,
     createdAt: row.created_at
   };
 }
@@ -46,7 +56,7 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT id, title, role_title, seniority_level, employment_type, headcount,
                location, target_recommend_count, daily_recommend_cap, platforms,
-               status, created_at
+               status, policy_version_id, created_at
         FROM talent_search_projects
         ORDER BY created_at DESC`;
       return res.status(200).json({ projects: rows.map(project_summary_out) });

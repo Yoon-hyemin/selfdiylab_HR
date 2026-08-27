@@ -3530,6 +3530,35 @@ async function restoreVersionNow(id){
 
 const TS_STATUS_LABEL = { draft: '작성중', approved: '승인됨' };
 
+async function computeTalentSearchDashboardCounts(projects){
+  const approved = projects.filter(p => p.status === 'approved' && p.policyVersionId);
+  if(!approved.length) return {};
+
+  let versions = [];
+  try{
+    const res = await apiGet('/talent-search-policy/versions');
+    versions = res.versions;
+  }catch(err){ /* 못 가져오면 아래에서 전부 0으로 처리 */ }
+
+  const counts = {};
+  await Promise.all(approved.map(async p => {
+    try{
+      const { candidates } = await apiGet('/talent-search-projects/'+p.id+'/candidates');
+      const policy = versions.find(v=>v.id===p.policyVersionId);
+      if(!policy || !candidates.length){ counts[p.id] = 0; return; }
+      let recommended = 0;
+      candidates.forEach(c => {
+        if(tsManualStatusLabel(c.manualStatus)) return;
+        if(simulateCandidate(c, policy).verdict === '추천') recommended++;
+      });
+      counts[p.id] = recommended;
+    }catch(err){
+      counts[p.id] = 0;
+    }
+  }));
+  return counts;
+}
+
 async function renderTalentSearchDashboard(){
   const el = document.getElementById('talentsearch-projects');
   if(!el) return;
@@ -3544,6 +3573,8 @@ async function renderTalentSearchDashboard(){
     return;
   }
 
+  const cumulativeCounts = await computeTalentSearchDashboardCounts(projects);
+
   const listHtml = projects.length ? `
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
       ${projects.map(p=>`
@@ -3557,7 +3588,7 @@ async function renderTalentSearchDashboard(){
           </div>
           <div style="display:flex;gap:10px;">
             <div class="kpi" style="flex:1;margin-bottom:0;"><div class="label">오늘 추천</div><div class="value">0 / ${p.dailyRecommendCap}</div></div>
-            <div class="kpi" style="flex:1;margin-bottom:0;"><div class="label">누적 추천</div><div class="value">0 / ${p.targetRecommendCount}</div></div>
+            <div class="kpi" style="flex:1;margin-bottom:0;"><div class="label">누적 추천</div><div class="value">${cumulativeCounts[p.id] ?? 0} / ${p.targetRecommendCount}</div></div>
           </div>
         </div>
       `).join('')}
