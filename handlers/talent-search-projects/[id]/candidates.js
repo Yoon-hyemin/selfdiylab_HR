@@ -2,8 +2,8 @@
  * handlers/talent-search-projects/[id]/candidates.js
  *
  * GET  -> 200 { candidates: [{ id, name, platform, resumeAgeDays,
- *              shortTenureCount, gapMonths, evidencePattern, createdAt }] }
- *              (생성순) | 404
+ *              shortTenureCount, gapMonths, evidencePattern, manualStatus,
+ *              createdAt }] } (생성순) | 404
  * POST {} -> 201 { candidates: [...] } (같은 모양) | 404 | 400
  *
  * Phase 1E-1: 가상 후보 생성 + 조회. 원본 명세가 실제 플랫폼에서 이력서를
@@ -28,6 +28,7 @@ function candidate_out(row) {
     shortTenureCount: row.short_tenure_count,
     gapMonths: row.gap_months,
     evidencePattern: row.evidence_pattern,
+    manualStatus: row.manual_status,
     createdAt: row.created_at
   };
 }
