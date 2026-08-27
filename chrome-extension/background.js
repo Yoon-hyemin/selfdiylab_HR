@@ -23,10 +23,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type !== 'CAPTURE_AND_OCR') return false;
 
   (async () => {
-    const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
-    await ensureOffscreenDocument();
-    const ocrResult = await chrome.runtime.sendMessage({ type: 'OCR_IMAGE', dataUrl });
-    sendResponse({ text: ocrResult.text });
+    try {
+      const dataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' });
+      await ensureOffscreenDocument();
+      const ocrResult = await chrome.runtime.sendMessage({ type: 'OCR_IMAGE', dataUrl });
+      sendResponse({ text: ocrResult.text });
+    } catch (err) {
+      // 캡처(captureVisibleTab) 실패나 오프스크린 문서 왕복 실패를 그냥
+      // 던지면 sendResponse가 한 번도 호출되지 않아서 호출부(content.js)에는
+      // "message channel closed before a response was received" 같은 원인을
+      // 알 수 없는 에러만 남는다 -- {text}와 구분되는 {error} 모양으로
+      // 돌려줘서 호출부가 실패를 감지하고 진단할 수 있게 한다.
+      sendResponse({ error: String(err) });
+    }
   })();
 
   return true; // 비동기 응답을 위해 채널을 열어둔다
