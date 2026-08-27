@@ -15,9 +15,10 @@ function getLib() {
 
 function findResumeContainer() {
   // 오늘 실사용 확인 기준, 이력서 상세 화면의 실제 콘텐츠는 <main> 안에
-  // 렌더링된다. 클래스명은 사람인이 임의로 바꿀 수 있는 해시값이라
-  // 의존하지 않는다.
-  return document.querySelector('main') || document.scrollingElement;
+  // 렌더링된다. document.scrollingElement 같은 항상-존재하는 폴백은 쓰지
+  // 않는다 -- <main>이 없으면(사이트 구조가 바뀐 경우) 추측해서 아무
+  // 영역이나 캡처하지 않고 명확히 실패해야 하기 때문이다.
+  return document.querySelector('main');
 }
 
 async function runExtraction(sendResponse) {
