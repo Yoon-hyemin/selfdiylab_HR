@@ -30,12 +30,9 @@ function getBlockedCheck() {
   return blockedCheckPromise;
 }
 
-// 실제 후보 카드를 감싸는 반복 요소의 선택자. Task 6 Step 1(실제
-// 사람인 페이지 DOM 확인)은 실제 페이지에 접근할 수 없는 환경이라
-// 스킵됐다 -- 이 자리표시자 선택자는 실제 페이지 구조를 확인하기
-// 전에 작성된 것이라 그대로 두면 동작하지 않는다. 실사용 전 반드시
-// 실제 화면을 열어 확인한 뒤 고쳐야 한다.
-const CANDIDATE_CARD_SELECTOR = '[data-testid="candidate-card"]';
+// 실제 후보 카드를 감싸는 반복 요소의 선택자. 2026-08-27 실사용
+// 확인 완료(로그인해서 실제 인재풀 검색결과 화면의 DOM을 직접 확인함).
+const CANDIDATE_CARD_SELECTOR = '.talent_list_item';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type !== 'PARSE_CURRENT_LIST') return false;
