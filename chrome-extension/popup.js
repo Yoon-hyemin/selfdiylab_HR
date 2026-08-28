@@ -153,7 +153,7 @@ importBtn.addEventListener('click', async () => {
       await wait(randomPageDelayMs());
     }
 
-    if (totalImported === 0) {
+    if (totalImported === 0 && totalSkipped === 0) {
       importStatus.textContent = stopReason || '가져올 후보를 찾지 못했어요';
     } else {
       let summary = pageCount > 1
