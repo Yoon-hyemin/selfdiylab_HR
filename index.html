@@ -3917,18 +3917,73 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
   loadTalentSearchListCandidates(projectId);
 }
 
+// 2026-08-27 fix wave: 이름 셀의 onclick(JS 문자열 컨텍스트)에
+// escapeHtml(sourceUrl)을 넣던 이전 방식은 실제로는 안전하지 않았다 --
+// 브라우저가 HTML 속성값을 먼저 디코드한 뒤 그 결과를 JS로 컴파일하기
+// 때문에, escapeHtml이 막는 HTML-속성 컨텍스트 탈출과 별개로 JS-문자열
+// 컨텍스트 탈출(예: sourceUrl에 작은따옴표+콤마+alert(...) 형태)은 그대로
+// 뚫린다. onclick/JS 문자열 보간을 아예 없애고 진짜 <a> 링크로 바꿔서
+// 이 클래스의 문제 자체를 제거한다. sourceUrl은 서버에서 http(s)만
+// 저장하도록 검증하지만(talentSearchListCandidateValidate.js),
+// escapeHtml은 href 속성값 자체를 위해 그대로 유지한다.
+let tsListCandidatesCache = [];
+let tsListSortMode = 'importedAt'; // 'importedAt' | 'age' | 'tagCount'
+let tsListSortDir = 'desc';
+
 function tsListCandidateRowHtml(c){
   const tags = (c.tags||[]).join(', ');
+  const importedLabel = c.importedAt ? new Date(c.importedAt).toLocaleDateString('ko-KR') : '-';
   return `
-    <tr class="clickable" onclick="window.open('${escapeHtml(c.sourceUrl)}', '_blank')">
-      <td>${escapeHtml(c.maskedName)}</td>
+    <tr>
+      <td><a href="${escapeHtml(c.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.maskedName)}</a></td>
       <td>${escapeHtml(c.gender||'-')}</td>
       <td>${c.age ?? '-'}</td>
       <td>${escapeHtml(c.careerSummary||'-')}</td>
       <td>${escapeHtml(c.education||'-')}</td>
       <td>${escapeHtml(tags||'-')}</td>
       <td>${escapeHtml(c.lastUpdatedLabel||'-')}</td>
+      <td>${escapeHtml(importedLabel)}</td>
     </tr>
+  `;
+}
+
+function tsListSortValue(c){
+  if(tsListSortMode==='age') return c.age ?? -1;
+  if(tsListSortMode==='tagCount') return (c.tags||[]).length;
+  return c.importedAt ? new Date(c.importedAt).getTime() : 0;
+}
+
+function tsListSortedCandidates(){
+  const dir = tsListSortDir==='asc' ? 1 : -1;
+  return [...tsListCandidatesCache].sort((a,b) => (tsListSortValue(a) - tsListSortValue(b)) * dir);
+}
+
+function changeTsListSort(v){ tsListSortMode = v; renderTsListCandidatesTable(); }
+function toggleTsListSortDir(){ tsListSortDir = tsListSortDir==='asc' ? 'desc' : 'asc'; renderTsListCandidatesTable(); }
+
+function renderTsListCandidatesTable(){
+  const bodyEl = document.getElementById('talentsearch-list-candidates-body');
+  if(!bodyEl) return;
+  if(!tsListCandidatesCache.length){
+    bodyEl.innerHTML = '<div class="empty">아직 가져온 후보가 없어요. 크롬 확장에서 사람인 검색결과를 가져와보세요.</div>';
+    return;
+  }
+  const sorted = tsListSortedCandidates();
+  bodyEl.innerHTML = `
+    <div class="field" style="margin:0 0 10px;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">정렬</label>
+      <select onchange="changeTsListSort(this.value)">
+        <option value="importedAt" ${tsListSortMode==='importedAt'?'selected':''}>가져온 날짜</option>
+        <option value="age" ${tsListSortMode==='age'?'selected':''}>나이</option>
+        <option value="tagCount" ${tsListSortMode==='tagCount'?'selected':''}>태그 수</option>
+      </select>
+      <button class="btn ghost sm" onclick="toggleTsListSortDir()">${tsListSortDir==='asc' ? '오름차순 ↑' : '내림차순 ↓'}</button>
+    </div>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>이름</th><th>성별</th><th>나이</th><th>경력</th><th>학력</th><th>태그</th><th>최종업데이트</th><th>가져온 날짜</th></tr></thead>
+      <tbody>${sorted.map(tsListCandidateRowHtml).join('')}</tbody>
+    </table>
+    </div>
   `;
 }
 
@@ -3937,18 +3992,8 @@ async function loadTalentSearchListCandidates(projectId){
   if(!bodyEl) return;
   try{
     const { candidates } = await apiGet(`/talent-search-projects/${projectId}/list-candidates`);
-    if(!candidates.length){
-      bodyEl.innerHTML = '<div class="empty">아직 가져온 후보가 없어요. 크롬 확장에서 사람인 검색결과를 가져와보세요.</div>';
-      return;
-    }
-    bodyEl.innerHTML = `
-      <div style="overflow-x:auto;">
-      <table>
-        <thead><tr><th>이름</th><th>성별</th><th>나이</th><th>경력</th><th>학력</th><th>태그</th><th>최종업데이트</th></tr></thead>
-        <tbody>${candidates.map(tsListCandidateRowHtml).join('')}</tbody>
-      </table>
-      </div>
-    `;
+    tsListCandidatesCache = candidates;
+    renderTsListCandidatesTable();
   }catch(err){
     bodyEl.innerHTML = `<div class="empty">불러오지 못했어요: ${escapeHtml(err.message)}</div>`;
   }

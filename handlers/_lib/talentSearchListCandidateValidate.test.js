@@ -35,6 +35,21 @@ test('age가 숫자가 아니면 거부', () => {
   assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [bad] }), '나이는 숫자여야 해요');
 });
 
+test('sourceUrl이 http(s)가 아니면 거부 (XSS 방지)', () => {
+  const bad = { ...validCandidate, sourceUrl: 'javascript:alert(1)' };
+  assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [bad] }), '후보 원문 링크가 올바르지 않아요');
+});
+
+test('후보가 200명 초과면 거부', () => {
+  const many = Array.from({ length: 201 }, (_, i) => ({ ...validCandidate, maskedName: `후보${i}` }));
+  assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: many }), '한 번에 너무 많은 후보를 가져올 수 없어요');
+});
+
+test('후보가 정확히 200명이면 통과', () => {
+  const exactly200 = Array.from({ length: 200 }, (_, i) => ({ ...validCandidate, maskedName: `후보${i}` }));
+  assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: exactly200 }), null);
+});
+
 test('정상 입력이면 통과(null)', () => {
   assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [validCandidate] }), null);
 });

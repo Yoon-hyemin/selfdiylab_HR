@@ -10,11 +10,17 @@ export function validateListCandidateBatch(body) {
   if (!Array.isArray(body.candidates) || body.candidates.length === 0) {
     return '가져올 후보가 1명 이상 있어야 해요';
   }
+  if (body.candidates.length > 200) {
+    return '한 번에 너무 많은 후보를 가져올 수 없어요';
+  }
   for (const c of body.candidates) {
     if (!c || typeof c.maskedName !== 'string' || !c.maskedName.trim()) {
       return '후보 이름이 올바르지 않아요';
     }
     if (typeof c.sourceUrl !== 'string' || !c.sourceUrl.trim()) {
+      return '후보 원문 링크가 올바르지 않아요';
+    }
+    if (!/^https?:\/\//i.test(c.sourceUrl)) {
       return '후보 원문 링크가 올바르지 않아요';
     }
     if (c.age !== undefined && c.age !== null && !Number.isInteger(c.age)) {
