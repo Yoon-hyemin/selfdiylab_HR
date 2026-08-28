@@ -21,6 +21,7 @@ tokenSaveBtn.addEventListener('click', async () => {
 
 const listImportSection = document.getElementById('listImportSection');
 const projectSelect = document.getElementById('projectSelect');
+const targetCountInput = document.getElementById('targetCountInput');
 const importBtn = document.getElementById('importBtn');
 const importStatus = document.getElementById('importStatus');
 
@@ -62,33 +63,106 @@ async function initListImportUiIfApplicable() {
   }
 }
 
+// 한 번의 "가져오기" 클릭이 넘길 수 있는 최대 페이지 수. 무한정
+// 페이지를 넘기지 않도록 하는 안전장치이지 정책값이 아니라서 상수로만
+// 관리한다(설계문서 참고) -- 더 필요하면 사람인에서 수동으로 몇 페이지
+// 넘긴 뒤 다시 누르면 된다.
+const MAX_PAGES = 5;
+
+function randomPageDelayMs() {
+  // 페이지 이동마다 정확히 같은 간격으로 클릭하지 않도록 2.5~4.5초
+  // 사이 무작위 지연을 둔다(사람처럼 보이게 하는 안전장치 -- 실행엔진
+  // OCR 작업 중 실제로 2단계인증을 겪은 적이 있어서 도입).
+  return 2500 + Math.random() * 2000;
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 importBtn.addEventListener('click', async () => {
   const token = await loadSavedToken();
   const projectId = projectSelect.value;
   if (!token || !projectId) return;
 
-  importStatus.textContent = '가져오는 중...';
+  const target = Math.max(1, Number(targetCountInput.value) || 50);
   importBtn.disabled = true;
+
+  const seenUrls = new Set();
+  let totalImported = 0;
+  let totalSkipped = 0;
+  let pageCount = 0;
+  let stopReason = null;
+
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const parseResult = await chrome.tabs.sendMessage(tab.id, { type: 'PARSE_CURRENT_LIST' });
-    if (parseResult && parseResult.blocked) {
-      importStatus.textContent = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
-      return;
-    }
-    const candidates = (parseResult && parseResult.candidates) || [];
-    if (!candidates.length) {
-      importStatus.textContent = '가져올 후보를 찾지 못했어요';
-      return;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      pageCount += 1;
+      importStatus.textContent = `${pageCount}페이지째 가져오는 중... (지금까지 ${totalImported}명 확보)`;
+
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const parseResult = await chrome.tabs.sendMessage(tab.id, { type: 'PARSE_CURRENT_LIST' });
+      if (parseResult && parseResult.blocked) {
+        stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
+        break;
+      }
+
+      const allCandidates = (parseResult && parseResult.candidates) || [];
+      // 같은 페이지를 다시 읽게 된 경우(다음 페이지 클릭이 실제로는
+      // 안 먹힌 경우 등)를 새 후보 0명으로 자연스럽게 감지하기 위해,
+      // 이번 "가져오기" 세션 동안 이미 본 sourceUrl은 다시 보내지
+      // 않는다.
+      const newCandidates = allCandidates.filter(c => c.sourceUrl && !seenUrls.has(c.sourceUrl));
+      if (!newCandidates.length) {
+        stopReason = pageCount === 1 ? '가져올 후보를 찾지 못했어요' : '더 이상 새로운 후보가 없어요';
+        break;
+      }
+      newCandidates.forEach(c => seenUrls.add(c.sourceUrl));
+
+      const res = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects/${projectId}/list-candidates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ platform: '사람인', candidates: newCandidates })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        stopReason = data.error || '가져오기 실패';
+        break;
+      }
+
+      totalImported += data.imported;
+      totalSkipped += data.skipped || 0;
+
+      if (totalImported >= target) break;
+
+      if (pageCount >= MAX_PAGES) {
+        stopReason = `안전 상한(${MAX_PAGES}페이지)에 도달해 멈췄어요. 필요하면 사람인에서 직접 다음 페이지로 이동한 뒤 다시 눌러주세요.`;
+        break;
+      }
+
+      const nextResult = await chrome.tabs.sendMessage(tab.id, { type: 'CLICK_NEXT_PAGE' });
+      if (!nextResult || nextResult.blocked) {
+        stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
+        break;
+      }
+      if (!nextResult.hasNextPage) {
+        stopReason = '마지막 페이지예요';
+        break;
+      }
+
+      await wait(randomPageDelayMs());
     }
 
-    const res = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects/${projectId}/list-candidates`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ platform: '사람인', candidates })
-    });
-    const data = await res.json();
-    importStatus.textContent = res.ok ? `${data.imported}명 가져왔어요` : (data.error || '가져오기 실패');
+    if (totalImported === 0) {
+      importStatus.textContent = stopReason || '가져올 후보를 찾지 못했어요';
+    } else {
+      let summary = pageCount > 1
+        ? `${pageCount}페이지에 걸쳐 ${totalImported}명 가져왔어요`
+        : `${totalImported}명 가져왔어요`;
+      if (totalSkipped) summary += ` (${totalSkipped}명은 조건에 안 맞아 제외)`;
+      if (stopReason) summary += ` — ${stopReason}`;
+      importStatus.textContent = summary;
+    }
   } catch (err) {
     importStatus.textContent = `오류: ${err.message}`;
   } finally {
