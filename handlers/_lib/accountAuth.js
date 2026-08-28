@@ -314,7 +314,12 @@ export async function requireExtensionToken(req, res) {
 }
 
 /**
- * GET/POST /api/talent-search-extension-token 둘 다에서 쓰는 공용 헬퍼.
+ * GET /api/talent-search-projects(목록 조회)가 쓰는 공용 헬퍼 -- 크롬
+ * 확장 팝업이 "어느 프로젝트에 넣을지" 드롭다운을 채울 때는 연결 코드로,
+ * HR 사이트 화면에서 호출할 때는 쿠키 세션으로 인증되게 한다.
+ * (POST /api/talent-search-extension-token은 항상 쿠키 세션 전용
+ * requireTalentSearchAccess만 쓴다 -- 연결 코드를 발급받으려면 이미
+ * 로그인이 돼 있어야 하므로 여기서 헤더 인증을 받아줄 이유가 없다.)
  * Authorization 헤더가 있으면 그걸로(확장이 호출하는 경우), 없으면
  * 쿠키 세션으로(HR 사이트 화면에서 호출하는 경우) 인증한다. 두 인증
  * 방식을 동시에 시도하지 않고 헤더 유무로 먼저 분기해서, 쿠키 세션에

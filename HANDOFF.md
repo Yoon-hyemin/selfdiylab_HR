@@ -18,6 +18,8 @@
 
 이 문서는 웹앱(1A~1E) 브랜치 기준이다 — 이후 별도로 `chrome-extension/`(Manifest V3, 사람인 이력서 OCR 추출 실행엔진 MVP)이 추가됐다. 배경/설치 방법은 CLAUDE.md의 "실행엔진" 절, 설계는 `docs/superpowers/specs/2026-08-27-talent-search-execution-engine-ocr-mvp-design.md`, 구현계획은 `docs/superpowers/plans/2026-08-27-talent-search-execution-engine-ocr-mvp.md` 참고.
 
+같은 세션에서 그 뒤 "사람인 실제 후보 리스트 가져오기"(검색결과 리스트를 확장으로 통째로 가져와 "검색 진행" 화면에 채점 없이 표시, 연결 코드 인증)도 완료됐다 — CLAUDE.md의 "인재검색 — 사람인 실제 후보 리스트 가져오기" 절 참고. DOM 선택자는 아직 라이브 페이지 미검증 placeholder라 실사용 전 확인 필요.
+
 ## 2. 작업 방식 (이 세션 내내 그대로 유지됨)
 
 매 서브 단계마다: **brainstorming 스킬(설계 문서 → `docs/superpowers/specs/`) → writing-plans 스킬(구현계획 → `docs/superpowers/plans/`) → subagent-driven-development 스킬(Task별 fresh subagent 구현 + task review + 최종 whole-branch review + fix wave + scoped re-review)** 순서를 반복해왔다. 새 세션도 이 패턴을 그대로 따르면 된다.
