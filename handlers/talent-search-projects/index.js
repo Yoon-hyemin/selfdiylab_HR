@@ -26,7 +26,7 @@
  * 목록에도 내려주는 것뿐이라 스키마 변경이나 새 엔드포인트는 아니다.
  */
 import { sql } from '../_lib/db.js';
-import { requireTalentSearchAccess } from '../_lib/accountAuth.js';
+import { requireTalentSearchAccess, requireTalentSearchAccessOrToken } from '../_lib/accountAuth.js';
 import { validateTalentSearchProjectInput } from '../_lib/talentSearchProjectValidate.js';
 
 function project_summary_out(row) {
@@ -48,7 +48,13 @@ function project_summary_out(row) {
 }
 
 export default async function handler(req, res) {
-  const account = await requireTalentSearchAccess(req, res);
+  // GET(목록 조회)만 크롬 확장의 연결 코드 인증도 허용한다 -- 확장
+  // 팝업이 "어느 프로젝트에 넣을지" 드롭다운을 채울 때 이 엔드포인트를
+  // 그대로 재사용하기 위해서다. POST(프로젝트 생성)는 HR 사이트 화면
+  // 전용 기능이라 그대로 쿠키 세션만 받는다.
+  const account = req.method === 'GET'
+    ? await requireTalentSearchAccessOrToken(req, res)
+    : await requireTalentSearchAccess(req, res);
   if (!account) return;
 
   if (req.method === 'GET') {
