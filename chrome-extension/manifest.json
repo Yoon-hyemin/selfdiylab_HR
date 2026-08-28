@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "description": "사람인 인재풀 후보 상세 이력서 화면을 스크롤하며 캡처하고, 로컬 OCR로 텍스트를 추출합니다.",
   "permissions": ["activeTab", "tabs", "offscreen"],
-  "host_permissions": ["https://hiring.saramin.co.kr/*"],
+  "host_permissions": [
+    "https://hiring.saramin.co.kr/*",
+    "https://www.saramin.co.kr/zf_user/memcom/talent-pool/*",
+    "http://localhost:3000/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -13,6 +17,10 @@
     {
       "matches": ["https://hiring.saramin.co.kr/applicant-view/*"],
       "js": ["content.js"]
+    },
+    {
+      "matches": ["https://www.saramin.co.kr/zf_user/memcom/talent-pool/*"],
+      "js": ["list-content.js"]
     }
   ],
   "action": {
@@ -22,7 +30,7 @@
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "web_accessible_resources": [{
-    "resources": ["content-lib.js", "ocr-lib.js"],
-    "matches": ["https://hiring.saramin.co.kr/*"]
+    "resources": ["content-lib.js", "ocr-lib.js", "list-content-lib.js"],
+    "matches": ["https://hiring.saramin.co.kr/*", "https://www.saramin.co.kr/*"]
   }]
 }
