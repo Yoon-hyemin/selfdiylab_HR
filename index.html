@@ -431,6 +431,7 @@
         <button class="tab active" onclick="switchTalentSearchTab('dashboard')" id="tstab-dashboard">대시보드</button>
         <button class="tab" onclick="switchTalentSearchTab('policy')" id="tstab-policy">기준 관리센터</button>
         <button class="tab" onclick="switchTalentSearchTab('versions')" id="tstab-versions">버전 이력</button>
+        <button class="tab" onclick="switchTalentSearchTab('connect')" id="tstab-connect">실행엔진 연결</button>
       </div>
       <div id="talentsearch-dashboard">
         <div class="section">
@@ -443,6 +444,14 @@
       </div>
       <div id="talentsearch-versions" style="display:none;">
         <div id="talentsearch-versions-body"></div>
+      </div>
+      <div id="talentsearch-connect" style="display:none;">
+        <div class="section">
+          <div class="section-head"><div><h3>실행엔진(크롬 확장) 연결</h3><div class="desc">크롬 확장이 이 HR 사이트에 후보 리스트를 저장하려면 연결 코드가 필요해요. 발급한 코드를 확장 설정에 붙여넣으면 그 다음부턴 자동으로 인증돼요.</div></div></div>
+          <div id="talentsearch-connect-status"></div>
+          <button class="btn primary sm" style="margin-top:10px;" onclick="issueTalentSearchExtensionToken()">연결 코드 발급/재발급</button>
+          <div id="talentsearch-connect-token" style="margin-top:10px;"></div>
+        </div>
       </div>
     </div>
 
@@ -3061,13 +3070,44 @@ function renderHrDash(){
 
 /* ---------- TALENT SEARCH (인재검색) ---------- */
 function switchTalentSearchTab(tab){
-  ['dashboard','policy','versions'].forEach(t=>{
+  ['dashboard','policy','versions','connect'].forEach(t=>{
     document.getElementById('talentsearch-'+t).style.display = t===tab ? '' : 'none';
     document.getElementById('tstab-'+t).classList.toggle('active', t===tab);
   });
   if(tab==='dashboard') renderTalentSearchDashboard();
   if(tab==='policy') loadAndRenderTalentSearchPolicy();
   if(tab==='versions') loadAndRenderTalentSearchVersions();
+  if(tab==='connect') loadAndRenderTalentSearchConnect();
+}
+
+async function loadAndRenderTalentSearchConnect(){
+  const statusEl = document.getElementById('talentsearch-connect-status');
+  statusEl.textContent = '불러오는 중...';
+  try{
+    const data = await apiGet('/talent-search-extension-token');
+    statusEl.innerHTML = data.hasToken
+      ? `연결 코드 발급됨${data.lastUsedAt ? ' · 마지막 사용: ' + new Date(data.lastUsedAt).toLocaleString('ko-KR') : ' · 아직 사용 안 함'}`
+      : '아직 연결 코드가 없어요';
+  }catch(err){
+    statusEl.textContent = '상태를 불러오지 못했어요: ' + err.message;
+  }
+}
+
+async function issueTalentSearchExtensionToken(){
+  if(!confirm('연결 코드를 새로 발급하면 기존 코드는 즉시 무효화돼요. 계속할까요?')) return;
+  try{
+    const data = await apiPost('/talent-search-extension-token', {});
+    document.getElementById('talentsearch-connect-token').innerHTML = `
+      <div class="section" style="background:var(--bg-soft,#f5f5f5);">
+        <div style="font-weight:600;margin-bottom:6px;">새 연결 코드 (이 화면을 닫으면 다시 볼 수 없어요)</div>
+        <div style="font-family:monospace;font-size:14px;word-break:break-all;user-select:all;">${escapeHtml(data.token)}</div>
+        <div class="desc" style="margin-top:6px;">이 코드를 복사해서 크롬 확장의 설정에 붙여넣으세요.</div>
+      </div>
+    `;
+    loadAndRenderTalentSearchConnect();
+  }catch(err){
+    alert('연결 코드 발급에 실패했어요: ' + err.message);
+  }
 }
 
 let tsPolicy = null;
@@ -3869,7 +3909,49 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
       </table>
       </div>
     </div>
+    <div class="section" id="talentsearch-list-candidates-section">
+      <div class="section-head"><div><h3>실제 후보 리스트</h3><div class="desc">사람인 검색결과에서 크롬 확장으로 가져온 후보예요. 채점은 아직 안 하고, 정렬·필터만 돼요. 행을 클릭하면 원문 이력서로 이동해요.</div></div></div>
+      <div id="talentsearch-list-candidates-body">불러오는 중...</div>
+    </div>
   `;
+  loadTalentSearchListCandidates(projectId);
+}
+
+function tsListCandidateRowHtml(c){
+  const tags = (c.tags||[]).join(', ');
+  return `
+    <tr class="clickable" onclick="window.open('${c.sourceUrl}', '_blank')">
+      <td>${escapeHtml(c.maskedName)}</td>
+      <td>${escapeHtml(c.gender||'-')}</td>
+      <td>${c.age ?? '-'}</td>
+      <td>${escapeHtml(c.careerSummary||'-')}</td>
+      <td>${escapeHtml(c.education||'-')}</td>
+      <td>${escapeHtml(tags||'-')}</td>
+      <td>${escapeHtml(c.lastUpdatedLabel||'-')}</td>
+    </tr>
+  `;
+}
+
+async function loadTalentSearchListCandidates(projectId){
+  const bodyEl = document.getElementById('talentsearch-list-candidates-body');
+  if(!bodyEl) return;
+  try{
+    const { candidates } = await apiGet(`/talent-search-projects/${projectId}/list-candidates`);
+    if(!candidates.length){
+      bodyEl.innerHTML = '<div class="empty">아직 가져온 후보가 없어요. 크롬 확장에서 사람인 검색결과를 가져와보세요.</div>';
+      return;
+    }
+    bodyEl.innerHTML = `
+      <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>이름</th><th>성별</th><th>나이</th><th>경력</th><th>학력</th><th>태그</th><th>최종업데이트</th></tr></thead>
+        <tbody>${candidates.map(tsListCandidateRowHtml).join('')}</tbody>
+      </table>
+      </div>
+    `;
+  }catch(err){
+    bodyEl.innerHTML = `<div class="empty">불러오지 못했어요: ${escapeHtml(err.message)}</div>`;
+  }
 }
 
 function openTalentSearchCandidateDetail(projectId, candidateId){
