@@ -69,10 +69,18 @@ export default async function handler(req, res) {
         if (policy) level1Rules = policy.level1_rules;
       }
 
+      // Postgres numeric 컬럼은 neon 드라이버가 정밀도 손실을 막으려고
+      // 문자열로 내려준다("5") -- evaluateListCandidate는 숫자를
+      // 기대하는데, 이 값을 그대로 넘기면 JS의 문자열+숫자 덧셈이
+      // 문자열 이어붙이기로 동작해서("5" + 0.5 === "50.5") 최대
+      // 경력연수 상한이 사실상 무력화되는 버그가 생긴다(실사용 검증
+      // 중 실제로 발견됨 -- 7년 경력자가 1~5년 프로젝트에서 안 걸러짐).
+      // 최소 경력연수 쪽은 뺄셈이라 우연히 숫자로 강제변환돼 문제가
+      // 안 드러났었다.
       const filterConfig = {
         level1Rules,
-        experienceMinYears: project.experience_min_years,
-        experienceMaxYears: project.experience_max_years
+        experienceMinYears: project.experience_min_years === null ? null : Number(project.experience_min_years),
+        experienceMaxYears: project.experience_max_years === null ? null : Number(project.experience_max_years)
       };
       const now = new Date();
 
