@@ -44,6 +44,11 @@ export async function getActivePolicy() {
   return row || null;
 }
 
+export async function getPolicyById(id) {
+  const [row] = await sql`SELECT * FROM talent_search_policy_versions WHERE id = ${id}`;
+  return row || null;
+}
+
 export async function getDraftPolicy() {
   const [row] = await sql`
     SELECT * FROM talent_search_policy_versions WHERE status = 'draft'

@@ -1,10 +1,18 @@
 /**
  * POST { platform, candidates: [{maskedName,gender?,age?,careerSummary?,
  *        recentPositions?,education?,tags?,badges?,lastUpdatedLabel?,
- *        sourceUrl}] } -> 201 { imported: N }
+ *        sourceUrl}] } -> 201 { imported: N, skipped: M, skippedReasons: {
+ *        resumeStale, careerOutOfRange } }
  *   크롬 확장 전용(requireExtensionToken). 사람인 검색리스트 화면에서
  *   "가져오기"를 누르면 호출된다. 채점을 하지 않으므로 원본 필드
- *   그대로 저장만 한다(이 프로젝트의 "서버는 원본만" 원칙).
+ *   그대로 저장만 한다(이 프로젝트의 "서버는 원본만" 원칙) -- 단,
+ *   2026-08-28부터 저장 전에 evaluateListCandidate(talentSearchListFilter.js)로
+ *   명확히 조건 밖인 후보(이력서 업데이트 180일 초과 또는 프로젝트
+ *   희망 경력범위 밖)는 아예 저장하지 않는다. 판단 불가는 통과시킨다.
+ *   판정 기준은 이 프로젝트가 승인 시점에 고정해 둔 정책 버전
+ *   (policy_version_id)을 쓴다 -- 나중에 정책이 바뀌어도 이미 지난
+ *   가져오기의 판정 근거가 흔들리지 않게 하기 위해서다(1D-2가 채점
+ *   기준을 승인 시점에 고정하는 것과 같은 이유).
  *
  * GET -> 200 { candidates: [...] }  (최신순)
  *   HR 사이트 "검색 진행" 화면 전용(requireTalentSearchAccess).
@@ -12,6 +20,8 @@
 import { sql } from '../../_lib/db.js';
 import { requireExtensionToken, requireTalentSearchAccess } from '../../_lib/accountAuth.js';
 import { validateListCandidateBatch } from '../../_lib/talentSearchListCandidateValidate.js';
+import { evaluateListCandidate } from '../../_lib/talentSearchListFilter.js';
+import { getPolicyById } from '../../_lib/talentSearchPolicy.js';
 
 function candidate_out(row) {
   return {
@@ -43,24 +53,59 @@ export default async function handler(req, res) {
     if (validationError) return res.status(400).json({ error: validationError });
 
     try {
-      const [project] = await sql`SELECT id FROM talent_search_projects WHERE id = ${projectId}`;
+      const [project] = await sql`
+        SELECT id, experience_min_years, experience_max_years, policy_version_id
+        FROM talent_search_projects WHERE id = ${projectId}`;
       if (!project) return res.status(404).json({ error: '검색 프로젝트를 찾을 수 없어요' });
 
-      const statements = body.candidates.map(c => sql`
-        INSERT INTO talent_search_list_candidates (
-          project_id, platform, masked_name, gender, age, career_summary,
-          recent_positions, education, tags, badges, last_updated_label,
-          source_url, imported_by_account_id
-        ) VALUES (
-          ${projectId}, ${body.platform}, ${c.maskedName}, ${c.gender || null}, ${c.age ?? null},
-          ${c.careerSummary || null}, ${JSON.stringify(c.recentPositions || [])}::jsonb,
-          ${c.education || null}, ${JSON.stringify(c.tags || [])}::jsonb,
-          ${JSON.stringify(c.badges || [])}::jsonb, ${c.lastUpdatedLabel || null},
-          ${c.sourceUrl}, ${account.id}
-        )`);
-      await sql.transaction(statements);
+      // policy_version_id가 없으면(승인 전 프로젝트, 정상 흐름에서는
+      // 발생하지 않지만 방어적으로 다룸) 이력서 업데이트일 기준은
+      // 건너뛴다 -- 기준 버전이 없는데 지금 활성 정책을 억지로 갖다
+      //쓰면, 나중에 정책이 바뀌었을 때 "그때 왜 걸렀는지" 설명할 수
+      // 없어서다.
+      let level1Rules = null;
+      if (project.policy_version_id) {
+        const policy = await getPolicyById(project.policy_version_id);
+        if (policy) level1Rules = policy.level1_rules;
+      }
 
-      return res.status(201).json({ imported: body.candidates.length });
+      const filterConfig = {
+        level1Rules,
+        experienceMinYears: project.experience_min_years,
+        experienceMaxYears: project.experience_max_years
+      };
+      const now = new Date();
+
+      const kept = [];
+      const skippedReasons = { resumeStale: 0, careerOutOfRange: 0 };
+      let skipped = 0;
+      for (const c of body.candidates) {
+        const { skip, reasons } = evaluateListCandidate(c, filterConfig, now);
+        if (skip) {
+          skipped += 1;
+          reasons.forEach(r => { skippedReasons[r] += 1; });
+        } else {
+          kept.push(c);
+        }
+      }
+
+      if (kept.length) {
+        const statements = kept.map(c => sql`
+          INSERT INTO talent_search_list_candidates (
+            project_id, platform, masked_name, gender, age, career_summary,
+            recent_positions, education, tags, badges, last_updated_label,
+            source_url, imported_by_account_id
+          ) VALUES (
+            ${projectId}, ${body.platform}, ${c.maskedName}, ${c.gender || null}, ${c.age ?? null},
+            ${c.careerSummary || null}, ${JSON.stringify(c.recentPositions || [])}::jsonb,
+            ${c.education || null}, ${JSON.stringify(c.tags || [])}::jsonb,
+            ${JSON.stringify(c.badges || [])}::jsonb, ${c.lastUpdatedLabel || null},
+            ${c.sourceUrl}, ${account.id}
+          )`);
+        await sql.transaction(statements);
+      }
+
+      return res.status(201).json({ imported: kept.length, skipped, skippedReasons });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ error: '후보 리스트를 저장하지 못했어요' });
