@@ -1,13 +1,15 @@
 // chrome-extension/list-content.js
 // 사람인 검색결과 리스트 페이지에 주입된다. 팝업의 "이 페이지
 // 가져오기" 클릭을 받으면(PARSE_CURRENT_LIST) 로그인/인증 화면인지
-// 먼저 확인하고(오늘 상세 페이지 작업 때 세운 원칙과 동일 -- 2단계인증
-// 화면을 실제로 겪어봤다), 아니면 현재 화면에 보이는 후보 카드들을
-// 파싱해서 돌려준다. 페이지를 스크롤하거나 다음 페이지로 넘기지
-// 않는다 -- "지금 보이는 페이지만" 가져오는 게 이번 슬라이스의
-// 의도된 범위다. 이 파일은 manifest에 classic 스크립트로 선언돼 있어
-// 최상위 import 문을 쓸 수 없다 -- 순수 함수는 동적 import()로
-// 가져온다(content.js와 동일한 패턴).
+// 먼저 확인하고(2단계인증 화면을 실제로 겪어봤다), 아니면 현재 화면에
+// 보이는 후보 카드들을 파싱해서 돌려준다. 목표 인원을 채우기 위해
+// 팝업이 여러 페이지를 반복 수집할 때는 CLICK_NEXT_PAGE로 "다음
+// 페이지" 요소를 대신 찾아 클릭한다(2026-08-28 추가) -- 이 파일
+// 자체는 스크롤하거나 페이지를 판단하지 않는다, 클릭 한 번만 담당하고
+// 반복 여부와 페이지 간 지연은 팝업(popup.js)이 주도한다. 이 파일은
+// manifest에 classic 스크립트로 선언돼 있어 최상위 import 문을 쓸 수
+// 없다 -- 순수 함수는 동적 import()로 가져온다(content.js와 동일한
+// 패턴).
 
 let libPromise = null;
 function getLib() {
@@ -35,23 +37,47 @@ function getBlockedCheck() {
 const CANDIDATE_CARD_SELECTOR = '.talent_list_item';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type !== 'PARSE_CURRENT_LIST') return false;
+  if (message.type === 'PARSE_CURRENT_LIST') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        // 로그인/2단계인증 화면에서는 카드 선택자가 그냥 하나도 안
+        // 걸려서 "0명"으로 조용히 성공한 것처럼 보일 위험이 있다 --
+        // blocked 플래그로 구분해서 팝업이 다른 메시지를 보여주게 한다.
+        sendResponse({ candidates: [], blocked: true });
+        return;
+      }
 
-  (async () => {
-    const { isBlockedPage } = await getBlockedCheck();
-    if (isBlockedPage(location.href, document.title)) {
-      // 로그인/2단계인증 화면에서는 카드 선택자가 그냥 하나도 안
-      // 걸려서 "0명"으로 조용히 성공한 것처럼 보일 위험이 있다 --
-      // blocked 플래그로 구분해서 팝업이 다른 메시지를 보여주게 한다.
-      sendResponse({ candidates: [], blocked: true });
-      return;
-    }
+      const { parseCandidateCard } = await getLib();
+      const cards = Array.from(document.querySelectorAll(CANDIDATE_CARD_SELECTOR));
+      const candidates = cards.map(parseCandidateCard).filter(c => c.maskedName && c.sourceUrl);
+      sendResponse({ candidates, blocked: false });
+    })();
+    return true; // 비동기 응답을 위해 채널을 열어둔다
+  }
 
-    const { parseCandidateCard } = await getLib();
-    const cards = Array.from(document.querySelectorAll(CANDIDATE_CARD_SELECTOR));
-    const candidates = cards.map(parseCandidateCard).filter(c => c.maskedName && c.sourceUrl);
-    sendResponse({ candidates, blocked: false });
-  })();
+  if (message.type === 'CLICK_NEXT_PAGE') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        // 클릭 자체가 예상 못한 팝업/리디렉션을 유발할 수 있어서
+        // 클릭 전에도 한 번 더 확인한다(PARSE_CURRENT_LIST 쪽과 이중
+        // 방어).
+        sendResponse({ hasNextPage: false, blocked: true });
+        return;
+      }
 
-  return true; // 비동기 응답을 위해 채널을 열어둔다
+      const { findNextPageButton } = await getLib();
+      const nextBtn = findNextPageButton(document);
+      if (!nextBtn) {
+        sendResponse({ hasNextPage: false, blocked: false });
+        return;
+      }
+      nextBtn.click();
+      sendResponse({ hasNextPage: true, blocked: false });
+    })();
+    return true;
+  }
+
+  return false;
 });

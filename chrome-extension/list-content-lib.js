@@ -48,3 +48,23 @@ export function parseCandidateCard(cardElement) {
     sourceUrl: residx ? `https://hiring.saramin.co.kr/applicant-view/position/resume/${residx}` : null
   };
 }
+
+// "다음 페이지" 요소를 찾는다. 텍스트("다음")와 클래스명 둘 다로
+// 찾는 이유: 사람인이 클래스명을 바꿔도 텍스트 매칭이 살아있으면
+// 완전히 못 찾는 상황을 피할 수 있다. 마지막 페이지에서 비활성화된
+// 요소(disabled 속성 또는 aria-disabled="true")는 제외한다 --
+// 존재하지만 눌러도 반응 없는 요소를 클릭 성공으로 잘못 보고하면
+// CLICK_NEXT_PAGE 호출부가 무한정 같은 페이지를 반복하게 된다.
+// 선택자는 2026-08-27 실사용 확인 기준 선택자들(.talent_list_item 등)과
+// 마찬가지로 실제 화면 구조가 바뀌면 깨질 수 있다.
+export function findNextPageButton(doc) {
+  const candidates = Array.from(doc.querySelectorAll('a, button'));
+  const isDisabled = el => el.disabled || el.getAttribute('aria-disabled') === 'true'
+    || (el.className && String(el.className).includes('disabled'));
+  return candidates.find(el =>
+    !isDisabled(el) && (
+      /^\s*다음\s*$/.test(el.textContent || '') ||
+      (el.className && String(el.className).includes('btn_next'))
+    )
+  ) || null;
+}

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { parseCandidateCard } from './list-content-lib.js';
+import { parseCandidateCard, findNextPageButton } from './list-content-lib.js';
 
 function cardFromHtml(html) {
   const dom = new JSDOM(`<!DOCTYPE html><div id="root">${html}</div>`);
@@ -95,4 +95,20 @@ test('parseCandidateCard: gender_age 텍스트에서 성별과 나이를 각각 
 test('parseCandidateCard: residx 없으면 sourceUrl은 null', () => {
   const card = cardFromHtml('<div class="talent_list_item"><div class="check_area"></div></div>');
   assert.equal(parseCandidateCard(card).sourceUrl, null);
+});
+
+test('findNextPageButton: 활성화된 다음 버튼을 찾는다', () => {
+  const dom = new JSDOM('<div class="paging"><a class="btn_prev">이전</a><a class="btn_next">다음</a></div>');
+  const btn = findNextPageButton(dom.window.document);
+  assert.equal(btn.textContent, '다음');
+});
+
+test('findNextPageButton: 비활성화된 버튼은 무시한다', () => {
+  const dom = new JSDOM('<div class="paging"><a class="btn_next disabled" aria-disabled="true">다음</a></div>');
+  assert.equal(findNextPageButton(dom.window.document), null);
+});
+
+test('findNextPageButton: 없으면 null', () => {
+  const dom = new JSDOM('<div class="paging"><a class="btn_prev">이전</a></div>');
+  assert.equal(findNextPageButton(dom.window.document), null);
 });
