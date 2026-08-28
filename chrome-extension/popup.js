@@ -43,7 +43,20 @@ async function initListImportUiIfApplicable() {
       importStatus.textContent = data.error || '프로젝트 목록을 불러오지 못했어요';
       return;
     }
-    projectSelect.innerHTML = data.projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+    // status==='approved'만 골라서 보여준다 -- "검색 진행" 화면(이 리스트
+    // 후보가 표시되는 곳)은 승인된 프로젝트에서만 열리므로(index.html의
+    // 'p.status===approved' 가드), draft 프로젝트에 가져오면 저장은
+    // 성공하지만 그 데이터를 다시 볼 방법이 없는 상태가 된다.
+    const approvedProjects = data.projects.filter(p => p.status === 'approved');
+    if (!approvedProjects.length) {
+      importStatus.textContent = '승인된 검색 프로젝트가 없어요 - 먼저 HR 사이트에서 프로젝트를 승인해주세요';
+      projectSelect.replaceChildren();
+      return;
+    }
+    // innerHTML 문자열 보간 대신 DOM 노드를 직접 만든다 -- p.title은
+    // HR 사이트에서 자유 입력된 텍스트라, 문자열로 조립하면 그 값 안의
+    // 따옴표/꺾쇠로 마크업이 깨지거나 스크립트가 주입될 수 있다.
+    projectSelect.replaceChildren(...approvedProjects.map(p => new Option(p.title, p.id)));
   } catch (err) {
     importStatus.textContent = `프로젝트 목록 오류: ${err.message}`;
   }
@@ -59,6 +72,10 @@ importBtn.addEventListener('click', async () => {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const parseResult = await chrome.tabs.sendMessage(tab.id, { type: 'PARSE_CURRENT_LIST' });
+    if (parseResult && parseResult.blocked) {
+      importStatus.textContent = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
+      return;
+    }
     const candidates = (parseResult && parseResult.candidates) || [];
     if (!candidates.length) {
       importStatus.textContent = '가져올 후보를 찾지 못했어요';
