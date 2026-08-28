@@ -3920,7 +3920,7 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
 function tsListCandidateRowHtml(c){
   const tags = (c.tags||[]).join(', ');
   return `
-    <tr class="clickable" onclick="window.open('${c.sourceUrl}', '_blank')">
+    <tr class="clickable" onclick="window.open('${escapeHtml(c.sourceUrl)}', '_blank')">
       <td>${escapeHtml(c.maskedName)}</td>
       <td>${escapeHtml(c.gender||'-')}</td>
       <td>${c.age ?? '-'}</td>
