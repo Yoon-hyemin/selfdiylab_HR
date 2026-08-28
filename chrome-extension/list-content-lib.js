@@ -56,20 +56,30 @@ export function parseCandidateCard(cardElement) {
 // "스페셜 태그" 캐러셀 다음 버튼(`#special_tag_next_btn`)도 접근성
 // 텍스트가 똑같이 "다음"이라 텍스트만으로는 그 버튼을 먼저 찾아버리는
 // 오탐이 실사용 확인 중 발견됐다(그 버튼은 DOM에서 페이지네이션보다
-// 앞에 나와서 .find()가 그걸 먼저 집는다). `.PageBox .BtnNext`로
-// 범위를 좁혀서 이 문제를 없앴다. 사람인이 클래스명을 바꾸는 경우에
-// 대비해 텍스트("다음") 기반 탐색을 2차 폴백으로 남겨두되, 오탐을
-// 일으켰던 스페셜 태그 캐러셀(`.special_tag_wrap`, `.swiper`) 내부
-// 요소는 폴백에서 제외한다. 마지막 페이지에서 비활성화된 요소(disabled
-// 속성 또는 aria-disabled="true")는 제외한다 -- 존재하지만 눌러도
+// 앞에 나와서 .find()가 그걸 먼저 집는다).
+//
+// `.PageBox`가 페이지에 존재하면 그게 페이지네이션의 유일한 진실
+// 소스다 -- `.PageBox`는 있는데 그 안의 `.BtnNext`가 없거나(사람인이
+// 구조를 바꿨거나) 비활성화돼 있으면(마지막 페이지), 문서 전체를 다시
+// "다음" 텍스트로 훑는 폴백으로 넘어가지 않고 그냥 null을 반환한다 --
+// 안 그러면 페이지 어딘가의 무관한 "다음" 버튼(캐러셀 이름으로 걸러낸
+// 것 말고 또 다른 것)을 잘못 클릭해서 검색결과 탭 자체를 벗어나버릴
+// 위험이 있다. 텍스트("다음") 기반 폴백은 `.PageBox` 자체가 문서에
+// 아예 없을 때(사람인이 그 컨테이너 자체를 통째로 바꾼 경우)에만
+// 쓴다 -- 이때도 오탐을 일으켰던 스페셜 태그 캐러셀(`.special_tag_wrap`,
+// `.swiper`) 내부 요소는 제외한다. 비활성화된 요소(disabled 속성
+// 또는 aria-disabled="true")는 항상 제외한다 -- 존재하지만 눌러도
 // 반응 없는 요소를 클릭 성공으로 잘못 보고하면 CLICK_NEXT_PAGE
 // 호출부가 무한정 같은 페이지를 반복하게 된다.
 export function findNextPageButton(doc) {
   const isDisabled = el => el.disabled || el.getAttribute('aria-disabled') === 'true'
     || (el.className && String(el.className).includes('disabled'));
 
-  const primary = doc.querySelector('.PageBox .BtnNext');
-  if (primary && !isDisabled(primary)) return primary;
+  const box = doc.querySelector('.PageBox');
+  if (box) {
+    const next = box.querySelector('.BtnNext');
+    return (next && !isDisabled(next)) ? next : null;
+  }
 
   const isInKnownCarousel = el => !!el.closest('.special_tag_wrap, .swiper');
   const fallback = Array.from(doc.querySelectorAll('a, button')).find(el =>

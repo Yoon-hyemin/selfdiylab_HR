@@ -50,7 +50,15 @@ export function evaluateListCandidate(candidate, config, refDate) {
 
   const careerYears = parseCareerYears(candidate.careerSummary);
   if (careerYears !== null) {
-    const { experienceMinYears, experienceMaxYears } = config;
+    // Postgres numeric 컬럼은 호출부(예: list-candidates.js)에서 이미
+    // Number()로 변환해서 넘기지만, 이 함수 자체가 그 변환에만 기대는
+    // 건 위험하다 -- 문자열("5")이 그대로 들어오면 `"5" + 0.5`가 JS의
+    // 문자열 이어붙이기로 동작해 비교가 조용히 무력화되는 실사용 버그가
+    // 실제로 있었다(handlers/talent-search-projects/[id]/list-candidates.js
+    // 코멘트 참고). 순수 함수 스스로도 DB에서 오는 문자열 입력을 정직하게
+    // 받아들이도록 여기서도 방어적으로 다시 변환한다.
+    const experienceMinYears = config.experienceMinYears == null ? null : Number(config.experienceMinYears);
+    const experienceMaxYears = config.experienceMaxYears == null ? null : Number(config.experienceMaxYears);
     if (experienceMinYears != null && careerYears < experienceMinYears - CAREER_YEARS_GRACE) {
       reasons.push('careerOutOfRange');
     } else if (experienceMaxYears != null && careerYears > experienceMaxYears + CAREER_YEARS_GRACE) {

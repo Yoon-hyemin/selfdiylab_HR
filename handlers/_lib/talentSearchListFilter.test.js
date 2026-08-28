@@ -88,6 +88,18 @@ test('evaluateListCandidate: level1Rules가 null이면 이력서 기준은 건�
   assert.deepEqual(evaluateListCandidate(candidate, config, refDate), { skip: false, reasons: [] });
 });
 
+test('evaluateListCandidate: experienceMinYears/experienceMaxYears가 문자열(Postgres numeric 컬럼 원래 모양)이어도 정상 비교한다', () => {
+  // 회귀 테스트: config 값이 숫자가 아니라 문자열("5")로 오면
+  // "5" + 0.5 === "50.5"가 되어 careerYears > experienceMaxYears + GRACE
+  // 비교가 조용히 무력화되는 실사용 버그가 있었다(list-candidates.js
+  // 코멘트, 커밋 da25f27 참고). 호출부 방어코드가 지워져도 이 순수
+  // 함수 자체가 이 버그를 다시 잡아내야 한다.
+  const candidate = { lastUpdatedLabel: LABEL, careerSummary: '경력 7년' };
+  const config = { level1Rules: { resumeUpdated: { verifyWithinDays: 180 } }, experienceMinYears: '5', experienceMaxYears: '5' };
+  const refDate = new Date(PARSED_MS + 10 * 86400000);
+  assert.deepEqual(evaluateListCandidate(candidate, config, refDate), { skip: true, reasons: ['careerOutOfRange'] });
+});
+
 test('evaluateListCandidate: 프로젝트가 min/max 둘 다 null이면 경력 기준 자체를 안 씀', () => {
   const candidate = { lastUpdatedLabel: LABEL, careerSummary: '신입' };
   const config = { level1Rules: { resumeUpdated: { verifyWithinDays: 180 } }, experienceMinYears: null, experienceMaxYears: null };

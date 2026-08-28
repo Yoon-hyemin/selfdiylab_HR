@@ -164,7 +164,13 @@ importBtn.addEventListener('click', async () => {
       importStatus.textContent = summary;
     }
   } catch (err) {
-    importStatus.textContent = `오류: ${err.message}`;
+    // 예외가 나기 전까지 이미 몇 페이지·몇 명을 저장했는지 보여준다 --
+    // 서버에 중복 제거가 없어서, 이 정보 없이 사용자가 무심코 다시
+    // 누르면 이미 저장된 후보가 또 저장될 수 있다.
+    const progress = totalImported > 0 || pageCount > 1
+      ? ` (그때까지 ${pageCount}페이지에서 ${totalImported}명 저장됨)`
+      : '';
+    importStatus.textContent = `오류: ${err.message}${progress}`;
   } finally {
     importBtn.disabled = false;
   }
