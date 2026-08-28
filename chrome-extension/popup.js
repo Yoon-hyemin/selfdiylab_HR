@@ -1,4 +1,86 @@
 // chrome-extension/popup.js
+const HR_SITE_ORIGIN = 'http://localhost:3000'; // 로컬 개발용. 배포 시 별도로 바꿔야 함(이번 계획 범위 밖).
+
+const tokenInput = document.getElementById('tokenInput');
+const tokenSaveBtn = document.getElementById('tokenSaveBtn');
+const tokenStatus = document.getElementById('tokenStatus');
+
+async function loadSavedToken() {
+  const { extensionToken } = await chrome.storage.local.get('extensionToken');
+  return extensionToken || null;
+}
+
+tokenSaveBtn.addEventListener('click', async () => {
+  const value = tokenInput.value.trim();
+  if (!value) return;
+  await chrome.storage.local.set({ extensionToken: value });
+  tokenInput.value = '';
+  tokenStatus.textContent = '저장됨';
+  await initListImportUiIfApplicable();
+});
+
+const listImportSection = document.getElementById('listImportSection');
+const projectSelect = document.getElementById('projectSelect');
+const importBtn = document.getElementById('importBtn');
+const importStatus = document.getElementById('importStatus');
+
+async function initListImportUiIfApplicable() {
+  const token = await loadSavedToken();
+  tokenStatus.textContent = token ? '연결 코드 저장됨' : '연결 코드를 입력해주세요';
+  if (!token) return;
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const isListPage = tab.url && tab.url.includes('/zf_user/memcom/talent-pool/');
+  if (!isListPage) return;
+
+  listImportSection.style.display = '';
+  try {
+    const res = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      importStatus.textContent = data.error || '프로젝트 목록을 불러오지 못했어요';
+      return;
+    }
+    projectSelect.innerHTML = data.projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+  } catch (err) {
+    importStatus.textContent = `프로젝트 목록 오류: ${err.message}`;
+  }
+}
+
+importBtn.addEventListener('click', async () => {
+  const token = await loadSavedToken();
+  const projectId = projectSelect.value;
+  if (!token || !projectId) return;
+
+  importStatus.textContent = '가져오는 중...';
+  importBtn.disabled = true;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const parseResult = await chrome.tabs.sendMessage(tab.id, { type: 'PARSE_CURRENT_LIST' });
+    const candidates = (parseResult && parseResult.candidates) || [];
+    if (!candidates.length) {
+      importStatus.textContent = '가져올 후보를 찾지 못했어요';
+      return;
+    }
+
+    const res = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects/${projectId}/list-candidates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ platform: '사람인', candidates })
+    });
+    const data = await res.json();
+    importStatus.textContent = res.ok ? `${data.imported}명 가져왔어요` : (data.error || '가져오기 실패');
+  } catch (err) {
+    importStatus.textContent = `오류: ${err.message}`;
+  } finally {
+    importBtn.disabled = false;
+  }
+});
+
+initListImportUiIfApplicable();
+
 const btn = document.getElementById('extractBtn');
 const statusEl = document.getElementById('status');
 const resultEl = document.getElementById('result');
