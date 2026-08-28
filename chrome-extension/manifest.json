@@ -3,7 +3,7 @@
   "name": "인재검색 이력서 추출 (MVP)",
   "version": "0.1.0",
   "description": "사람인 인재풀 후보 상세 이력서 화면을 스크롤하며 캡처하고, 로컬 OCR로 텍스트를 추출합니다.",
-  "permissions": ["activeTab", "tabs", "offscreen"],
+  "permissions": ["activeTab", "tabs", "offscreen", "storage"],
   "host_permissions": [
     "https://hiring.saramin.co.kr/*",
     "https://www.saramin.co.kr/zf_user/memcom/talent-pool/*",
