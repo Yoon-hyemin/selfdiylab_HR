@@ -25,6 +25,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { sql } from './db.js';
+import { hashExtensionToken } from './extensionToken.js';
 
 const COOKIE_NAME = 'hr_auth';
 const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60; // 12시간 -- 실제 비밀번호가 생긴 뒤라 예전 30일보다 짧게 잡는다.
@@ -274,4 +275,54 @@ export async function attemptLogin(email, password) {
 
   await sql`UPDATE accounts SET failed_login_count = 0, locked_until = NULL, last_login_at = now() WHERE id = ${account.id}`;
   return { account };
+}
+
+/**
+ * 크롬 확장 전용 인증. 쿠키 세션이 아니라 Authorization: Bearer 헤더의
+ * 연결 코드로 계정을 찾는다. requireTalentSearchAccess와 마찬가지로
+ * ADMIN이거나 can_use_talent_search가 켜진 계정만 통과시킨다 -- 이
+ * 기능 전체가 ADMIN 전용이 아니라는 기존 원칙과 동일하게 맞춘다.
+ */
+export async function requireExtensionToken(req, res) {
+  const header = (req.headers && req.headers.authorization) || '';
+  const match = /^Bearer\s+(.+)$/.exec(header);
+  if (!match) {
+    res.status(401).json({ error: '연결 코드가 필요해요' });
+    return null;
+  }
+
+  const tokenHash = hashExtensionToken(match[1].trim());
+  const [tokenRow] = await sql`
+    SELECT account_id FROM talent_search_extension_tokens WHERE token_hash = ${tokenHash}`;
+  if (!tokenRow) {
+    res.status(401).json({ error: '연결 코드가 올바르지 않아요' });
+    return null;
+  }
+
+  const account = await loadAccountById(tokenRow.account_id);
+  if (!account || account.account_status !== 'ACTIVE') {
+    res.status(401).json({ error: '연결 코드가 올바르지 않아요' });
+    return null;
+  }
+  if (account.system_role !== 'ADMIN' && !account.can_use_talent_search) {
+    res.status(403).json({ error: '인재검색 권한이 없어요' });
+    return null;
+  }
+
+  await sql`UPDATE talent_search_extension_tokens SET last_used_at = now() WHERE account_id = ${account.id}`;
+  return account;
+}
+
+/**
+ * GET/POST /api/talent-search-extension-token 둘 다에서 쓰는 공용 헬퍼.
+ * Authorization 헤더가 있으면 그걸로(확장이 호출하는 경우), 없으면
+ * 쿠키 세션으로(HR 사이트 화면에서 호출하는 경우) 인증한다. 두 인증
+ * 방식을 동시에 시도하지 않고 헤더 유무로 먼저 분기해서, 쿠키 세션에
+ * 실패했다고 401을 쓴 뒤 토큰도 검사하는 이중 응답을 피한다.
+ */
+export async function requireTalentSearchAccessOrToken(req, res) {
+  if (req.headers && req.headers.authorization) {
+    return requireExtensionToken(req, res);
+  }
+  return requireTalentSearchAccess(req, res);
 }

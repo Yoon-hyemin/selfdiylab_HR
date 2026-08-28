@@ -63,6 +63,7 @@ import talentSearchPolicyDraft from '../handlers/talent-search-policy/draft.js';
 import talentSearchPolicyDraftApply from '../handlers/talent-search-policy/draft/apply.js';
 import talentSearchPolicyVersions from '../handlers/talent-search-policy/versions/index.js';
 import talentSearchPolicyVersionRestore from '../handlers/talent-search-policy/versions/[id]/restore.js';
+import talentSearchExtensionToken from '../handlers/talent-search-extension-token/index.js';
 import talentSearchProjectsIndex from '../handlers/talent-search-projects/index.js';
 import talentSearchProjectsId from '../handlers/talent-search-projects/[id].js';
 import talentSearchProjectsIdApprove from '../handlers/talent-search-projects/[id]/approve.js';
@@ -119,6 +120,7 @@ const ROUTES = [
   { pattern: ['talent-search-policy', 'draft', 'apply'], handler: talentSearchPolicyDraftApply },
   { pattern: ['talent-search-policy', 'versions'], handler: talentSearchPolicyVersions },
   { pattern: ['talent-search-policy', 'versions', ':id', 'restore'], handler: talentSearchPolicyVersionRestore },
+  { pattern: ['talent-search-extension-token'], handler: talentSearchExtensionToken },
   { pattern: ['talent-search-projects'], handler: talentSearchProjectsIndex },
   { pattern: ['talent-search-projects', ':id'], handler: talentSearchProjectsId },
   { pattern: ['talent-search-projects', ':id', 'approve'], handler: talentSearchProjectsIdApprove },
