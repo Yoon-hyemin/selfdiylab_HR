@@ -97,14 +97,68 @@ test('parseCandidateCard: residx 없으면 sourceUrl은 null', () => {
   assert.equal(parseCandidateCard(card).sourceUrl, null);
 });
 
-test('findNextPageButton: 활성화된 다음 버튼을 찾는다', () => {
-  const dom = new JSDOM('<div class="paging"><a class="btn_prev">이전</a><a class="btn_next">다음</a></div>');
+// 2026-08-28 실제 사람인 인재풀 검색결과 화면에서 로그인해서 직접
+// 확인한 실제 페이지네이션 구조(.PageBox 안에 .BtnPrev/.BtnNext) --
+// 클릭해서 실제로 1페이지→2페이지로 넘어가는 것까지 확인함.
+test('findNextPageButton: .PageBox .BtnNext를 우선 찾는다', () => {
+  const dom = new JSDOM(`
+    <div class="talent_list">
+      <div class="PageBox">
+        <button class="BtnType SizeS BtnPrev">이전</button>
+        <a href="#" class="on">1</a>
+        <a href="#">2</a>
+        <button class="BtnType SizeS BtnNext">다음</button>
+      </div>
+    </div>
+  `);
   const btn = findNextPageButton(dom.window.document);
-  assert.equal(btn.textContent, '다음');
+  assert.equal(btn.className, 'BtnType SizeS BtnNext');
 });
 
-test('findNextPageButton: 비활성화된 버튼은 무시한다', () => {
-  const dom = new JSDOM('<div class="paging"><a class="btn_next disabled" aria-disabled="true">다음</a></div>');
+// 실사용 확인 중 실제로 발견한 오탐 사례: 검색결과 화면 위쪽의 "스페셜
+// 태그" 캐러셀 다음 버튼(#special_tag_next_btn)도 접근성 텍스트가
+// 똑같이 "다음"이고, DOM 순서상 페이지네이션보다 앞에 나온다.
+// .PageBox 범위로 좁혀서 이 버튼을 절대 집지 않아야 한다.
+test('findNextPageButton: 스페셜 태그 캐러셀의 "다음" 버튼은 무시한다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <div class="special_tag_wrap">
+        <div class="swiper special_tag_swiper">
+          <button id="special_tag_next_btn" aria-disabled="false">다음</button>
+        </div>
+      </div>
+      <div class="talent_list">
+        <div class="PageBox">
+          <button class="BtnType SizeS BtnNext">다음</button>
+        </div>
+      </div>
+    </div>
+  `);
+  const btn = findNextPageButton(dom.window.document);
+  assert.notEqual(btn.id, 'special_tag_next_btn');
+  assert.equal(btn.className, 'BtnType SizeS BtnNext');
+});
+
+test('findNextPageButton: .PageBox가 없으면 텍스트 폴백으로 찾되 캐러셀은 제외한다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <div class="special_tag_wrap"><button id="special_tag_next_btn">다음</button></div>
+      <div class="paging"><a class="btn_next">다음</a></div>
+    </div>
+  `);
+  const btn = findNextPageButton(dom.window.document);
+  assert.equal(btn.className, 'btn_next');
+});
+
+test('findNextPageButton: 비활성화된 .PageBox .BtnNext는 무시하고 폴백도 없으면 null', () => {
+  const dom = new JSDOM(`
+    <div class="PageBox"><button class="BtnType SizeS BtnNext disabled" disabled>다음</button></div>
+  `);
+  assert.equal(findNextPageButton(dom.window.document), null);
+});
+
+test('findNextPageButton: 아무것도 없으면 null', () => {
+  const dom = new JSDOM('<div class="PageBox"></div>');
   assert.equal(findNextPageButton(dom.window.document), null);
 });
 

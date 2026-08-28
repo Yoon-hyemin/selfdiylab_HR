@@ -49,22 +49,31 @@ export function parseCandidateCard(cardElement) {
   };
 }
 
-// "다음 페이지" 요소를 찾는다. 텍스트("다음")와 클래스명 둘 다로
-// 찾는 이유: 사람인이 클래스명을 바꿔도 텍스트 매칭이 살아있으면
-// 완전히 못 찾는 상황을 피할 수 있다. 마지막 페이지에서 비활성화된
-// 요소(disabled 속성 또는 aria-disabled="true")는 제외한다 --
-// 존재하지만 눌러도 반응 없는 요소를 클릭 성공으로 잘못 보고하면
-// CLICK_NEXT_PAGE 호출부가 무한정 같은 페이지를 반복하게 된다.
-// 선택자는 2026-08-27 실사용 확인 기준 선택자들(.talent_list_item 등)과
-// 마찬가지로 실제 화면 구조가 바뀌면 깨질 수 있다.
+// "다음 페이지" 요소를 찾는다. 2026-08-28 실사용 확인(로그인해서 실제
+// 인재풀 검색결과 화면에서 직접 클릭해보고 페이지가 실제로 1→2로
+// 넘어가는 것까지 확인함) 기준 정확한 선택자는 `.PageBox .BtnNext`다
+// -- 처음엔 "다음" 텍스트만으로도 찾도록 만들었는데, 같은 화면 위쪽의
+// "스페셜 태그" 캐러셀 다음 버튼(`#special_tag_next_btn`)도 접근성
+// 텍스트가 똑같이 "다음"이라 텍스트만으로는 그 버튼을 먼저 찾아버리는
+// 오탐이 실사용 확인 중 발견됐다(그 버튼은 DOM에서 페이지네이션보다
+// 앞에 나와서 .find()가 그걸 먼저 집는다). `.PageBox .BtnNext`로
+// 범위를 좁혀서 이 문제를 없앴다. 사람인이 클래스명을 바꾸는 경우에
+// 대비해 텍스트("다음") 기반 탐색을 2차 폴백으로 남겨두되, 오탐을
+// 일으켰던 스페셜 태그 캐러셀(`.special_tag_wrap`, `.swiper`) 내부
+// 요소는 폴백에서 제외한다. 마지막 페이지에서 비활성화된 요소(disabled
+// 속성 또는 aria-disabled="true")는 제외한다 -- 존재하지만 눌러도
+// 반응 없는 요소를 클릭 성공으로 잘못 보고하면 CLICK_NEXT_PAGE
+// 호출부가 무한정 같은 페이지를 반복하게 된다.
 export function findNextPageButton(doc) {
-  const candidates = Array.from(doc.querySelectorAll('a, button'));
   const isDisabled = el => el.disabled || el.getAttribute('aria-disabled') === 'true'
     || (el.className && String(el.className).includes('disabled'));
-  return candidates.find(el =>
-    !isDisabled(el) && (
-      /^\s*다음\s*$/.test(el.textContent || '') ||
-      (el.className && String(el.className).includes('btn_next'))
-    )
-  ) || null;
+
+  const primary = doc.querySelector('.PageBox .BtnNext');
+  if (primary && !isDisabled(primary)) return primary;
+
+  const isInKnownCarousel = el => !!el.closest('.special_tag_wrap, .swiper');
+  const fallback = Array.from(doc.querySelectorAll('a, button')).find(el =>
+    !isDisabled(el) && !isInKnownCarousel(el) && /^\s*다음\s*$/.test(el.textContent || '')
+  );
+  return fallback || null;
 }
