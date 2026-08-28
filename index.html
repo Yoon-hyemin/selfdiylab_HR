@@ -3843,6 +3843,19 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
 
   const backBtn = `<button class="btn ghost sm" style="margin-bottom:14px;" onclick="openTalentSearchProjectDetail('${projectId}')">← 뒤로</button>`;
 
+  // "실제 후보 리스트" 섹션(크롬 확장으로 가져온 진짜 후보)은 가상
+  // 후보 유무·채점기준 로딩 성공 여부와 완전히 무관한 별개 기능이라,
+  // 아래 세 분기(가상후보 없음/채점기준 없음/정상) 중 어디로 가든
+  // 항상 렌더링돼야 한다 -- 예전엔 각 분기가 el.innerHTML을 쓰고 바로
+  // return해서, 가상 후보를 한 번도 안 만든 프로젝트에서는 이 섹션
+  // 자체가 영영 안 뜨는 버그가 있었다(실사용 확인 중 발견).
+  const listCandidatesSectionHtml = `
+    <div class="section" id="talentsearch-list-candidates-section">
+      <div class="section-head"><div><h3>실제 후보 리스트</h3><div class="desc">사람인 검색결과에서 크롬 확장으로 가져온 후보예요. 채점은 아직 안 하고, 정렬·필터만 돼요. 행을 클릭하면 원문 이력서로 이동해요.</div></div></div>
+      <div id="talentsearch-list-candidates-body">불러오는 중...</div>
+    </div>
+  `;
+
   if(!candidates.length){
     el.innerHTML = `
       ${backBtn}
@@ -3851,12 +3864,15 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
         <div style="font-size:12.5px;color:var(--sub);margin-bottom:10px;">가상 시뮬레이션이라 다시 생성할 때마다 결과가 달라져요.</div>
         <button class="btn primary sm" onclick="generateTalentSearchCandidates('${projectId}')">가상 후보 생성하기</button>
       </div>
+      ${listCandidatesSectionHtml}
     `;
+    loadTalentSearchListCandidates(projectId);
     return;
   }
 
   if(!policy){
-    el.innerHTML = `${backBtn}<div class="section">${escapeHtml(policyLoadError || '채점 기준을 불러오지 못했어요')}</div>`;
+    el.innerHTML = `${backBtn}<div class="section">${escapeHtml(policyLoadError || '채점 기준을 불러오지 못했어요')}</div>${listCandidatesSectionHtml}`;
+    loadTalentSearchListCandidates(projectId);
     return;
   }
 
@@ -3909,10 +3925,7 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
       </table>
       </div>
     </div>
-    <div class="section" id="talentsearch-list-candidates-section">
-      <div class="section-head"><div><h3>실제 후보 리스트</h3><div class="desc">사람인 검색결과에서 크롬 확장으로 가져온 후보예요. 채점은 아직 안 하고, 정렬·필터만 돼요. 행을 클릭하면 원문 이력서로 이동해요.</div></div></div>
-      <div id="talentsearch-list-candidates-body">불러오는 중...</div>
-    </div>
+    ${listCandidatesSectionHtml}
   `;
   loadTalentSearchListCandidates(projectId);
 }
