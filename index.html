@@ -3816,16 +3816,14 @@ async function openTalentSearchCandidates(projectId){
   const candidates = candidatesRes.candidates;
 
   let policy = null, policyLoadError = '';
-  if(candidates.length){
-    if(project.policyVersionId){
-      try{
-        const { versions } = await apiGet('/talent-search-policy/versions');
-        policy = versions.find(v=>v.id===project.policyVersionId) || null;
-        if(!policy) policyLoadError = '승인 당시 버전을 더 이상 찾을 수 없어요';
-      }catch(err){ policyLoadError = err.message; }
-    }else{
-      policyLoadError = '이 프로젝트는 아직 채점 기준이 고정되지 않았어요';
-    }
+  if(project.policyVersionId){
+    try{
+      const { versions } = await apiGet('/talent-search-policy/versions');
+      policy = versions.find(v=>v.id===project.policyVersionId) || null;
+      if(!policy) policyLoadError = '승인 당시 버전을 더 이상 찾을 수 없어요';
+    }catch(err){ policyLoadError = err.message; }
+  }else{
+    policyLoadError = '이 프로젝트는 아직 채점 기준이 고정되지 않았어요';
   }
 
   renderTalentSearchCandidatesScreen(projectId, project, candidates, policy, policyLoadError);
@@ -3866,13 +3864,13 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
       </div>
       ${listCandidatesSectionHtml}
     `;
-    loadTalentSearchListCandidates(projectId);
+    loadTalentSearchListCandidates(projectId, project, policy);
     return;
   }
 
   if(!policy){
     el.innerHTML = `${backBtn}<div class="section">${escapeHtml(policyLoadError || '채점 기준을 불러오지 못했어요')}</div>${listCandidatesSectionHtml}`;
-    loadTalentSearchListCandidates(projectId);
+    loadTalentSearchListCandidates(projectId, project, policy);
     return;
   }
 
@@ -3927,7 +3925,7 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
     </div>
     ${listCandidatesSectionHtml}
   `;
-  loadTalentSearchListCandidates(projectId);
+  loadTalentSearchListCandidates(projectId, project, policy);
 }
 
 // 2026-08-27 fix wave: 이름 셀의 onclick(JS 문자열 컨텍스트)에
