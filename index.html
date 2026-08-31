@@ -3881,9 +3881,12 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
   // 항상 렌더링돼야 한다 -- 예전엔 각 분기가 el.innerHTML을 쓰고 바로
   // return해서, 가상 후보를 한 번도 안 만든 프로젝트에서는 이 섹션
   // 자체가 영영 안 뜨는 버그가 있었다(실사용 확인 중 발견).
+  const listCandidatesDesc = policy
+    ? '사람인 검색결과에서 크롬 확장으로 가져온 후보예요. 직무 60점 기준으로 점수를 매겨서 보여드려요. 행을 클릭하면 원문 이력서로 이동해요.'
+    : '사람인 검색결과에서 크롬 확장으로 가져온 후보예요. 채점은 아직 안 하고, 정렬·필터만 돼요. 행을 클릭하면 원문 이력서로 이동해요.';
   const listCandidatesSectionHtml = `
     <div class="section" id="talentsearch-list-candidates-section">
-      <div class="section-head"><div><h3>실제 후보 리스트</h3><div class="desc">사람인 검색결과에서 크롬 확장으로 가져온 후보예요. 채점은 아직 안 하고, 정렬·필터만 돼요. 행을 클릭하면 원문 이력서로 이동해요.</div></div></div>
+      <div class="section-head"><div><h3>실제 후보 리스트</h3><div class="desc">${listCandidatesDesc}</div></div></div>
       <div id="talentsearch-list-candidates-body">불러오는 중...</div>
     </div>
   `;
