@@ -3972,12 +3972,15 @@ function renderTalentSearchCandidatesScreen(projectId, project, candidates, poli
 // 저장하도록 검증하지만(talentSearchListCandidateValidate.js),
 // escapeHtml은 href 속성값 자체를 위해 그대로 유지한다.
 let tsListCandidatesCache = [];
-let tsListSortMode = 'importedAt'; // 'importedAt' | 'age' | 'tagCount'
+let tsListSortMode = 'importedAt'; // 'importedAt' | 'age' | 'tagCount' | 'jobFitScore'
 let tsListSortDir = 'desc';
+let tsListScoringContext = null; // { project, policy } | null -- 정책 없으면 채점 안 함
+let tsListShowBelowThreshold = false;
 
-function tsListCandidateRowHtml(c){
+function tsListCandidateRowHtml(c, r){
   const tags = (c.tags||[]).join(', ');
   const importedLabel = c.importedAt ? new Date(c.importedAt).toLocaleDateString('ko-KR') : '-';
+  const scoreCells = r ? `<td>${r.jobFitScore}</td><td><span class="${verdictBadgeClass(r.verdict)}">${escapeHtml(r.verdict)}</span></td>` : '';
   return `
     <tr>
       <td><a href="${escapeHtml(c.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.maskedName)}</a></td>
@@ -3988,23 +3991,40 @@ function tsListCandidateRowHtml(c){
       <td>${escapeHtml(tags||'-')}</td>
       <td>${escapeHtml(c.lastUpdatedLabel||'-')}</td>
       <td>${escapeHtml(importedLabel)}</td>
+      ${scoreCells}
     </tr>
   `;
 }
 
-function tsListSortValue(c){
+function tsListCandidatesWithScores(){
+  if(!tsListScoringContext) return tsListCandidatesCache.map(c => ({ c, r: null }));
+  return tsListCandidatesCache.map(c => ({
+    c,
+    r: scoreListCandidateJobFit(c, tsListScoringContext.project.keywords, tsListScoringContext.policy)
+  }));
+}
+
+function tsListSortValue(entry){
+  const c = entry.c, r = entry.r;
   if(tsListSortMode==='age') return c.age ?? -1;
   if(tsListSortMode==='tagCount') return (c.tags||[]).length;
+  if(tsListSortMode==='jobFitScore') return r ? r.jobFitScore : -1;
   return c.importedAt ? new Date(c.importedAt).getTime() : 0;
 }
 
 function tsListSortedCandidates(){
   const dir = tsListSortDir==='asc' ? 1 : -1;
-  return [...tsListCandidatesCache].sort((a,b) => (tsListSortValue(a) - tsListSortValue(b)) * dir);
+  const entries = tsListCandidatesWithScores();
+  return [...entries].sort((a,b) => (tsListSortValue(a) - tsListSortValue(b)) * dir);
 }
 
 function changeTsListSort(v){ tsListSortMode = v; renderTsListCandidatesTable(); }
 function toggleTsListSortDir(){ tsListSortDir = tsListSortDir==='asc' ? 'desc' : 'asc'; renderTsListCandidatesTable(); }
+
+function toggleTsListShowBelowThreshold(){
+  tsListShowBelowThreshold = !tsListShowBelowThreshold;
+  renderTsListCandidatesTable();
+}
 
 function renderTsListCandidatesTable(){
   const bodyEl = document.getElementById('talentsearch-list-candidates-body');
@@ -4013,28 +4033,53 @@ function renderTsListCandidatesTable(){
     bodyEl.innerHTML = '<div class="empty">아직 가져온 후보가 없어요. 크롬 확장에서 사람인 검색결과를 가져와보세요.</div>';
     return;
   }
-  const sorted = tsListSortedCandidates();
+
+  const sorted = tsListSortedCandidates(); // [{c, r}]
+  const hasScoring = !!tsListScoringContext;
+  const passing = hasScoring ? sorted.filter(e => e.r.verdict === '추천') : sorted;
+  const belowThreshold = hasScoring ? sorted.filter(e => e.r.verdict !== '추천') : [];
+  const rowsToShow = hasScoring && !tsListShowBelowThreshold ? passing : sorted;
+
+  const sortOptions = `
+    <option value="importedAt" ${tsListSortMode==='importedAt'?'selected':''}>가져온 날짜</option>
+    <option value="age" ${tsListSortMode==='age'?'selected':''}>나이</option>
+    <option value="tagCount" ${tsListSortMode==='tagCount'?'selected':''}>태그 수</option>
+    ${hasScoring ? `<option value="jobFitScore" ${tsListSortMode==='jobFitScore'?'selected':''}>직무 60점</option>` : ''}
+  `;
+  const scoreHeader = hasScoring ? '<th>직무60점</th><th>판정</th>' : '';
+  const scoringNotice = hasScoring
+    ? `<div class="desc" style="margin-bottom:8px;">직무 60점은 태그·경력요약이 프로젝트 키워드와 얼마나 겹치는지로 추정한 근사치예요 — 실제 서류전형 판단 근거로 쓰기엔 부족해요.</div>`
+    : '';
+  const emptyPassingNotice = hasScoring && !tsListShowBelowThreshold && passing.length === 0
+    ? `<div class="empty" style="margin-bottom:8px;">기준을 넘는 후보가 아직 없어요.</div>`
+    : '';
+  const toggleHtml = hasScoring && belowThreshold.length
+    ? `<button class="btn ghost sm" style="margin-top:10px;" onclick="toggleTsListShowBelowThreshold()">${tsListShowBelowThreshold ? '접기' : `확인 필요 ${belowThreshold.length}명 더보기`}</button>`
+    : '';
+
   bodyEl.innerHTML = `
     <div class="field" style="margin:0 0 10px;flex-direction:row;align-items:center;gap:6px;"><label style="margin:0;">정렬</label>
-      <select onchange="changeTsListSort(this.value)">
-        <option value="importedAt" ${tsListSortMode==='importedAt'?'selected':''}>가져온 날짜</option>
-        <option value="age" ${tsListSortMode==='age'?'selected':''}>나이</option>
-        <option value="tagCount" ${tsListSortMode==='tagCount'?'selected':''}>태그 수</option>
-      </select>
+      <select onchange="changeTsListSort(this.value)">${sortOptions}</select>
       <button class="btn ghost sm" onclick="toggleTsListSortDir()">${tsListSortDir==='asc' ? '오름차순 ↑' : '내림차순 ↓'}</button>
     </div>
+    ${scoringNotice}
+    ${emptyPassingNotice}
     <div style="overflow-x:auto;">
     <table>
-      <thead><tr><th>이름</th><th>성별</th><th>나이</th><th>경력</th><th>학력</th><th>태그</th><th>최종업데이트</th><th>가져온 날짜</th></tr></thead>
-      <tbody>${sorted.map(tsListCandidateRowHtml).join('')}</tbody>
+      <thead><tr><th>이름</th><th>성별</th><th>나이</th><th>경력</th><th>학력</th><th>태그</th><th>최종업데이트</th><th>가져온 날짜</th>${scoreHeader}</tr></thead>
+      <tbody>${rowsToShow.map(e => tsListCandidateRowHtml(e.c, e.r)).join('')}</tbody>
     </table>
     </div>
+    ${toggleHtml}
   `;
 }
 
-async function loadTalentSearchListCandidates(projectId){
+async function loadTalentSearchListCandidates(projectId, project, policy){
   const bodyEl = document.getElementById('talentsearch-list-candidates-body');
   if(!bodyEl) return;
+  tsListScoringContext = policy ? { project, policy } : null;
+  tsListSortMode = policy ? 'jobFitScore' : 'importedAt';
+  tsListShowBelowThreshold = false;
   try{
     const { candidates } = await apiGet(`/talent-search-projects/${projectId}/list-candidates`);
     tsListCandidatesCache = candidates;
