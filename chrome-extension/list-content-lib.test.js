@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { parseCandidateCard, findNextPageButton } from './list-content-lib.js';
+import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton } from './list-content-lib.js';
 
 function cardFromHtml(html) {
   const dom = new JSDOM(`<!DOCTYPE html><div id="root">${html}</div>`);
@@ -165,4 +165,47 @@ test('findNextPageButton: 아무것도 없으면 null', () => {
 test('findNextPageButton: 없으면 null', () => {
   const dom = new JSDOM('<div class="paging"><a class="btn_prev">이전</a></div>');
   assert.equal(findNextPageButton(dom.window.document), null);
+});
+
+test('setNativeInputValue: 값을 설정하고 input 이벤트를 발생시킨다', () => {
+  const dom = new JSDOM('<input>');
+  const input = dom.window.document.querySelector('input');
+  let firedValue = null;
+  input.addEventListener('input', () => { firedValue = input.value; });
+  setNativeInputValue(input, '영상편집');
+  assert.equal(input.value, '영상편집');
+  assert.equal(firedValue, '영상편집');
+});
+
+test('findSearchInputs: placeholder로 OR/AND/NOT 3칸을 찾는다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <input placeholder="하나 이상의 키워드 포함">
+      <input placeholder="키워드를 모두 포함">
+      <input placeholder="제외할 키워드">
+    </div>
+  `);
+  const inputs = findSearchInputs(dom.window.document);
+  assert.equal(inputs.or.placeholder, '하나 이상의 키워드 포함');
+  assert.equal(inputs.and.placeholder, '키워드를 모두 포함');
+  assert.equal(inputs.not.placeholder, '제외할 키워드');
+});
+
+test('findSearchInputs: 못 찾으면 null', () => {
+  const dom = new JSDOM('<div></div>');
+  const inputs = findSearchInputs(dom.window.document);
+  assert.equal(inputs.or, null);
+  assert.equal(inputs.and, null);
+  assert.equal(inputs.not, null);
+});
+
+test('findSearchButton: 텍스트가 정확히 "검색"인 버튼을 찾는다', () => {
+  const dom = new JSDOM('<div><button>필터 초기화</button><button>검색</button></div>');
+  const btn = findSearchButton(dom.window.document);
+  assert.equal(btn.textContent, '검색');
+});
+
+test('findSearchButton: 없으면 null', () => {
+  const dom = new JSDOM('<div><button>다른 버튼</button></div>');
+  assert.equal(findSearchButton(dom.window.document), null);
 });

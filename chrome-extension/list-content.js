@@ -79,5 +79,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'FILL_AND_SEARCH') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true, skipped: false });
+        return;
+      }
+
+      const { andTerms, orTerms, notTerms } = message;
+      // 셋 다 비어있으면(프로젝트에 키워드가 하나도 없음) 검색창을
+      // 건드리지 않고 건너뛴다 -- 빈 조건으로 검색 버튼을 눌러서 이미
+      // 사용자가 사람인에서 설정해 둔 화면을 예상 못한 상태로 바꾸지
+      // 않기 위해서다.
+      if (!andTerms && !orTerms && !notTerms) {
+        sendResponse({ ok: true, blocked: false, skipped: true });
+        return;
+      }
+
+      const { setNativeInputValue, findSearchInputs, findSearchButton } = await getLib();
+      const inputs = findSearchInputs(document);
+      if (inputs.and && andTerms) setNativeInputValue(inputs.and, andTerms);
+      if (inputs.or && orTerms) setNativeInputValue(inputs.or, orTerms);
+      if (inputs.not && notTerms) setNativeInputValue(inputs.not, notTerms);
+
+      const searchBtn = findSearchButton(document);
+      if (!searchBtn) {
+        sendResponse({ ok: false, blocked: false, skipped: false });
+        return;
+      }
+      searchBtn.click();
+      sendResponse({ ok: true, blocked: false, skipped: false });
+    })();
+    return true;
+  }
+
   return false;
 });

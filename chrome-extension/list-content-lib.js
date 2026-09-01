@@ -87,3 +87,37 @@ export function findNextPageButton(doc) {
   );
   return fallback || null;
 }
+
+// 네이티브 input의 값 설정자를 통해 값을 바꾼 뒤 input 이벤트를
+// 발생시킨다. React 등 프레임워크로 만들어진 입력창은 `el.value = x`만
+// 으로는 내부 상태가 갱신되지 않는 경우가 흔해서(화면엔 값이 보여도
+// 검색 버튼을 눌렀을 때 실제로는 반영이 안 됨), 반드시 이 방식으로
+// 값을 채워야 한다. `inputEl.ownerDocument.defaultView`로 window를
+// 구해서 jsdom 테스트와 실제 콘텐츠 스크립트 양쪽에서 동일하게
+// 동작하게 한다(콘텐츠 스크립트에서 그냥 전역 window를 참조하면 jsdom
+// 테스트 환경에서는 window가 없어 에러가 난다).
+export function setNativeInputValue(inputEl, text) {
+  const win = inputEl.ownerDocument.defaultView;
+  const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
+  setter.call(inputEl, text);
+  inputEl.dispatchEvent(new win.Event('input', { bubbles: true }));
+}
+
+// 사람인 검색창의 OR/AND/NOT 3칸을 찾는다. 선택자는 2026-08-28 시점
+// 미검증 추정치 -- placeholder 텍스트로 우선 찾고, 없으면 name 속성
+// 폴백을 시도한다. 못 찾으면 해당 키는 null이 된다(추측해서 엉뚱한
+// input에 값을 넣지 않는다 -- 이 프로젝트의 fail-closed 원칙).
+export function findSearchInputs(doc) {
+  const byPlaceholder = (text) =>
+    Array.from(doc.querySelectorAll('input')).find(el => (el.placeholder || '').includes(text)) || null;
+  return {
+    or: byPlaceholder('하나 이상의 키워드') || doc.querySelector('input[name="or_word"]'),
+    and: byPlaceholder('키워드를 모두 포함') || doc.querySelector('input[name="and_word"]'),
+    not: byPlaceholder('제외할 키워드') || doc.querySelector('input[name="not_word"]')
+  };
+}
+
+// 검색 버튼을 찾는다. 텍스트가 정확히 "검색"인 button 요소를 찾는다.
+export function findSearchButton(doc) {
+  return Array.from(doc.querySelectorAll('button')).find(el => (el.textContent || '').trim() === '검색') || null;
+}
