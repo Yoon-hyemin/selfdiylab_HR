@@ -20,10 +20,6 @@ test('validateTalentSearchProjectInput: title이 없으면 에러', () => {
   assert.ok(validateTalentSearchProjectInput({ ...VALID, title: '' }));
 });
 
-test('validateTalentSearchProjectInput: headcount가 0이면 에러', () => {
-  assert.ok(validateTalentSearchProjectInput({ ...VALID, headcount: 0 }));
-});
-
 test('validateTalentSearchProjectInput: targetRecommendCount가 소수면 에러', () => {
   assert.ok(validateTalentSearchProjectInput({ ...VALID, targetRecommendCount: 1.5 }));
 });

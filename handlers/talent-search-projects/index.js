@@ -93,9 +93,9 @@ export default async function handler(req, res) {
           employment_type, headcount, location, work_conditions, natural_language_brief,
           keywords, clarification_notes, target_recommend_count, platforms, created_by
         ) VALUES (
-          ${body.title.trim()}, ${body.roleTitle.trim()}, ${body.seniorityLevel || null},
+          ${body.title.trim()}, ${body.roleTitle ? body.roleTitle.trim() : null}, ${body.seniorityLevel || null},
           ${body.experienceMinYears ?? null}, ${body.experienceMaxYears ?? null},
-          ${body.employmentType.trim()}, ${body.headcount}, ${body.location || null},
+          ${body.employmentType ? body.employmentType.trim() : null}, ${body.headcount ?? null}, ${body.location || null},
           ${JSON.stringify(body.workConditions || {})}::jsonb, ${body.naturalLanguageBrief || null},
           ${JSON.stringify(keywords)}::jsonb, ${JSON.stringify(body.clarificationNotes || [])}::jsonb,
           ${body.targetRecommendCount}, ${JSON.stringify(body.platforms)}::jsonb, ${account.id}

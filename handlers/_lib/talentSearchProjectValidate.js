@@ -25,9 +25,6 @@ function isStringArray(v) {
 export function validateTalentSearchProjectInput(body) {
   if (!body || typeof body !== 'object') return '입력값이 올바르지 않아요';
   if (!isNonEmptyString(body.title)) return '검색 프로젝트명을 입력해주세요';
-  if (!isNonEmptyString(body.roleTitle)) return '채용 직무/포지션명을 입력해주세요';
-  if (!isNonEmptyString(body.employmentType)) return '고용형태를 입력해주세요';
-  if (!isPositiveInt(body.headcount)) return '채용인원은 1명 이상의 정수여야 해요';
   if (!isPositiveInt(body.targetRecommendCount)) return '총 적합 추천 목표 인원은 1명 이상의 정수여야 해요';
   if (!Array.isArray(body.platforms) || body.platforms.length === 0) return '검색할 플랫폼을 1개 이상 선택해주세요';
   if (body.platforms.some(p => !TALENT_SEARCH_PLATFORMS.includes(p))) return '지원하지 않는 플랫폼이 포함돼 있어요';
