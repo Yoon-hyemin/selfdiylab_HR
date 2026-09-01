@@ -43,6 +43,7 @@ function project_summary_out(row) {
     platforms: row.platforms,
     status: row.status,
     policyVersionId: row.policy_version_id,
+    keywords: row.keywords,
     createdAt: row.created_at
   };
 }
@@ -62,7 +63,7 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT id, title, role_title, seniority_level, employment_type, headcount,
                location, target_recommend_count, daily_recommend_cap, platforms,
-               status, policy_version_id, created_at
+               status, policy_version_id, keywords, created_at
         FROM talent_search_projects
         ORDER BY created_at DESC`;
       return res.status(200).json({ projects: rows.map(project_summary_out) });
