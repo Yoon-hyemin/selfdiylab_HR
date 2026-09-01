@@ -3803,6 +3803,7 @@ async function openTalentSearchProjectFlow(id){
     <div style="font-size:13px;margin-bottom:6px;">추천 ${recommendedCount}명 / 목표 ${p.targetRecommendCount}명</div>
     <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${progressPct}%;background:var(--primary);border-radius:4px;"></div></div>
     <div style="margin-top:8px;"><a href="javascript:void(0)" onclick="openVirtualCandidatePreview('${p.id}')" style="font-size:12.5px;color:var(--sub);text-decoration:underline;">가상 후보로 미리 테스트해보기 →</a></div>
+    ${policyLoadError ? `<div style="font-size:12.5px;color:var(--red);margin-top:6px;">${escapeHtml(policyLoadError)}</div>` : ''}
   `;
 
   function stageBlock(n, title, bodyHtml){
