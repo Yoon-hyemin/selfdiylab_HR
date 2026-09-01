@@ -97,8 +97,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      const { setNativeInputValue, findSearchInputs, findSearchButton } = await getLib();
+      const { setNativeInputValue, findSearchInputs, findSearchButton, parseCandidateCard } = await getLib();
       const inputs = findSearchInputs(document);
+
+      // 프로젝트가 실제로 필요로 하는 칸(해당 *Terms가 비어있지 않은
+      // 칸)인데 못 찾은 게 하나라도 있으면, 그 칸만 조용히 건너뛰고
+      // 나머지 조건만으로 검색 버튼을 누르지 않는다 -- 그러면 팝업은
+      // "검색이 적용됐다"고 믿고 화면에 이미 떠 있던(어쩌면 전혀 다른
+      // 조건의) 결과를 그대로 가져오면서도 성공 메시지를 보여주게
+      // 된다. 채우기 시도 자체는 이 검사를 통과한 뒤에만 한다 -- 일부만
+      // 채운 채로 실패를 반환하면 사람인 화면이 어중간한 상태로 남아
+      // 사용자가 다시 시도할 때 헷갈릴 수 있다.
+      const missing = [];
+      if (andTerms && !inputs.and) missing.push('AND');
+      if (orTerms && !inputs.or) missing.push('OR');
+      if (notTerms && !inputs.not) missing.push('NOT');
+      if (missing.length) {
+        sendResponse({ ok: false, blocked: false, skipped: false, missing });
+        return;
+      }
+
       if (inputs.and && andTerms) setNativeInputValue(inputs.and, andTerms);
       if (inputs.or && orTerms) setNativeInputValue(inputs.or, orTerms);
       if (inputs.not && notTerms) setNativeInputValue(inputs.not, notTerms);
@@ -108,8 +126,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, blocked: false, skipped: false });
         return;
       }
+
+      // 검색 버튼을 누르기 직전, 지금 화면 맨 위 후보의 sourceUrl을
+      // 미리 남겨둔다 -- randomPageDelayMs()는 사람처럼 보이기 위한
+      // 지연일 뿐 "결과가 실제로 갱신됐는지"를 보장하지 않아서, 팝업이
+      // 이 값을 검색 후 PARSE_CURRENT_LIST 결과와 비교해 화면이 실제로
+      // 바뀔 때까지 몇 번 더 확인(readiness poll)하는 데 쓴다.
+      const firstCard = document.querySelector(CANDIDATE_CARD_SELECTOR);
+      const firstCandidateIdBefore = firstCard ? parseCandidateCard(firstCard).sourceUrl : null;
+
       searchBtn.click();
-      sendResponse({ ok: true, blocked: false, skipped: false });
+      sendResponse({ ok: true, blocked: false, skipped: false, firstCandidateIdBefore });
     })();
     return true;
   }

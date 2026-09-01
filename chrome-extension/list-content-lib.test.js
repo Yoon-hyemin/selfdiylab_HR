@@ -209,3 +209,34 @@ test('findSearchButton: 없으면 null', () => {
   const dom = new JSDOM('<div><button>다른 버튼</button></div>');
   assert.equal(findSearchButton(dom.window.document), null);
 });
+
+// findNextPageButton이 "다음" 텍스트 전역 매칭으로 스페셜 태그 캐러셀의
+// 동명 버튼을 잘못 집었던 전례와 같은 종류의 오탐을 막기 위한 배제 --
+// findSearchButton도 아직 실제 컨테이너로 못 좁혀서, 이미 알려진 오탐
+// 유발 영역만이라도 제외한다.
+test('findSearchButton: 캐러셀 안의 동명 버튼은 무시한다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <div class="special_tag_wrap"><button>검색</button></div>
+      <div class="search_filter"><button>검색</button></div>
+    </div>
+  `);
+  const btn = findSearchButton(dom.window.document);
+  assert.equal(btn.parentElement.className, 'search_filter');
+});
+
+test('findSearchButton: 비활성화된 버튼은 무시한다', () => {
+  const dom = new JSDOM('<div><button disabled>검색</button></div>');
+  assert.equal(findSearchButton(dom.window.document), null);
+});
+
+test('findSearchButton: containerSelector를 주면 그 범위 안에서만 찾는다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <div class="outside"><button>검색</button></div>
+      <div class="inside_box"><button>검색</button></div>
+    </div>
+  `);
+  const btn = findSearchButton(dom.window.document, '.inside_box');
+  assert.equal(btn.parentElement.className, 'inside_box');
+});

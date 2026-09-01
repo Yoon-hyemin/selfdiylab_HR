@@ -118,6 +118,26 @@ export function findSearchInputs(doc) {
 }
 
 // 검색 버튼을 찾는다. 텍스트가 정확히 "검색"인 button 요소를 찾는다.
-export function findSearchButton(doc) {
-  return Array.from(doc.querySelectorAll('button')).find(el => (el.textContent || '').trim() === '검색') || null;
+//
+// 알려진 위험(라이브 검증 전 필수 재검토 대상): findNextPageButton은
+// 처음엔 "다음" 텍스트만으로 문서 전체를 훑다가, 같은 화면 위쪽의
+// 스페셜 태그 캐러셀에 있는 동명("다음") 버튼을 먼저 잡아버리는
+// 오탐을 실사용 검증 중 발견하고서야 `.PageBox` 컨테이너로 좁혀
+// 고쳤다(위 findNextPageButton 주석 참고). 이 함수도 아직 같은
+// 페이지-전체 텍스트 매칭 방식이라 같은 종류의 오탐(화면에 "검색"
+// 버튼이 여러 개 있으면 엉뚱한 걸 클릭)에 노출돼 있다 -- 실제 검색창
+// 컨테이너 선택자는 findSearchInputs와 마찬가지로 아직 미검증이라
+// 지금 당장 진짜 컨테이너로 좁히지는 못했다. 대신 (1) 이미 오탐으로
+// 확인된 캐러셀 영역은 배제하고 (2) 나중에 실제 컨테이너 선택자를
+// 알게 되면 바로 좁혀 쓸 수 있도록 선택적 containerSelector 인자를
+// 받는다. 라이브 검증 시 반드시 실제 컨테이너로 좁힐 것.
+export function findSearchButton(doc, containerSelector) {
+  const isDisabled = el => el.disabled || el.getAttribute('aria-disabled') === 'true'
+    || (el.className && String(el.className).includes('disabled'));
+  const isInKnownCarousel = el => !!el.closest('.special_tag_wrap, .swiper');
+
+  const scope = (containerSelector && doc.querySelector(containerSelector)) || doc;
+  return Array.from(scope.querySelectorAll('button')).find(el =>
+    !isDisabled(el) && !isInKnownCarousel(el) && (el.textContent || '').trim() === '검색'
+  ) || null;
 }

@@ -72,6 +72,16 @@ async function initListImportUiIfApplicable() {
 // 넘긴 뒤 다시 누르면 된다.
 const MAX_PAGES = 5;
 
+// 검색 버튼을 누른 뒤 결과가 실제로 갱신됐는지 확인하는 재시도 횟수.
+// randomPageDelayMs()는 사람처럼 보이기 위한 지연일 뿐 페이지가 실제로
+// 갱신됐다는 신호가 아니라서, 느린 네비게이션/AJAX 갱신이 그 지연
+// 창(2.5~4.5초) 이후에 끝나면 옛날(검색 전) 결과를 그대로 가져올 위험이
+// 있다 -- 그래서 첫 후보의 sourceUrl이 바뀔 때까지 최대 이 횟수만큼
+// PARSE_CURRENT_LIST로 다시 확인한다. 무한정 기다리지는 않는다(다
+// 확인해도 안 바뀌면 그냥 진행 -- 검색 전후 결과가 우연히 같은 것도
+// 정상적인 경우이지 실패로 볼 수 없다).
+const MAX_READINESS_POLL_ATTEMPTS = 5;
+
 function randomPageDelayMs() {
   // 페이지 이동마다 정확히 같은 간격으로 클릭하지 않도록 2.5~4.5초
   // 사이 무작위 지연을 둔다(사람처럼 보이게 하는 안전장치 -- 실행엔진
@@ -128,7 +138,23 @@ importBtn.addEventListener('click', async () => {
       stopReason = '검색 조건을 채우지 못했어요 - 사람인 화면 구조가 바뀌었을 수 있어요';
     } else {
       searchOk = true;
-      if (!searchResult.skipped) await wait(randomPageDelayMs());
+      if (!searchResult.skipped) {
+        const firstCandidateIdBefore = searchResult.firstCandidateIdBefore || null;
+        // 검색 클릭 직후 결과가 실제로 갱신됐는지 몇 번 더 확인한다(위
+        // MAX_READINESS_POLL_ATTEMPTS 주석 참고). 클릭 전에 후보가 하나도
+        // 없었다면(firstCandidateIdBefore가 null) 비교할 대상이 없으니
+        // 기존처럼 지연 한 번만 두고 바로 진행한다.
+        for (let attempt = 0; attempt < MAX_READINESS_POLL_ATTEMPTS; attempt += 1) {
+          await wait(randomPageDelayMs());
+          if (!firstCandidateIdBefore) break;
+
+          const [readyTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          const peek = await chrome.tabs.sendMessage(readyTab.id, { type: 'PARSE_CURRENT_LIST' }).catch(() => null);
+          if (peek && peek.blocked) break; // 아래 본 루프의 첫 PARSE_CURRENT_LIST가 다시 감지해 처리한다
+          const firstNow = (peek && peek.candidates && peek.candidates[0] && peek.candidates[0].sourceUrl) || null;
+          if (firstNow !== firstCandidateIdBefore) break; // 결과가 바뀐 것을 확인했으니 더 기다리지 않는다
+        }
+      }
     }
 
     if (searchOk) {
