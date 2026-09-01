@@ -3604,6 +3604,49 @@ async function restoreVersionNow(id){
 
 const TS_STATUS_LABEL = { draft: '작성중', approved: '승인됨' };
 
+const TS_STAGE_LABEL = { 1: '조건 설정', 2: '검색 실행 대기', 3: '수집 중', 4: '적합/부적합 확인' };
+const TS_STAGE_BADGE_CLASS = { 1: 'badge grey', 2: 'badge grey', 3: 'badge blue', 4: 'badge green' };
+
+// 프로젝트 하나의 단계를 계산한다. 플랫폼 이름을 판정에 쓰지 않는다 --
+// 어느 플랫폼에서 왔든 실제 후보가 1건이라도 있으면 2단계를 지난
+//것으로 본다(설계문서의 "다른 플랫폼 확장 대비" 절 참고). "검색을
+// 실행했다"는 사실 자체는 서버가 기록하지 않으므로, 그 결과(후보
+// 유입)로 간접 판단한다.
+function computeTalentSearchProjectStage(project, listCandidates, policy){
+  if(project.status !== 'approved') return { stage: 1, recommendedCount: 0 };
+  if(!listCandidates.length) return { stage: 2, recommendedCount: 0 };
+  if(!policy) return { stage: 3, recommendedCount: 0 };
+
+  let recommendedCount = 0;
+  listCandidates.forEach(c => {
+    if(scoreListCandidateJobFit(c, project.keywords, policy).verdict === '추천') recommendedCount++;
+  });
+  const stage = recommendedCount >= project.targetRecommendCount ? 4 : 3;
+  return { stage, recommendedCount };
+}
+
+async function computeTalentSearchProjectStages(projects){
+  const stages = {};
+  const approved = projects.filter(p => p.status === 'approved');
+  projects.forEach(p => { if(p.status !== 'approved') stages[p.id] = { stage: 1, recommendedCount: 0 }; });
+  if(!approved.length) return stages;
+
+  let versions = [];
+  try{ const res = await apiGet('/talent-search-policy/versions'); versions = res.versions; }
+  catch(err){ /* 못 가져오면 아래에서 정책 없음으로 처리 */ }
+
+  await Promise.all(approved.map(async p => {
+    try{
+      const { candidates } = await apiGet('/talent-search-projects/'+p.id+'/list-candidates');
+      const policy = versions.find(v => v.id === p.policyVersionId) || null;
+      stages[p.id] = computeTalentSearchProjectStage(p, candidates, policy);
+    }catch(err){
+      stages[p.id] = { stage: 2, recommendedCount: 0 };
+    }
+  }));
+  return stages;
+}
+
 async function computeTalentSearchDashboardCounts(projects){
   const approved = projects.filter(p => p.status === 'approved' && p.policyVersionId);
   if(!approved.length) return {};
@@ -3647,25 +3690,20 @@ async function renderTalentSearchDashboard(){
     return;
   }
 
-  const cumulativeCounts = await computeTalentSearchDashboardCounts(projects);
+  const stages = await computeTalentSearchProjectStages(projects);
 
   const listHtml = projects.length ? `
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
-      ${projects.map(p=>`
-        <div class="section" style="margin-bottom:0;cursor:pointer;" onclick="openTalentSearchProjectDetail('${p.id}')">
+      ${projects.map(p=>{
+        const s = stages[p.id] || { stage: 1, recommendedCount: 0 };
+        return `
+        <div class="section" style="margin-bottom:0;cursor:pointer;" onclick="openTalentSearchProjectFlow('${p.id}')">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-            <div>
-              <div style="font-size:15px;font-weight:800;">${escapeHtml(p.title)}</div>
-              <div style="font-size:12px;color:var(--sub);margin-top:2px;">${escapeHtml(p.roleTitle)}${p.seniorityLevel ? ' · '+escapeHtml(p.seniorityLevel) : ''} · ${escapeHtml(p.employmentType)}${p.location ? ' · '+escapeHtml(p.location) : ''}</div>
-            </div>
-            <span class="badge grey">${escapeHtml(TS_STATUS_LABEL[p.status] || p.status)}</span>
-          </div>
-          <div style="display:flex;gap:10px;">
-            <div class="kpi" style="flex:1;margin-bottom:0;"><div class="label">오늘 추천</div><div class="value">0 / ${p.dailyRecommendCap}</div></div>
-            <div class="kpi" style="flex:1;margin-bottom:0;"><div class="label">누적 추천</div><div class="value">${cumulativeCounts[p.id] ?? 0} / ${p.targetRecommendCount}</div></div>
+            <div style="font-size:15px;font-weight:800;">${escapeHtml(p.title)}</div>
+            <span class="${TS_STAGE_BADGE_CLASS[s.stage]}">${s.stage}단계 · ${TS_STAGE_LABEL[s.stage]}${s.stage>=3 ? ` (${s.recommendedCount}/${p.targetRecommendCount})` : ''}</span>
           </div>
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>
   ` : `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--sub);">아직 만든 검색 프로젝트가 없어요 — 위 "+ 새 인재검색"으로 시작해보세요.</div>`;
 
