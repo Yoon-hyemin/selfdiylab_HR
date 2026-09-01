@@ -427,11 +427,16 @@
     <!-- TALENT SEARCH (인재검색, ADMIN 또는 canUseTalentSearch 계정) -->
     <div class="view" id="view-talentsearch">
       <div class="page-head"><div><h1>인재검색</h1><p>여러 채용 플랫폼의 인재풀을 검색하고 평가해서 추천 후보를 정리해요</p></div></div>
-      <div class="tabs">
-        <button class="tab active" onclick="switchTalentSearchTab('dashboard')" id="tstab-dashboard">대시보드</button>
-        <button class="tab" onclick="switchTalentSearchTab('policy')" id="tstab-policy">기준 관리센터</button>
-        <button class="tab" onclick="switchTalentSearchTab('versions')" id="tstab-versions">버전 이력</button>
-        <button class="tab" onclick="switchTalentSearchTab('connect')" id="tstab-connect">실행엔진 연결</button>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+        <div style="position:relative;">
+          <button class="btn ghost sm" onclick="toggleTsSettingsMenu()">⚙ 설정</button>
+          <div id="ts-settings-menu" style="display:none;position:absolute;right:0;top:36px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.08);min-width:160px;z-index:10;">
+            <button class="tab" style="width:100%;text-align:left;border-radius:0;" onclick="closeTsSettingsMenuAnd('policy')" id="tstab-policy">기준 관리센터</button>
+            <button class="tab" style="width:100%;text-align:left;border-radius:0;" onclick="closeTsSettingsMenuAnd('versions')" id="tstab-versions">버전 이력</button>
+            <button class="tab" style="width:100%;text-align:left;border-radius:0;" onclick="closeTsSettingsMenuAnd('connect')" id="tstab-connect">실행엔진 연결</button>
+            <button class="tab" style="width:100%;text-align:left;border-radius:0;border-top:1px solid var(--border);" onclick="closeTsSettingsMenuAnd('dashboard')" id="tstab-dashboard-link">← 검색 프로젝트 목록으로</button>
+          </div>
+        </div>
       </div>
       <div id="talentsearch-dashboard">
         <div class="section">
@@ -3071,13 +3076,24 @@ function renderHrDash(){
 /* ---------- TALENT SEARCH (인재검색) ---------- */
 function switchTalentSearchTab(tab){
   ['dashboard','policy','versions','connect'].forEach(t=>{
-    document.getElementById('talentsearch-'+t).style.display = t===tab ? '' : 'none';
-    document.getElementById('tstab-'+t).classList.toggle('active', t===tab);
+    const panel = document.getElementById('talentsearch-'+t);
+    if(panel) panel.style.display = t===tab ? '' : 'none';
+    document.getElementById('tstab-'+t)?.classList.toggle('active', t===tab);
   });
   if(tab==='dashboard') renderTalentSearchDashboard();
   if(tab==='policy') loadAndRenderTalentSearchPolicy();
   if(tab==='versions') loadAndRenderTalentSearchVersions();
   if(tab==='connect') loadAndRenderTalentSearchConnect();
+}
+
+function toggleTsSettingsMenu(){
+  const menu = document.getElementById('ts-settings-menu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function closeTsSettingsMenuAnd(tab){
+  document.getElementById('ts-settings-menu').style.display = 'none';
+  switchTalentSearchTab(tab);
 }
 
 async function loadAndRenderTalentSearchConnect(){
