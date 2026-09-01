@@ -25,6 +25,8 @@ const targetCountInput = document.getElementById('targetCountInput');
 const importBtn = document.getElementById('importBtn');
 const importStatus = document.getElementById('importStatus');
 
+let cachedApprovedProjects = [];
+
 async function initListImportUiIfApplicable() {
   const token = await loadSavedToken();
   tokenStatus.textContent = token ? '연결 코드 저장됨' : '연결 코드를 입력해주세요';
@@ -49,6 +51,7 @@ async function initListImportUiIfApplicable() {
     // 'p.status===approved' 가드), draft 프로젝트에 가져오면 저장은
     // 성공하지만 그 데이터를 다시 볼 방법이 없는 상태가 된다.
     const approvedProjects = data.projects.filter(p => p.status === 'approved');
+    cachedApprovedProjects = approvedProjects;
     if (!approvedProjects.length) {
       importStatus.textContent = '승인된 검색 프로젝트가 없어요 - 먼저 HR 사이트에서 프로젝트를 승인해주세요';
       projectSelect.replaceChildren();
@@ -80,6 +83,20 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// 프로젝트의 keywords(포함/OR/정확일치/제외/우대)를 사람인 검색창의
+// 3칸(OR/AND/NOT)에 맞춰 문자열로 변환한다. 정확일치는 따옴표로
+// 감싸 AND칸에 같이 넣는다(사람인이 실제로 따옴표를 정확일치로
+// 처리하는지는 라이브 검증 대상 -- 안 되더라도 AND 조건으로는
+// 동작하니 크게 어긋나지 않는다). 우대조건은 검색어로 쓰지 않는다
+// (사람인 검색창에 대응하는 칸이 없고, 채점에서만 신호로 씀).
+function buildSearchTerms(keywords) {
+  const kw = keywords || {};
+  const andTerms = [...(kw.include || []), ...(kw.exact || []).map(k => `"${k}"`)].join(' ');
+  const orTerms = (kw.or || []).join(' ');
+  const notTerms = (kw.exclude || []).join(' ');
+  return { andTerms, orTerms, notTerms };
+}
+
 importBtn.addEventListener('click', async () => {
   const token = await loadSavedToken();
   const projectId = projectSelect.value;
@@ -95,62 +112,83 @@ importBtn.addEventListener('click', async () => {
   let stopReason = null;
 
   try {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      pageCount += 1;
-      importStatus.textContent = `${pageCount}페이지째 가져오는 중... (지금까지 ${totalImported}명 확보)`;
+    const selectedProject = cachedApprovedProjects.find(p => p.id === projectId);
+    const { andTerms, orTerms, notTerms } = buildSearchTerms(selectedProject && selectedProject.keywords);
 
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const parseResult = await chrome.tabs.sendMessage(tab.id, { type: 'PARSE_CURRENT_LIST' });
-      if (parseResult && parseResult.blocked) {
-        stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
-        break;
+    importStatus.textContent = '검색 조건 채우는 중...';
+    const [searchTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const searchResult = await chrome.tabs.sendMessage(searchTab.id, {
+      type: 'FILL_AND_SEARCH', andTerms, orTerms, notTerms
+    });
+
+    let searchOk = false;
+    if (searchResult && searchResult.blocked) {
+      stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
+    } else if (!searchResult || !searchResult.ok) {
+      stopReason = '검색 조건을 채우지 못했어요 - 사람인 화면 구조가 바뀌었을 수 있어요';
+    } else {
+      searchOk = true;
+      if (!searchResult.skipped) await wait(randomPageDelayMs());
+    }
+
+    if (searchOk) {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        pageCount += 1;
+        importStatus.textContent = `${pageCount}페이지째 가져오는 중... (지금까지 ${totalImported}명 확보)`;
+
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const parseResult = await chrome.tabs.sendMessage(tab.id, { type: 'PARSE_CURRENT_LIST' });
+        if (parseResult && parseResult.blocked) {
+          stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
+          break;
+        }
+
+        const allCandidates = (parseResult && parseResult.candidates) || [];
+        // 같은 페이지를 다시 읽게 된 경우(다음 페이지 클릭이 실제로는
+        // 안 먹힌 경우 등)를 새 후보 0명으로 자연스럽게 감지하기 위해,
+        // 이번 "가져오기" 세션 동안 이미 본 sourceUrl은 다시 보내지
+        // 않는다.
+        const newCandidates = allCandidates.filter(c => c.sourceUrl && !seenUrls.has(c.sourceUrl));
+        if (!newCandidates.length) {
+          stopReason = pageCount === 1 ? '가져올 후보를 찾지 못했어요' : '더 이상 새로운 후보가 없어요';
+          break;
+        }
+        newCandidates.forEach(c => seenUrls.add(c.sourceUrl));
+
+        const res = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects/${projectId}/list-candidates`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ platform: '사람인', candidates: newCandidates })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          stopReason = data.error || '가져오기 실패';
+          break;
+        }
+
+        totalImported += data.imported;
+        totalSkipped += data.skipped || 0;
+
+        if (totalImported >= target) break;
+
+        if (pageCount >= MAX_PAGES) {
+          stopReason = `안전 상한(${MAX_PAGES}페이지)에 도달해 멈췄어요. 필요하면 사람인에서 직접 다음 페이지로 이동한 뒤 다시 눌러주세요.`;
+          break;
+        }
+
+        const nextResult = await chrome.tabs.sendMessage(tab.id, { type: 'CLICK_NEXT_PAGE' });
+        if (!nextResult || nextResult.blocked) {
+          stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
+          break;
+        }
+        if (!nextResult.hasNextPage) {
+          stopReason = '마지막 페이지예요';
+          break;
+        }
+
+        await wait(randomPageDelayMs());
       }
-
-      const allCandidates = (parseResult && parseResult.candidates) || [];
-      // 같은 페이지를 다시 읽게 된 경우(다음 페이지 클릭이 실제로는
-      // 안 먹힌 경우 등)를 새 후보 0명으로 자연스럽게 감지하기 위해,
-      // 이번 "가져오기" 세션 동안 이미 본 sourceUrl은 다시 보내지
-      // 않는다.
-      const newCandidates = allCandidates.filter(c => c.sourceUrl && !seenUrls.has(c.sourceUrl));
-      if (!newCandidates.length) {
-        stopReason = pageCount === 1 ? '가져올 후보를 찾지 못했어요' : '더 이상 새로운 후보가 없어요';
-        break;
-      }
-      newCandidates.forEach(c => seenUrls.add(c.sourceUrl));
-
-      const res = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects/${projectId}/list-candidates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ platform: '사람인', candidates: newCandidates })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        stopReason = data.error || '가져오기 실패';
-        break;
-      }
-
-      totalImported += data.imported;
-      totalSkipped += data.skipped || 0;
-
-      if (totalImported >= target) break;
-
-      if (pageCount >= MAX_PAGES) {
-        stopReason = `안전 상한(${MAX_PAGES}페이지)에 도달해 멈췄어요. 필요하면 사람인에서 직접 다음 페이지로 이동한 뒤 다시 눌러주세요.`;
-        break;
-      }
-
-      const nextResult = await chrome.tabs.sendMessage(tab.id, { type: 'CLICK_NEXT_PAGE' });
-      if (!nextResult || nextResult.blocked) {
-        stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
-        break;
-      }
-      if (!nextResult.hasNextPage) {
-        stopReason = '마지막 페이지예요';
-        break;
-      }
-
-      await wait(randomPageDelayMs());
     }
 
     if (totalImported === 0 && totalSkipped === 0) {
