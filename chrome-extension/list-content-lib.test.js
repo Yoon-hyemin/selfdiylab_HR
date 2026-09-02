@@ -167,14 +167,25 @@ test('findNextPageButton: 없으면 null', () => {
   assert.equal(findNextPageButton(dom.window.document), null);
 });
 
-test('setNativeInputValue: 값을 설정하고 input 이벤트를 발생시킨다', () => {
+// 2026-09-02 실사용 확인: 사람인 검색창은 `input` 이벤트를 받으면 그
+// 즉시 값을 빈 문자열로 되돌린다(자동완성 컴포넌트로 추정) -- 그래서
+// `input` 대신 `keyup`+`change`를 쏜다. 이 테스트는 그 두 이벤트가
+// 실제로 발생하는지, 그리고 (input 이벤트를 등록해도) 최종 값이
+// 되돌아가지 않고 유지되는지를 함께 확인한다.
+test('setNativeInputValue: 값을 설정하고 keyup+change 이벤트를 발생시킨다(input은 쏘지 않음)', () => {
   const dom = new JSDOM('<input>');
   const input = dom.window.document.querySelector('input');
-  let firedValue = null;
-  input.addEventListener('input', () => { firedValue = input.value; });
+  let keyupFired = false;
+  let changeValue = null;
+  let inputFired = false;
+  input.addEventListener('keyup', () => { keyupFired = true; });
+  input.addEventListener('change', () => { changeValue = input.value; });
+  input.addEventListener('input', () => { inputFired = true; });
   setNativeInputValue(input, '영상편집');
   assert.equal(input.value, '영상편집');
-  assert.equal(firedValue, '영상편집');
+  assert.equal(keyupFired, true);
+  assert.equal(changeValue, '영상편집');
+  assert.equal(inputFired, false);
 });
 
 // 2026-08-31 실제 인재풀 검색결과 화면에서 로그인해서 직접 확인한

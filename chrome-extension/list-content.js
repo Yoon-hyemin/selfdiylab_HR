@@ -10,6 +10,16 @@
 // manifest에 classic 스크립트로 선언돼 있어 최상위 import 문을 쓸 수
 // 없다 -- 순수 함수는 동적 import()로 가져온다(content.js와 동일한
 // 패턴).
+//
+// 검색어 자동입력(2026-09-02 재설계)은 이 파일 하나로 안 끝난다 --
+// CHECK_SEARCH_INPUTS(필요한 칸이 다 있는지 사전확인)/
+// FILL_SEARCH_TERM(칸 하나에 값 채우기)/CLICK_SEARCH_BUTTON(검색
+// 버튼 클릭)으로 쪼개져 있고, 그 사이사이 "칩으로 확정하는 Enter
+// 키"는 콘텐츠 스크립트가 못 만든다(합성 이벤트는 이 사이트가
+// 무시하는 것을 실사용 확인함) -- popup.js가 chrome.debugger로
+// 보내는 진짜 키 입력이 그 역할을 한다. 이 파일은 여전히 "값 채우기/
+// 버튼 찾기/클릭"만 담당하고, 언제 어떤 칸에 무엇을 채울지와 Enter
+// 타이밍은 popup.js가 주도한다.
 
 let libPromise = null;
 function getLib() {
@@ -79,54 +89,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'FILL_AND_SEARCH') {
+  // 2026-09-02 실사용 확인으로 FILL_AND_SEARCH(값을 채우고 바로 버튼을
+  // 누르는 방식)를 폐기했다 -- 사람인 검색창은 텍스트칸이 아니라 "칩
+  // 태그" 입력(키워드를 입력하고 Enter를 눌러야 확정되고, 확정된
+  // 칩만 실제 검색에 반영됨)이었고, 그 확정(Enter) 동작은 브라우저가
+  // "진짜 사용자 입력"으로 인정하는 신호에만 반응해서, 콘텐츠
+  // 스크립트가 만드는 합성 이벤트(keydown/keyup 등, 전부
+  // isTrusted=false)로는 아무리 다양한 이벤트를 시도해도 커밋이 되지
+  // 않았다(라이브 확인: 값은 화면에 채워지지만 실제 검색 요청에는
+  // 반영 안 됨). 값 자체를 채우는 것(FILL_SEARCH_TERM)은 여전히 이
+  // 콘텐츠 스크립트가 하되(신뢰 여부와 무관하게 값은 정상적으로
+  // 채워지는 것까지 확인됨), 그 다음 칩으로 확정하는 Enter 키
+  // 입력은 popup.js가 chrome.debugger(Input.dispatchKeyEvent)로 보내는
+  // "진짜" 키 입력에 맡긴다 -- 콘텐츠 스크립트는 debugger API에 접근할
+  // 수 없어서(확장 페이지 전용 API), 이 역할 분담이 불가피하다.
+  if (message.type === 'CHECK_SEARCH_INPUTS') {
     (async () => {
       const { isBlockedPage } = await getBlockedCheck();
       if (isBlockedPage(location.href, document.title)) {
-        sendResponse({ ok: false, blocked: true, skipped: false });
+        sendResponse({ ok: false, blocked: true });
         return;
       }
-
-      const { andTerms, orTerms, notTerms } = message;
-      // 셋 다 비어있으면(프로젝트에 키워드가 하나도 없음) 검색창을
-      // 건드리지 않고 건너뛴다 -- 빈 조건으로 검색 버튼을 눌러서 이미
-      // 사용자가 사람인에서 설정해 둔 화면을 예상 못한 상태로 바꾸지
-      // 않기 위해서다.
-      if (!andTerms && !orTerms && !notTerms) {
-        sendResponse({ ok: true, blocked: false, skipped: true });
-        return;
-      }
-
-      const { setNativeInputValue, findSearchInputs, findSearchButton, parseCandidateCard } = await getLib();
+      const { findSearchInputs } = await getLib();
       const inputs = findSearchInputs(document);
-
-      // 프로젝트가 실제로 필요로 하는 칸(해당 *Terms가 비어있지 않은
-      // 칸)인데 못 찾은 게 하나라도 있으면, 그 칸만 조용히 건너뛰고
-      // 나머지 조건만으로 검색 버튼을 누르지 않는다 -- 그러면 팝업은
-      // "검색이 적용됐다"고 믿고 화면에 이미 떠 있던(어쩌면 전혀 다른
-      // 조건의) 결과를 그대로 가져오면서도 성공 메시지를 보여주게
-      // 된다. 채우기 시도 자체는 이 검사를 통과한 뒤에만 한다 -- 일부만
-      // 채운 채로 실패를 반환하면 사람인 화면이 어중간한 상태로 남아
-      // 사용자가 다시 시도할 때 헷갈릴 수 있다.
+      const { needAnd, needOr, needNot } = message;
       const missing = [];
-      if (andTerms && !inputs.and) missing.push('AND');
-      if (orTerms && !inputs.or) missing.push('OR');
-      if (notTerms && !inputs.not) missing.push('NOT');
-      if (missing.length) {
-        sendResponse({ ok: false, blocked: false, skipped: false, missing });
+      if (needAnd && !inputs.and) missing.push('AND');
+      if (needOr && !inputs.or) missing.push('OR');
+      if (needNot && !inputs.not) missing.push('NOT');
+      sendResponse({ ok: missing.length === 0, blocked: false, missing });
+    })();
+    return true;
+  }
+
+  if (message.type === 'FILL_SEARCH_TERM') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true });
         return;
       }
+      const { setNativeInputValue, findSearchInputs } = await getLib();
+      const inputs = findSearchInputs(document);
+      const input = inputs[message.box];
+      if (!input) {
+        sendResponse({ ok: false, blocked: false });
+        return;
+      }
+      // 칩 입력창은 이전 칩들과 별개인 "지금 타이핑 중" 버퍼 하나만
+      // 노출한다 -- 이전 칩(예: 이미 커밋된 다른 키워드)은 이 input의
+      // value에 안 보이므로 그대로 두고, 지금 커밋할 키워드 하나만
+      // 채운다. 커밋(Enter)은 popup.js가 이어서 보낸다.
+      input.focus();
+      setNativeInputValue(input, message.term);
+      sendResponse({ ok: true, blocked: false });
+    })();
+    return true;
+  }
 
-      if (inputs.and && andTerms) setNativeInputValue(inputs.and, andTerms);
-      if (inputs.or && orTerms) setNativeInputValue(inputs.or, orTerms);
-      if (inputs.not && notTerms) setNativeInputValue(inputs.not, notTerms);
-
+  if (message.type === 'CLICK_SEARCH_BUTTON') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true });
+        return;
+      }
+      const { findSearchButton, parseCandidateCard } = await getLib();
       const searchBtn = findSearchButton(document);
       if (!searchBtn) {
-        sendResponse({ ok: false, blocked: false, skipped: false });
+        sendResponse({ ok: false, blocked: false });
         return;
       }
-
       // 검색 버튼을 누르기 직전, 지금 화면 맨 위 후보의 sourceUrl을
       // 미리 남겨둔다 -- randomPageDelayMs()는 사람처럼 보이기 위한
       // 지연일 뿐 "결과가 실제로 갱신됐는지"를 보장하지 않아서, 팝업이
@@ -134,9 +167,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // 바뀔 때까지 몇 번 더 확인(readiness poll)하는 데 쓴다.
       const firstCard = document.querySelector(CANDIDATE_CARD_SELECTOR);
       const firstCandidateIdBefore = firstCard ? parseCandidateCard(firstCard).sourceUrl : null;
-
       searchBtn.click();
-      sendResponse({ ok: true, blocked: false, skipped: false, firstCandidateIdBefore });
+      sendResponse({ ok: true, blocked: false, firstCandidateIdBefore });
     })();
     return true;
   }

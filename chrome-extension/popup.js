@@ -95,17 +95,86 @@ function wait(ms) {
 }
 
 // 프로젝트의 keywords(포함/OR/정확일치/제외/우대)를 사람인 검색창의
-// 3칸(OR/AND/NOT)에 맞춰 문자열로 변환한다. 정확일치는 따옴표로
-// 감싸 AND칸에 같이 넣는다(사람인이 실제로 따옴표를 정확일치로
-// 처리하는지는 라이브 검증 대상 -- 안 되더라도 AND 조건으로는
-// 동작하니 크게 어긋나지 않는다). 우대조건은 검색어로 쓰지 않는다
-// (사람인 검색창에 대응하는 칸이 없고, 채점에서만 신호로 씀).
+// 3칸(OR/AND/NOT)에 맞춰 "칩으로 하나씩 커밋할 키워드 배열"로
+// 변환한다. 2026-09-02 실사용 확인 전까지는 이걸 공백으로 이어붙인
+// 문자열 하나로 만들어서 한 번에 넣으면 되는 줄 알았는데, 실제로는
+// 각 칸이 "입력 후 Enter로 확정되는 칩 태그" 방식이라 키워드 하나당
+// Enter 한 번씩 필요하다는 게 밝혀져서 배열로 바꿨다(아래
+// fillAndSearch 참고). 정확일치는 따옴표로 감싸 AND칸에 같이 넣는다.
+// 우대조건은 검색어로 쓰지 않는다(사람인 검색창에 대응하는 칸이
+// 없고, 채점에서만 신호로 씀).
 function buildSearchTerms(keywords) {
   const kw = keywords || {};
-  const andTerms = [...(kw.include || []), ...(kw.exact || []).map(k => `"${k}"`)].join(' ');
-  const orTerms = (kw.or || []).join(' ');
-  const notTerms = (kw.exclude || []).join(' ');
+  const andTerms = [...(kw.include || []), ...(kw.exact || []).map(k => `"${k}"`)];
+  const orTerms = kw.or || [];
+  const notTerms = kw.exclude || [];
   return { andTerms, orTerms, notTerms };
+}
+
+// 칩 하나를 커밋하는 "진짜" Enter 키 입력을 보낸다. 콘텐츠 스크립트의
+// dispatchEvent(new KeyboardEvent(...))는 isTrusted=false라서 사람인
+// 검색창이 무시한다는 것을 실사용 확인 중 발견했다(값은 채워지지만
+// 실제 검색 요청에는 전혀 반영 안 됨) -- chrome.debugger의
+// Input.dispatchKeyEvent는 브라우저 입력 파이프라인을 거치는 "진짜"
+// 입력이라 이 사이트가 실제 사용자 입력으로 인정한다(라이브 확인:
+// 이 방식으로 누른 Enter 뒤에는 검색 결과가 실제로 바뀜). 포커스는
+// 이 함수가 아니라 호출 직전 FILL_SEARCH_TERM이 이미 맞춰둔
+// input에 그대로 적용된다(키보드 이벤트는 좌표가 아니라 지금
+// 포커스된 요소를 대상으로 하므로).
+async function dispatchTrustedEnter(tabId) {
+  const params = { type: 'rawKeyDown', windowsVirtualKeyCode: 13, code: 'Enter', key: 'Enter' };
+  await chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', params);
+  await chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', { ...params, type: 'keyUp' });
+}
+
+// 칩 커밋 사이 짧은 대기 -- 페이지 넘김 때 쓰는 randomPageDelayMs()
+// (2.5~4.5초, 사람처럼 보이기 위한 지연)와는 목적이 다르다. 이건
+// 그냥 이번 칩이 화면에 반영될 시간을 주는 것뿐이라 짧게 잡는다.
+const CHIP_COMMIT_DELAY_MS = 400;
+
+// 검색창에 프로젝트의 keywords를 채우고 검색을 실행한다.
+// {ok, blocked, missing, firstCandidateIdBefore} 형태로 결과를 돌려준다
+// (기존 FILL_AND_SEARCH 메시지의 응답 모양과 호환되게 맞췄다 --
+// 호출부인 importBtn 핸들러의 이후 로직은 그대로 재사용).
+// 키워드가 하나도 없으면(andTerms/orTerms/notTerms 전부 빈 배열)
+// chrome.debugger를 붙이지도 않고 즉시 skipped:true로 돌아간다 --
+// 이미 사람인에 설정해 둔 화면을 예상 못하게 바꾸지 않기 위해서다.
+async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
+  if (!andTerms.length && !orTerms.length && !notTerms.length) {
+    return { ok: true, blocked: false, skipped: true };
+  }
+
+  const checkResult = await chrome.tabs.sendMessage(tabId, {
+    type: 'CHECK_SEARCH_INPUTS', needAnd: andTerms.length > 0, needOr: orTerms.length > 0, needNot: notTerms.length > 0
+  });
+  if (!checkResult || checkResult.blocked) return { ok: false, blocked: true, skipped: false };
+  if (!checkResult.ok) return { ok: false, blocked: false, skipped: false, missing: checkResult.missing };
+
+  await chrome.debugger.attach({ tabId }, '1.3');
+  try {
+    const boxes = [['or', orTerms], ['and', andTerms], ['not', notTerms]];
+    for (const [box, terms] of boxes) {
+      for (const term of terms) {
+        const fillResult = await chrome.tabs.sendMessage(tabId, { type: 'FILL_SEARCH_TERM', box, term });
+        if (!fillResult || fillResult.blocked) return { ok: false, blocked: true, skipped: false };
+        if (!fillResult.ok) return { ok: false, blocked: false, skipped: false, missing: [box.toUpperCase()] };
+        await dispatchTrustedEnter(tabId);
+        await wait(CHIP_COMMIT_DELAY_MS);
+      }
+    }
+
+    const clickResult = await chrome.tabs.sendMessage(tabId, { type: 'CLICK_SEARCH_BUTTON' });
+    if (!clickResult || clickResult.blocked) return { ok: false, blocked: true, skipped: false };
+    if (!clickResult.ok) return { ok: false, blocked: false, skipped: false };
+    return { ok: true, blocked: false, skipped: false, firstCandidateIdBefore: clickResult.firstCandidateIdBefore };
+  } finally {
+    // 디버깅 배너(크롬이 표시하는 "자동화 소프트웨어가 제어 중" 안내줄)를
+    // 최소한만 띄우려고, 칩 커밋이 끝나는 즉시(페이지 넘기기 전에)
+    // detach한다 -- 이후 CLICK_NEXT_PAGE/PARSE_CURRENT_LIST는 일반
+    // 클릭이라 debugger가 필요 없다(라이브 확인: 트러스트 여부와
+    // 무관하게 버튼 클릭 자체는 항상 실제 요청을 만들었음).
+    await chrome.debugger.detach({ tabId }).catch(() => {});
+  }
 }
 
 importBtn.addEventListener('click', async () => {
@@ -128,15 +197,14 @@ importBtn.addEventListener('click', async () => {
 
     importStatus.textContent = '검색 조건 채우는 중...';
     const [searchTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const searchResult = await chrome.tabs.sendMessage(searchTab.id, {
-      type: 'FILL_AND_SEARCH', andTerms, orTerms, notTerms
-    });
+    const searchResult = await fillAndSearch(searchTab.id, andTerms, orTerms, notTerms);
 
     let searchOk = false;
     if (searchResult && searchResult.blocked) {
       stopReason = '로그인/인증이 필요합니다 - 직접 처리 후 다시 시도해주세요';
     } else if (!searchResult || !searchResult.ok) {
-      stopReason = '검색 조건을 채우지 못했어요 - 사람인 화면 구조가 바뀌었을 수 있어요';
+      const missingNote = searchResult && searchResult.missing ? ` (${searchResult.missing.join(', ')} 칸을 못 찾음)` : '';
+      stopReason = `검색 조건을 채우지 못했어요 - 사람인 화면 구조가 바뀌었을 수 있어요${missingNote}`;
     } else {
       searchOk = true;
       if (!searchResult.skipped) {

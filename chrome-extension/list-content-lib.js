@@ -88,19 +88,27 @@ export function findNextPageButton(doc) {
   return fallback || null;
 }
 
-// 네이티브 input의 값 설정자를 통해 값을 바꾼 뒤 input 이벤트를
-// 발생시킨다. React 등 프레임워크로 만들어진 입력창은 `el.value = x`만
-// 으로는 내부 상태가 갱신되지 않는 경우가 흔해서(화면엔 값이 보여도
-// 검색 버튼을 눌렀을 때 실제로는 반영이 안 됨), 반드시 이 방식으로
-// 값을 채워야 한다. `inputEl.ownerDocument.defaultView`로 window를
-// 구해서 jsdom 테스트와 실제 콘텐츠 스크립트 양쪽에서 동일하게
+// 네이티브 input의 값 설정자를 통해 값을 바꾼 뒤 keyup/change 이벤트를
+// 발생시킨다. `el.value = x`만으로는 프레임워크의 내부 상태가 갱신되지
+// 않는 경우가 흔해서 네이티브 setter를 거쳐야 한다는 것까지는 맞지만,
+// 2026-09-02 실사용 확인 중 사람인 인재풀 검색창에서는 그 뒤에 `input`
+// 이벤트를 발생시키면 오히려 그 즉시(같은 틱 안에서 동기적으로) 값이
+// 다시 빈 문자열로 되돌아가는 것을 발견했다 -- 아마 실시간 자동완성/
+// 추천어 컴포넌트가 `input` 이벤트를 "아직 조합 중인 타이핑"으로
+// 해석해서 초기화하는 것으로 추정된다. 반면 `change`/`keyup`
+// 이벤트는 값을 되돌리지 않으면서도 화면의 "검색" 버튼이 최종 값을
+// 읽어가는 데 필요한 이벤트로 확인됐다(라이브 콘솔에서 setter+keyup+
+// change 조합으로 값이 유지되고, 그 뒤 검색 버튼 클릭도 그 값을
+// 정상적으로 읽어가는 것까지 확인). `inputEl.ownerDocument.defaultView`로
+// window를 구해서 jsdom 테스트와 실제 콘텐츠 스크립트 양쪽에서 동일하게
 // 동작하게 한다(콘텐츠 스크립트에서 그냥 전역 window를 참조하면 jsdom
 // 테스트 환경에서는 window가 없어 에러가 난다).
 export function setNativeInputValue(inputEl, text) {
   const win = inputEl.ownerDocument.defaultView;
   const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
   setter.call(inputEl, text);
-  inputEl.dispatchEvent(new win.Event('input', { bubbles: true }));
+  inputEl.dispatchEvent(new win.KeyboardEvent('keyup', { bubbles: true }));
+  inputEl.dispatchEvent(new win.Event('change', { bubbles: true }));
 }
 
 // 사람인 검색창의 OR/AND/NOT 3칸을 찾는다. 선택자는 2026-08-31 실사용
