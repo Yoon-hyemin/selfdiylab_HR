@@ -3794,12 +3794,25 @@ async function openTalentSearchProjectFlow(id){
 
   // 블록 1: 조건 설정
   const step1Done = p.status === 'approved';
+  const clarificationHtml = (p.clarificationNotes && p.clarificationNotes.length) ? `
+    <div style="font-size:12.5px;margin-top:8px;">
+      <div style="color:var(--sub);margin-bottom:4px;">추가질문 답변</div>
+      ${p.clarificationNotes.map(n=>`
+        <div style="margin-bottom:6px;">
+          <div style="color:var(--sub);">${escapeHtml(n.question)}</div>
+          <div>${n.answer ? escapeHtml(n.answer) : '<span style="color:var(--sub);">답하지 않음</span>'}</div>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
   const step1Body = step1Done ? `
     <div style="font-size:13px;margin-bottom:8px;">경력 ${p.experienceMinYears??'?'}~${p.experienceMaxYears??'?'}년 · 목표 ${p.targetRecommendCount}명 · ${tsTagChips(p.platforms)}</div>
     <div style="font-size:12.5px;color:var(--sub);">필수 ${tsTagChips(p.keywords?.include)} · OR ${tsTagChips(p.keywords?.or)} · 정확일치 ${tsTagChips(p.keywords?.exact)} · 제외 ${tsTagChips(p.keywords?.exclude)} · 우대 ${tsTagChips(p.keywords?.preferred)}</div>
+    ${clarificationHtml}
   ` : `
     <div style="font-size:13px;margin-bottom:10px;">경력 ${p.experienceMinYears??'?'}~${p.experienceMaxYears??'?'}년 · 목표 ${p.targetRecommendCount}명 · ${tsTagChips(p.platforms)}</div>
     <div style="font-size:12.5px;color:var(--sub);margin-bottom:10px;">필수 ${tsTagChips(p.keywords?.include)} · OR ${tsTagChips(p.keywords?.or)} · 정확일치 ${tsTagChips(p.keywords?.exact)} · 제외 ${tsTagChips(p.keywords?.exclude)} · 우대 ${tsTagChips(p.keywords?.preferred)}</div>
+    ${clarificationHtml}
     <button class="btn primary sm" onclick="approveTalentSearchProject('${p.id}')">이 조건으로 검색</button>
   `;
 
