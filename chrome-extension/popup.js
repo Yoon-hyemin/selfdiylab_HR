@@ -292,53 +292,68 @@ importBtn.addEventListener('click', async () => {
         // MAX_READINESS_POLL_ATTEMPTS 주석 참고). 클릭 전에 후보가 하나도
         // 없었다면(firstCandidateIdBefore가 null) 비교할 대상이 없으니
         // 기존처럼 지연 한 번만 두고 바로 진행한다.
-        for (let attempt = 0; attempt < MAX_READINESS_POLL_ATTEMPTS; attempt += 1) {
+        //
+        // 2026-09-02 실사용 확인 중 발견한 버그 수정: 예전엔 다 확인해도
+        // 결과가 안 바뀌면 "우연히 같을 수도 있다"고 보고 그냥 진행했는데,
+        // 실제로는 검색이 적용 안 된 채(예전 화면 그대로) 엉뚱한 후보
+        // 59명이 수집되는 사고로 이어졌다(인사회계 키워드인데 마케팅/
+        // 국제무역 태그의 후보가 들어옴). 결과가 끝까지 안 바뀌면 이제
+        // 우연으로 넘기지 않고 검색 실패로 처리해서 가져오기를 중단한다.
+        let confirmedChanged = !firstCandidateIdBefore; // 비교 대상이 없으면 그냥 통과시킨다
+        for (let attempt = 0; attempt < MAX_READINESS_POLL_ATTEMPTS && !confirmedChanged; attempt += 1) {
           await wait(randomPageDelayMs());
-          if (!firstCandidateIdBefore) break;
 
           const [readyTab] = await chrome.tabs.query({ active: true, currentWindow: true });
           const peek = await chrome.tabs.sendMessage(readyTab.id, { type: 'PARSE_CURRENT_LIST' }).catch(() => null);
-          if (peek && peek.blocked) break; // 아래 본 루프의 첫 PARSE_CURRENT_LIST가 다시 감지해 처리한다
+          if (peek && peek.blocked) { confirmedChanged = true; break; } // 아래 본 루프의 첫 PARSE_CURRENT_LIST가 다시 감지해 처리한다
           const firstNow = (peek && peek.candidates && peek.candidates[0] && peek.candidates[0].sourceUrl) || null;
-          if (firstNow !== firstCandidateIdBefore) break; // 결과가 바뀐 것을 확인했으니 더 기다리지 않는다
+          if (firstNow !== firstCandidateIdBefore) confirmedChanged = true; // 결과가 바뀐 것을 확인했으니 더 기다리지 않는다
+        }
+        if (!confirmedChanged) {
+          searchOk = false;
+          stopReason = '검색 결과가 안 바뀐 것 같아요 - 사람인에서 직접 확인 후 다시 시도해주세요(엉뚱한 후보가 수집되는 걸 막기 위해 중단했어요)';
         }
       }
 
-      // 정렬/최신순 필터는 키워드 검색 성공 여부와 무관하게 항상 적용한다
-      // (키워드가 하나도 없어 검색을 건너뛴 프로젝트에서도 마찬가지) --
-      // 실패해도(사람인 화면 구조가 바뀐 경우) 전체 가져오기를 막지는
-      // 않는다(list-content.js의 APPLY_DEFAULT_LIST_FILTERS 주석 참고).
-      const filtersResult = await chrome.tabs.sendMessage(searchTab.id, {
-        type: 'APPLY_DEFAULT_LIST_FILTERS', freshnessValue: DEFAULT_UPDATE_FRESHNESS_VALUE, sortLabel: DEFAULT_SORT_LABEL
-      }).catch(() => null);
-      if (filtersResult && (filtersResult.freshnessApplied || filtersResult.sortApplied)) {
-        // 필터/정렬 변경도 검색과 마찬가지로 실제 반영에 약간 시간이
-        // 걸리므로, 아래 가져오기 루프가 옛 결과를 읽지 않도록 한 번 쉰다.
-        await wait(randomPageDelayMs());
-      }
-
-      // 학력 조건(프로젝트별 설정, 고정 기본값 아님)도 같은 이유로
-      // 키워드 검색 성공 여부와 무관하게 적용한다 -- 실패해도 전체
-      // 가져오기를 막지 않는다(APPLY_EDUCATION_LEVELS 주석 참고).
-      const educationLevels = (selectedProject && selectedProject.educationLevels) || [];
-      if (educationLevels.length) {
-        const eduResult = await chrome.tabs.sendMessage(searchTab.id, {
-          type: 'APPLY_EDUCATION_LEVELS', levels: educationLevels
+      // 2026-09-02: 검색 결과 변경을 확인 못 해서 위에서 이미 searchOk를
+      // false로 내렸다면(검색 실패), 아래 필터/학력/지역 적용은 어차피
+      // 버려질 화면에 대고 사람인과 더 상호작용만 늘리는 셈이라 건너뛴다.
+      if (searchOk) {
+        // 정렬/최신순 필터는 키워드가 하나도 없어 검색을 건너뛴 프로젝트
+        // 에서도 적용한다 -- 실패해도(사람인 화면 구조가 바뀐 경우) 전체
+        // 가져오기를 막지는 않는다(APPLY_DEFAULT_LIST_FILTERS 주석 참고).
+        const filtersResult = await chrome.tabs.sendMessage(searchTab.id, {
+          type: 'APPLY_DEFAULT_LIST_FILTERS', freshnessValue: DEFAULT_UPDATE_FRESHNESS_VALUE, sortLabel: DEFAULT_SORT_LABEL
         }).catch(() => null);
-        if (eduResult && eduResult.appliedCount) await wait(randomPageDelayMs());
-      }
-
-      // 지역(구/군) 조건도 같은 이유로 적용한다. 시/도를 여러 번
-      // 오가야 해서 다른 필터보다 시간이 걸린다(applyLocationDistricts
-      // 주석 참고) -- importStatus에 진행 상황을 보여준다.
-      const locationDistricts = (selectedProject && selectedProject.locationDistricts) || [];
-      if (locationDistricts.length) {
-        importStatus.textContent = '지역 조건 적용 중... (시/도를 여러 번 확인해서 시간이 좀 걸려요)';
-        const locationResult = await applyLocationDistricts(searchTab.id, locationDistricts).catch(() => null);
-        if (locationResult && locationResult.notFound && locationResult.notFound.length) {
-          locationNote = `지역 조건 중 ${locationResult.notFound.join(', ')}은(는) 적용 못 했어요 - 사람인에서 직접 추가해주세요`;
+        if (filtersResult && (filtersResult.freshnessApplied || filtersResult.sortApplied)) {
+          // 필터/정렬 변경도 검색과 마찬가지로 실제 반영에 약간 시간이
+          // 걸리므로, 아래 가져오기 루프가 옛 결과를 읽지 않도록 한 번 쉰다.
+          await wait(randomPageDelayMs());
         }
-        await wait(randomPageDelayMs());
+
+        // 학력 조건(프로젝트별 설정, 고정 기본값 아님)도 같은 이유로
+        // 적용한다 -- 실패해도 전체 가져오기를 막지 않는다
+        // (APPLY_EDUCATION_LEVELS 주석 참고).
+        const educationLevels = (selectedProject && selectedProject.educationLevels) || [];
+        if (educationLevels.length) {
+          const eduResult = await chrome.tabs.sendMessage(searchTab.id, {
+            type: 'APPLY_EDUCATION_LEVELS', levels: educationLevels
+          }).catch(() => null);
+          if (eduResult && eduResult.appliedCount) await wait(randomPageDelayMs());
+        }
+
+        // 지역(구/군) 조건도 같은 이유로 적용한다. 시/도를 여러 번
+        // 오가야 해서 다른 필터보다 시간이 걸린다(applyLocationDistricts
+        // 주석 참고) -- importStatus에 진행 상황을 보여준다.
+        const locationDistricts = (selectedProject && selectedProject.locationDistricts) || [];
+        if (locationDistricts.length) {
+          importStatus.textContent = '지역 조건 적용 중... (시/도를 여러 번 확인해서 시간이 좀 걸려요)';
+          const locationResult = await applyLocationDistricts(searchTab.id, locationDistricts).catch(() => null);
+          if (locationResult && locationResult.notFound && locationResult.notFound.length) {
+            locationNote = `지역 조건 중 ${locationResult.notFound.join(', ')}은(는) 적용 못 했어요 - 사람인에서 직접 추가해주세요`;
+          }
+          await wait(randomPageDelayMs());
+        }
       }
     }
 
