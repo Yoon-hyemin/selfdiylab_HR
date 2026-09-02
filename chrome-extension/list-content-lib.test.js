@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton } from './list-content-lib.js';
+import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue } from './list-content-lib.js';
 
 function cardFromHtml(html) {
   const dom = new JSDOM(`<!DOCTYPE html><div id="root">${html}</div>`);
@@ -268,4 +268,44 @@ test('findSearchButton: 인자 없이도 기본으로 .search_form_wrap 범위 �
   `);
   const btn = findSearchButton(dom.window.document);
   assert.equal(btn.className, 'search_submit');
+});
+
+// 2026-09-02 실사용 확인: 정렬 토글(추천순/업데이트일순)과 "업데이트
+// N일/개월 이내" 필터 select는 칩 입력과 달리 합성 이벤트만으로도
+// 실제 검색을 다시 발생시켰다 -- chrome.debugger가 필요 없다.
+test('findSortButton: label과 정확히 일치하는 버튼을 찾는다', () => {
+  const dom = new JSDOM('<div><button class="active">추천순</button><button class="sort_item_update">업데이트일순</button></div>');
+  const btn = findSortButton(dom.window.document, '업데이트일순');
+  assert.equal(btn.className, 'sort_item_update');
+});
+
+test('findSortButton: 없으면 null', () => {
+  const dom = new JSDOM('<div><button>추천순</button></div>');
+  assert.equal(findSortButton(dom.window.document, '업데이트일순'), null);
+});
+
+test('findUpdateFreshnessSelect: 옵션에 "이내"가 포함된 select를 찾는다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <select name="career_min"><option>선택</option><option>1년 이상</option></select>
+      <select><option value="3day">업데이트 3일 이내</option><option value="6month">업데이트 6개월 이내</option></select>
+    </div>
+  `);
+  const sel = findUpdateFreshnessSelect(dom.window.document);
+  assert.equal(sel.options[1].value, '6month');
+});
+
+test('findUpdateFreshnessSelect: 없으면 null', () => {
+  const dom = new JSDOM('<div><select name="career_min"><option>선택</option></select></div>');
+  assert.equal(findUpdateFreshnessSelect(dom.window.document), null);
+});
+
+test('setNativeSelectValue: 값을 설정하고 change 이벤트를 발생시킨다', () => {
+  const dom = new JSDOM('<select><option value="3day">3일</option><option value="6month">6개월</option></select>');
+  const sel = dom.window.document.querySelector('select');
+  let changeValue = null;
+  sel.addEventListener('change', () => { changeValue = sel.value; });
+  setNativeSelectValue(sel, '6month');
+  assert.equal(sel.value, '6month');
+  assert.equal(changeValue, '6month');
 });

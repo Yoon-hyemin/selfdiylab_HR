@@ -150,3 +150,32 @@ export function findSearchButton(doc, containerSelector) {
     !isDisabled(el) && !isInKnownCarousel(el) && (el.textContent || '').trim() === '검색'
   ) || null;
 }
+
+// 정렬 기준(추천순/업데이트일순) 토글 버튼을 찾는다. 2026-09-02
+// 실사용 확인 -- 텍스트가 정확히 label과 일치하는 button 요소 하나뿐인
+// 것까지 확인했다(캐러셀 등 동명 오탐 후보 없음, findSearchButton과
+// 달리 별도 컨테이너 스코프 없이도 안전).
+export function findSortButton(doc, label) {
+  return Array.from(doc.querySelectorAll('button')).find(el => (el.textContent || '').trim() === label) || null;
+}
+
+// "업데이트 N일/개월 이내" 최신순 필터 드롭다운(select)을 찾는다.
+// name/id/class가 전혀 없어서(2026-09-02 실사용 확인) 옵션 텍스트에
+// "이내"가 포함되는지로 식별한다 -- 이 페이지의 9개 select 중 이
+// 문구를 쓰는 건 이거 하나뿐이다.
+export function findUpdateFreshnessSelect(doc) {
+  return Array.from(doc.querySelectorAll('select')).find(sel =>
+    Array.from(sel.options).some(o => (o.textContent || '').includes('이내'))
+  ) || null;
+}
+
+// <select>의 값을 프레임워크가 인식하게 바꾼다. 사람인 검색창의 칩
+// 입력(setNativeInputValue 참고)과 달리, 이 select는 합성 'change'
+// 이벤트만으로도 실제 검색 요청이 다시 발생하는 것까지 실사용
+// 확인했다 -- 신뢰된 입력(chrome.debugger)이 굳이 필요 없다.
+export function setNativeSelectValue(selectEl, value) {
+  const win = selectEl.ownerDocument.defaultView;
+  const setter = Object.getOwnPropertyDescriptor(win.HTMLSelectElement.prototype, 'value').set;
+  setter.call(selectEl, value);
+  selectEl.dispatchEvent(new win.Event('change', { bubbles: true }));
+}

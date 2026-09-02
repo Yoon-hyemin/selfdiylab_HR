@@ -132,6 +132,15 @@ async function dispatchTrustedEnter(tabId) {
 // 그냥 이번 칩이 화면에 반영될 시간을 주는 것뿐이라 짧게 잡는다.
 const CHIP_COMMIT_DELAY_MS = 400;
 
+// 2026-09-02: 사용자가 확정한 고정 기본값 -- 프로젝트별로 다르게
+// 설정하는 게 아니라 "목표 인원 채우기"를 누를 때마다 항상 이렇게
+// 적용한다. 이유: 업데이트가 너무 오래된 후보는 지금 이직 생각이
+// 없을 가능성이 높아서, 추천순 대신 최근 업데이트순으로 보고 싶고
+// (지금 활발히 움직이는 사람 우선), 6개월 넘게 업데이트 없는 후보는
+// 아예 검색 결과에서 빼고 싶다는 요청.
+const DEFAULT_UPDATE_FRESHNESS_VALUE = '6month';
+const DEFAULT_SORT_LABEL = '업데이트일순';
+
 // 검색창에 프로젝트의 keywords를 채우고 검색을 실행한다.
 // {ok, blocked, missing, firstCandidateIdBefore} 형태로 결과를 돌려준다
 // (기존 FILL_AND_SEARCH 메시지의 응답 모양과 호환되게 맞췄다 --
@@ -223,6 +232,19 @@ importBtn.addEventListener('click', async () => {
           const firstNow = (peek && peek.candidates && peek.candidates[0] && peek.candidates[0].sourceUrl) || null;
           if (firstNow !== firstCandidateIdBefore) break; // 결과가 바뀐 것을 확인했으니 더 기다리지 않는다
         }
+      }
+
+      // 정렬/최신순 필터는 키워드 검색 성공 여부와 무관하게 항상 적용한다
+      // (키워드가 하나도 없어 검색을 건너뛴 프로젝트에서도 마찬가지) --
+      // 실패해도(사람인 화면 구조가 바뀐 경우) 전체 가져오기를 막지는
+      // 않는다(list-content.js의 APPLY_DEFAULT_LIST_FILTERS 주석 참고).
+      const filtersResult = await chrome.tabs.sendMessage(searchTab.id, {
+        type: 'APPLY_DEFAULT_LIST_FILTERS', freshnessValue: DEFAULT_UPDATE_FRESHNESS_VALUE, sortLabel: DEFAULT_SORT_LABEL
+      }).catch(() => null);
+      if (filtersResult && (filtersResult.freshnessApplied || filtersResult.sortApplied)) {
+        // 필터/정렬 변경도 검색과 마찬가지로 실제 반영에 약간 시간이
+        // 걸리므로, 아래 가져오기 루프가 옛 결과를 읽지 않도록 한 번 쉰다.
+        await wait(randomPageDelayMs());
       }
     }
 

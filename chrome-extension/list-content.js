@@ -173,5 +173,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // 2026-09-02 추가: 정렬(추천순/업데이트일순)과 "업데이트 N 이내"
+  // 필터는 키워드 칩과 달리 합성 이벤트로도 실제 검색을 다시
+  // 일으킨다(실사용 확인) -- chrome.debugger 없이 이 콘텐츠 스크립트
+  // 안에서 전부 처리한다. 이 둘은 "고정 기본값"이라 못 찾아도(사람인
+  // 화면이 바뀐 경우) 전체 가져오기를 막을 정도는 아니라고 판단해서,
+  // 실패해도 ok:false만 돌려주고 popup.js가 계속 진행하게 한다(FILL_
+  // SEARCH_TERM과 달리 fail-closed로 전체를 중단시키지 않음).
+  if (message.type === 'APPLY_DEFAULT_LIST_FILTERS') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true, freshnessApplied: false, sortApplied: false });
+        return;
+      }
+      const { findUpdateFreshnessSelect, setNativeSelectValue, findSortButton } = await getLib();
+      const { freshnessValue, sortLabel } = message;
+
+      let freshnessApplied = false;
+      const freshnessSelect = findUpdateFreshnessSelect(document);
+      if (freshnessSelect && freshnessSelect.value !== freshnessValue) {
+        setNativeSelectValue(freshnessSelect, freshnessValue);
+        freshnessApplied = true;
+      }
+
+      // 이미 선택된 정렬을 다시 누르면 오름/내림차순이 뒤집힐 수 있어서
+      // (실사용 확인: 클릭 후 클래스에 arrow_down이 붙는 것으로 보아
+      // 방향 토글 가능성이 있음), 아직 활성화 안 된 경우에만 클릭한다.
+      let sortApplied = false;
+      const sortBtn = findSortButton(document, sortLabel);
+      if (sortBtn && !sortBtn.className.includes('active')) {
+        sortBtn.click();
+        sortApplied = true;
+      }
+
+      sendResponse({ ok: true, blocked: false, freshnessApplied, sortApplied });
+    })();
+    return true;
+  }
+
   return false;
 });
