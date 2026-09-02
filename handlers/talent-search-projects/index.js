@@ -4,12 +4,18 @@
  * GET  -> 200 { projects: [{ id, title, roleTitle, seniorityLevel,
  *              employmentType, headcount, location, targetRecommendCount,
  *              dailyRecommendCap, platforms, status, policyVersionId,
- *              createdAt }] } (최신순 전체)
+ *              keywords, locationDistricts, educationLevels, createdAt }] } (최신순 전체)
  * POST { title, roleTitle, seniorityLevel?, experienceMinYears?, experienceMaxYears?,
  *        employmentType, headcount, location?, workConditions?, naturalLanguageBrief?,
- *        keywords?: {include,or,exact,exclude,preferred}, targetRecommendCount,
+ *        keywords?: {include,or,exact,exclude,preferred}, locationDistricts?: string[],
+ *        educationLevels?: string[], targetRecommendCount,
  *        platforms: string[], clarificationNotes?: [{question,answer}] }
  *   -> 201 { id }
+ *
+ * locationDistricts/educationLevels(2026-09-02 추가)는 사람인 인재풀
+ * 사이드바 필터(구/군 단위 지역, 학력 5단계)에 대응하는 값이다 --
+ * keywords(자유 텍스트 3칸)와는 별개 컬럼. 둘 다 빈 배열이면 그
+ * 필터를 안 건드린다는 뜻.
  *
  * Phase 1C에서 POST만 만들었고(검색 프로젝트를 실제로 만드는 첫 엔드포인트,
  * status는 항상 'draft'로 시작) 목록 조회는 없었다. Phase 1D-1에서 GET을
@@ -44,6 +50,8 @@ function project_summary_out(row) {
     status: row.status,
     policyVersionId: row.policy_version_id,
     keywords: row.keywords,
+    locationDistricts: row.location_districts,
+    educationLevels: row.education_levels,
     createdAt: row.created_at
   };
 }
@@ -63,7 +71,7 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT id, title, role_title, seniority_level, employment_type, headcount,
                location, target_recommend_count, daily_recommend_cap, platforms,
-               status, policy_version_id, keywords, created_at
+               status, policy_version_id, keywords, location_districts, education_levels, created_at
         FROM talent_search_projects
         ORDER BY created_at DESC`;
       return res.status(200).json({ projects: rows.map(project_summary_out) });
@@ -91,14 +99,16 @@ export default async function handler(req, res) {
         INSERT INTO talent_search_projects (
           title, role_title, seniority_level, experience_min_years, experience_max_years,
           employment_type, headcount, location, work_conditions, natural_language_brief,
-          keywords, clarification_notes, target_recommend_count, platforms, created_by
+          keywords, clarification_notes, target_recommend_count, platforms, created_by,
+          location_districts, education_levels
         ) VALUES (
           ${body.title.trim()}, ${body.roleTitle ? body.roleTitle.trim() : null}, ${body.seniorityLevel || null},
           ${body.experienceMinYears ?? null}, ${body.experienceMaxYears ?? null},
           ${body.employmentType ? body.employmentType.trim() : null}, ${body.headcount ?? null}, ${body.location || null},
           ${JSON.stringify(body.workConditions || {})}::jsonb, ${body.naturalLanguageBrief || null},
           ${JSON.stringify(keywords)}::jsonb, ${JSON.stringify(body.clarificationNotes || [])}::jsonb,
-          ${body.targetRecommendCount}, ${JSON.stringify(body.platforms)}::jsonb, ${account.id}
+          ${body.targetRecommendCount}, ${JSON.stringify(body.platforms)}::jsonb, ${account.id},
+          ${JSON.stringify(body.locationDistricts || [])}::jsonb, ${JSON.stringify(body.educationLevels || [])}::jsonb
         ) RETURNING id`;
       return res.status(201).json({ id: row.id });
     } catch (err) {

@@ -246,6 +246,17 @@ importBtn.addEventListener('click', async () => {
         // 걸리므로, 아래 가져오기 루프가 옛 결과를 읽지 않도록 한 번 쉰다.
         await wait(randomPageDelayMs());
       }
+
+      // 학력 조건(프로젝트별 설정, 고정 기본값 아님)도 같은 이유로
+      // 키워드 검색 성공 여부와 무관하게 적용한다 -- 실패해도 전체
+      // 가져오기를 막지 않는다(APPLY_EDUCATION_LEVELS 주석 참고).
+      const educationLevels = (selectedProject && selectedProject.educationLevels) || [];
+      if (educationLevels.length) {
+        const eduResult = await chrome.tabs.sendMessage(searchTab.id, {
+          type: 'APPLY_EDUCATION_LEVELS', levels: educationLevels
+        }).catch(() => null);
+        if (eduResult && eduResult.appliedCount) await wait(randomPageDelayMs());
+      }
     }
 
     if (searchOk) {

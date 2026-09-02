@@ -10,6 +10,11 @@
 
 export const TALENT_SEARCH_PLATFORMS = ['사람인', '잡코리아', '리멤버', '원티드'];
 
+// 사람인 학력 필터의 고정 5개 값. 이 사이트가 정한 값이라 여기서
+// 새로 정의하지 않고 그대로 옮겨온다 -- 임의 문자열을 저장해서 나중에
+// 확장이 이 값으로 체크박스를 찾을 때 오타로 매칭 실패하는 걸 막는다.
+export const TALENT_SEARCH_EDUCATION_LEVELS = ['고등학교', '대학(2,3년)', '대학(4년)', '석사', '박사'];
+
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim().length > 0;
 }
@@ -35,6 +40,17 @@ export function validateTalentSearchProjectInput(body) {
       if (body.keywords[field] !== undefined && !isStringArray(body.keywords[field])) {
         return '키워드 형식이 올바르지 않아요';
       }
+    }
+  }
+
+  if (body.locationDistricts !== undefined && !isStringArray(body.locationDistricts)) {
+    return '지역 조건 형식이 올바르지 않아요';
+  }
+
+  if (body.educationLevels !== undefined) {
+    if (!isStringArray(body.educationLevels)) return '학력 조건 형식이 올바르지 않아요';
+    if (body.educationLevels.some(lv => !TALENT_SEARCH_EDUCATION_LEVELS.includes(lv))) {
+      return '학력 조건에 지원하지 않는 값이 포함돼 있어요';
     }
   }
 

@@ -212,5 +212,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // 2026-09-02 추가: 학력 필터(고정 5개 체크박스, 팝업 없음)를 프로젝트의
+  // educationLevels에 맞춰 체크한다. 정렬/최신순과 마찬가지로 "고정
+  // 기본값"이 아니라 프로젝트별 조건이지만, 사이드바 필터라는 점에서는
+  // 같은 부류라 이 메시지도 실패해도 ok:false만 돌려주고 전체 가져오기를
+  // 막지 않는다(키워드 칩과 달리 fail-closed 대상 아님).
+  if (message.type === 'APPLY_EDUCATION_LEVELS') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true, appliedCount: 0, notFound: [] });
+        return;
+      }
+      const { findEducationCheckboxLabel } = await getLib();
+      const { levels } = message;
+      let appliedCount = 0;
+      const notFound = [];
+      for (const level of levels) {
+        const label = findEducationCheckboxLabel(document, level);
+        if (!label) { notFound.push(level); continue; }
+        const input = document.getElementById(label.getAttribute('for'));
+        if (input && !input.checked) {
+          label.click();
+          appliedCount += 1;
+        }
+      }
+      sendResponse({ ok: true, blocked: false, appliedCount, notFound });
+    })();
+    return true;
+  }
+
   return false;
 });

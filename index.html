@@ -3807,7 +3807,7 @@ async function openTalentSearchProjectFlow(id){
   ` : '';
   const step1Body = step1Done ? `
     <div style="font-size:13px;margin-bottom:8px;">경력 ${p.experienceMinYears??'?'}~${p.experienceMaxYears??'?'}년 · 목표 ${p.targetRecommendCount}명 · ${tsTagChips(p.platforms)}</div>
-    <div style="font-size:12.5px;color:var(--sub);">필수 ${tsTagChips(p.keywords?.include)} · OR ${tsTagChips(p.keywords?.or)} · 정확일치 ${tsTagChips(p.keywords?.exact)} · 제외 ${tsTagChips(p.keywords?.exclude)} · 우대 ${tsTagChips(p.keywords?.preferred)}</div>
+    <div style="font-size:12.5px;color:var(--sub);">필수 ${tsTagChips(p.keywords?.include)} · OR ${tsTagChips(p.keywords?.or)} · 정확일치 ${tsTagChips(p.keywords?.exact)} · 제외 ${tsTagChips(p.keywords?.exclude)} · 우대 ${tsTagChips(p.keywords?.preferred)} · 지역 ${tsTagChips(p.locationDistricts)} · 학력 ${tsTagChips(p.educationLevels)}</div>
     ${clarificationHtml}
   ` : `
     <div style="font-size:13px;margin-bottom:10px;">경력 ${p.experienceMinYears??'?'}~${p.experienceMaxYears??'?'}년 · 목표 ${p.targetRecommendCount}명 · ${tsTagChips(p.platforms)}</div>
@@ -4174,6 +4174,9 @@ const TS_PLATFORMS = ['사람인', '잡코리아', '리멤버', '원티드'];
 // 된다(TS_PLATFORMS 자체는 안 바꿔도 됨, DB·검증 로직은 이미
 // 4개를 다 허용하고 있음).
 const TS_PLATFORMS_ENABLED = ['사람인'];
+// 사람인 학력 필터의 고정 5개 값(handlers/_lib/talentSearchProjectValidate.js의
+// TALENT_SEARCH_EDUCATION_LEVELS와 동일 -- 서버가 이 값 그대로 검증한다).
+const TS_EDUCATION_LEVELS = ['고등학교', '대학(2,3년)', '대학(4년)', '석사', '박사'];
 let tsProjectDraft = null;
 let tsJobTemplates = [];
 
@@ -4181,6 +4184,7 @@ async function openNewTalentSearchForm(){
   tsProjectDraft = {
     title:'', experienceMinYears:'', experienceMaxYears:'',
     keywords:{ include:'', or:'', exact:'', exclude:'', preferred:'' },
+    locationDistricts:'', educationLevels:[],
     targetRecommendCount:'', platforms:[],
     saveAsTemplate:false, templateName:''
   };
@@ -4214,6 +4218,12 @@ function renderNewTalentSearchForm(){
       <div class="field"><label>🔍 제외할 키워드 (검색에 사용, 쉼표로 구분)</label><input id="f-ts-kw-exclude" value="${escapeHtml(d.keywords.exclude)}"></div>
     </div>
     <div class="field"><label>⭐ 우대 키워드 (채점에만 사용, 검색엔 안 씀 · 쉼표로 구분)</label><input id="f-ts-kw-preferred" value="${escapeHtml(d.keywords.preferred)}"></div>
+    <div class="field"><label>🔍 지역 (검색에 사용, 구/군 단위로 쉼표로 구분 · 예: 영등포구, 마포구)</label><input id="f-ts-location-districts" value="${escapeHtml(d.locationDistricts)}"></div>
+    <div class="field"><label>🔍 학력 (검색에 사용, 해당하는 것만 선택 — 아무것도 선택 안 하면 전체)</label>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;">
+        ${TS_EDUCATION_LEVELS.map((lv,i)=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;"><input type="checkbox" id="f-ts-edu-${i}" ${d.educationLevels.includes(lv)?'checked':''}> ${escapeHtml(lv)}</label>`).join('')}
+      </div>
+    </div>
     <div class="form-row">
       <div class="field"><label>총 적합 추천 목표 인원</label><input id="f-ts-target" type="number" min="1" value="${escapeHtml(String(d.targetRecommendCount))}"></div>
       <div class="field"><label>검색할 플랫폼</label>
@@ -4267,6 +4277,8 @@ function loadTemplateIntoForm(idxStr){
       exclude: (c.keywords?.exclude || []).join(', '),
       preferred: (c.keywords?.preferred || []).join(', ')
     },
+    locationDistricts: (c.locationDistricts || []).join(', '),
+    educationLevels: (c.educationLevels || []).filter(lv => TS_EDUCATION_LEVELS.includes(lv)),
     targetRecommendCount: c.targetRecommendCount ?? '',
     platforms: (c.platforms || []).filter(p => TS_PLATFORMS_ENABLED.includes(p))
   };
@@ -4283,6 +4295,8 @@ function captureNewTalentSearchForm(){
   d.keywords.exact = document.getElementById('f-ts-kw-exact').value;
   d.keywords.exclude = document.getElementById('f-ts-kw-exclude').value;
   d.keywords.preferred = document.getElementById('f-ts-kw-preferred').value;
+  d.locationDistricts = document.getElementById('f-ts-location-districts').value;
+  d.educationLevels = TS_EDUCATION_LEVELS.filter((lv,i)=>document.getElementById('f-ts-edu-'+i).checked);
   d.targetRecommendCount = document.getElementById('f-ts-target').value;
   d.platforms = TS_PLATFORMS_ENABLED.filter((p,i)=>document.getElementById('f-ts-platform-'+i).checked);
   d.saveAsTemplate = document.getElementById('f-ts-savetemplate').checked;
@@ -4360,6 +4374,8 @@ async function saveNewTalentSearchProject(clarificationNotes){
       exclude: splitKeywords(d.keywords.exclude),
       preferred: splitKeywords(d.keywords.preferred)
     },
+    locationDistricts: splitKeywords(d.locationDistricts),
+    educationLevels: d.educationLevels,
     targetRecommendCount: Number(d.targetRecommendCount),
     platforms: d.platforms
   };

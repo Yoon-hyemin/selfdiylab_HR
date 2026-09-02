@@ -24,6 +24,8 @@ export function project_detail_out(row) {
     workConditions: row.work_conditions,
     naturalLanguageBrief: row.natural_language_brief,
     keywords: row.keywords,
+    locationDistricts: row.location_districts,
+    educationLevels: row.education_levels,
     clarificationNotes: row.clarification_notes,
     targetRecommendCount: row.target_recommend_count,
     dailyRecommendCap: row.daily_recommend_cap,

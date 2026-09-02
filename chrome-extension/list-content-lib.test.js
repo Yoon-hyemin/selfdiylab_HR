@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue } from './list-content-lib.js';
+import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue, findEducationCheckboxLabel } from './list-content-lib.js';
 
 function cardFromHtml(html) {
   const dom = new JSDOM(`<!DOCTYPE html><div id="root">${html}</div>`);
@@ -308,4 +308,18 @@ test('setNativeSelectValue: 값을 설정하고 change 이벤트를 발생시킨
   setNativeSelectValue(sel, '6month');
   assert.equal(sel.value, '6month');
   assert.equal(changeValue, '6month');
+});
+
+test('findEducationCheckboxLabel: 텍스트가 정확히 일치하는 label을 찾는다', () => {
+  const dom = new JSDOM(`
+    <span class="Chk"><input type="checkbox" id="edu_8"><label for="edu_8">대학(4년)</label></span>
+    <span class="Chk"><input type="checkbox" id="edu_16"><label for="edu_16">석사</label></span>
+  `);
+  const label = findEducationCheckboxLabel(dom.window.document, '대학(4년)');
+  assert.equal(label.getAttribute('for'), 'edu_8');
+});
+
+test('findEducationCheckboxLabel: 없으면 null', () => {
+  const dom = new JSDOM('<span class="Chk"><label for="edu_1">고등학교</label></span>');
+  assert.equal(findEducationCheckboxLabel(dom.window.document, '박사'), null);
 });

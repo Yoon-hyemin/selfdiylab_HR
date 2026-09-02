@@ -179,3 +179,16 @@ export function setNativeSelectValue(selectEl, value) {
   setter.call(selectEl, value);
   selectEl.dispatchEvent(new win.Event('change', { bubbles: true }));
 }
+
+// 학력 필터 체크박스(고정 5개 -- handlers/_lib/talentSearchProjectValidate.js의
+// TALENT_SEARCH_EDUCATION_LEVELS와 동일)를 찾는다. 2026-09-02 실사용
+// 확인 -- 팝업 없이 사이드바에 바로 <label>(텍스트가 학력명과 정확히
+// 일치)과 그 옆 <input type="checkbox">가 있다. label을 클릭하면
+// 연결된 체크박스가 토글되는 표준 브라우저 동작이라, 정렬/최신순
+// select와 마찬가지로 신뢰된 입력이 필요 없을 것으로 보이지만
+// (라이브 세션이 중간에 로그아웃돼서) 실제 체크 이후 검색 요청까지
+// 발생하는 것은 아직 재확인 못 했다 -- 다음에 이 기능을 다룰 때
+// 반드시 한 번 더 확인할 것.
+export function findEducationCheckboxLabel(doc, level) {
+  return Array.from(doc.querySelectorAll('label')).find(el => el.textContent.trim() === level) || null;
+}
