@@ -177,21 +177,25 @@ test('setNativeInputValue: 값을 설정하고 input 이벤트를 발생시킨�
   assert.equal(firedValue, '영상편집');
 });
 
-test('findSearchInputs: placeholder로 OR/AND/NOT 3칸을 찾는다', () => {
+// 2026-08-31 실제 인재풀 검색결과 화면에서 로그인해서 직접 확인한
+// 실제 구조 -- 세 칸 모두 placeholder/name/id가 없고 동일한 class
+// (search_input result)를 공유해서, 부모 컨테이너의 class로만
+// 구분된다.
+test('findSearchInputs: 컨테이너 class로 OR/AND/NOT 3칸을 찾는다', () => {
   const dom = new JSDOM(`
-    <div>
-      <input placeholder="하나 이상의 키워드 포함">
-      <input placeholder="키워드를 모두 포함">
-      <input placeholder="제외할 키워드">
+    <div class="search_form_wrap">
+      <div class="search_default"><input class="search_input result"></div>
+      <div class="search_word_include"><input class="search_input result" value="인플루언서, 시딩"></div>
+      <div class="search_word_except"><input class="search_input result"></div>
     </div>
   `);
   const inputs = findSearchInputs(dom.window.document);
-  assert.equal(inputs.or.placeholder, '하나 이상의 키워드 포함');
-  assert.equal(inputs.and.placeholder, '키워드를 모두 포함');
-  assert.equal(inputs.not.placeholder, '제외할 키워드');
+  assert.ok(inputs.or);
+  assert.equal(inputs.and.value, '인플루언서, 시딩');
+  assert.ok(inputs.not);
 });
 
-test('findSearchInputs: 못 찾으면 null', () => {
+test('findSearchInputs: 컨테이너가 없으면 null', () => {
   const dom = new JSDOM('<div></div>');
   const inputs = findSearchInputs(dom.window.document);
   assert.equal(inputs.or, null);
@@ -239,4 +243,18 @@ test('findSearchButton: containerSelector를 주면 그 범위 안에서만 찾�
   `);
   const btn = findSearchButton(dom.window.document, '.inside_box');
   assert.equal(btn.parentElement.className, 'inside_box');
+});
+
+// 2026-08-31 실제 확인: 컨테이너 인자를 안 줘도 기본으로
+// .search_form_wrap 범위 안에서 찾는다(그 화면엔 "검색" 버튼이 이
+// 하나뿐인 것까지 실사용 확인했지만, 방어적으로 스코프를 유지한다).
+test('findSearchButton: 인자 없이도 기본으로 .search_form_wrap 범위 안에서 찾는다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <div class="outside"><button>검색</button></div>
+      <div class="search_form_wrap"><button class="search_submit">검색</button></div>
+    </div>
+  `);
+  const btn = findSearchButton(dom.window.document);
+  assert.equal(btn.className, 'search_submit');
 });

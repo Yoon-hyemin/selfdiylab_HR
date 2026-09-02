@@ -103,40 +103,41 @@ export function setNativeInputValue(inputEl, text) {
   inputEl.dispatchEvent(new win.Event('input', { bubbles: true }));
 }
 
-// 사람인 검색창의 OR/AND/NOT 3칸을 찾는다. 선택자는 2026-08-28 시점
-// 미검증 추정치 -- placeholder 텍스트로 우선 찾고, 없으면 name 속성
-// 폴백을 시도한다. 못 찾으면 해당 키는 null이 된다(추측해서 엉뚱한
-// input에 값을 넣지 않는다 -- 이 프로젝트의 fail-closed 원칙).
+// 사람인 검색창의 OR/AND/NOT 3칸을 찾는다. 선택자는 2026-08-31 실사용
+// 확인 기준(로그인해서 실제 인재풀 검색결과 화면의 DOM을 직접 열어봄)
+// -- 세 칸 모두 placeholder/name/id가 없고 동일한 class
+// (`search_input result`)를 공유해서, 처음 추정했던 placeholder/name
+// 기반 탐색은 셋 다 못 찾고 매번 "검색 조건을 채우지 못했어요"로
+// 실패했다(실사용 확인 중 발견). 실제로는 각 칸을 감싸는 부모 요소의
+// class로만 구분된다: OR="search_default", AND="search_word_include",
+// NOT="search_word_except". 컨테이너 자체가 없으면(사람인이 구조를
+// 다시 바꾼 경우) 추측하지 않고 null로 둔다(이 프로젝트의 fail-closed
+// 원칙).
 export function findSearchInputs(doc) {
-  const byPlaceholder = (text) =>
-    Array.from(doc.querySelectorAll('input')).find(el => (el.placeholder || '').includes(text)) || null;
+  const inContainer = (containerClass) => {
+    const container = doc.querySelector('.' + containerClass);
+    return container ? container.querySelector('input') : null;
+  };
   return {
-    or: byPlaceholder('하나 이상의 키워드') || doc.querySelector('input[name="or_word"]'),
-    and: byPlaceholder('키워드를 모두 포함') || doc.querySelector('input[name="and_word"]'),
-    not: byPlaceholder('제외할 키워드') || doc.querySelector('input[name="not_word"]')
+    or: inContainer('search_default'),
+    and: inContainer('search_word_include'),
+    not: inContainer('search_word_except')
   };
 }
 
-// 검색 버튼을 찾는다. 텍스트가 정확히 "검색"인 button 요소를 찾는다.
-//
-// 알려진 위험(라이브 검증 전 필수 재검토 대상): findNextPageButton은
-// 처음엔 "다음" 텍스트만으로 문서 전체를 훑다가, 같은 화면 위쪽의
-// 스페셜 태그 캐러셀에 있는 동명("다음") 버튼을 먼저 잡아버리는
-// 오탐을 실사용 검증 중 발견하고서야 `.PageBox` 컨테이너로 좁혀
-// 고쳤다(위 findNextPageButton 주석 참고). 이 함수도 아직 같은
-// 페이지-전체 텍스트 매칭 방식이라 같은 종류의 오탐(화면에 "검색"
-// 버튼이 여러 개 있으면 엉뚱한 걸 클릭)에 노출돼 있다 -- 실제 검색창
-// 컨테이너 선택자는 findSearchInputs와 마찬가지로 아직 미검증이라
-// 지금 당장 진짜 컨테이너로 좁히지는 못했다. 대신 (1) 이미 오탐으로
-// 확인된 캐러셀 영역은 배제하고 (2) 나중에 실제 컨테이너 선택자를
-// 알게 되면 바로 좁혀 쓸 수 있도록 선택적 containerSelector 인자를
-// 받는다. 라이브 검증 시 반드시 실제 컨테이너로 좁힐 것.
+// 검색 버튼을 찾는다. 2026-08-31 실사용 확인 기준 정확한 선택자는
+// `.search_form_wrap .search_submit`이다 -- findNextPageButton이 겪은
+// "페이지 전체 텍스트 매칭이 캐러셀의 동명 버튼을 잘못 집는" 문제와
+// 같은 위험을 피하려고 처음부터 컨테이너(`search_form_wrap`)로
+// 스코프를 좁혀서 찾는다. 이 화면엔 "검색" 텍스트를 가진 버튼이
+// 이 하나뿐인 것까지 실사용 확인 중 직접 확인했다(캐러셀 등 오탐
+// 후보 없음) -- 그래도 배제 로직은 방어적으로 유지한다.
 export function findSearchButton(doc, containerSelector) {
   const isDisabled = el => el.disabled || el.getAttribute('aria-disabled') === 'true'
     || (el.className && String(el.className).includes('disabled'));
   const isInKnownCarousel = el => !!el.closest('.special_tag_wrap, .swiper');
 
-  const scope = (containerSelector && doc.querySelector(containerSelector)) || doc;
+  const scope = doc.querySelector(containerSelector || '.search_form_wrap') || doc;
   return Array.from(scope.querySelectorAll('button')).find(el =>
     !isDisabled(el) && !isInKnownCarousel(el) && (el.textContent || '').trim() === '검색'
   ) || null;
