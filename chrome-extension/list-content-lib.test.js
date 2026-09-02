@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue, findEducationCheckboxLabel } from './list-content-lib.js';
+import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue, findEducationCheckboxLabel, findFilterAddButton, findRegionPanel, findRegionTabButton, findRegionListButton, findDistrictCheckboxLabel, findRegionSaveButton } from './list-content-lib.js';
 
 function cardFromHtml(html) {
   const dom = new JSDOM(`<!DOCTYPE html><div id="root">${html}</div>`);
@@ -322,4 +322,80 @@ test('findEducationCheckboxLabel: 텍스트가 정확히 일치하는 label을 �
 test('findEducationCheckboxLabel: 없으면 null', () => {
   const dom = new JSDOM('<span class="Chk"><label for="edu_1">고등학교</label></span>');
   assert.equal(findEducationCheckboxLabel(dom.window.document, '박사'), null);
+});
+
+// 2026-09-02 실사용 확인(로그인해서 실제 "지역 추가" 팝업을 열어 직접
+// 읽어봄, 체크박스는 클릭 안 하고 구조만 확인)한 실제 DOM을 재현한
+// fixture.
+function regionFixtureHtml() {
+  return `
+    <div>
+      <span class="talent_filter_tit">지역<button>추가</button></span>
+      <div class="filter_layer_depth">
+        <ul><li class="is_on">근무희망지역</li><li>거주지역</li></ul>
+        <button>근무희망지역</button>
+        <button>거주지역</button>
+        <button class="filter_depth1 on">서울</button>
+        <button class="filter_depth1">경기</button>
+        <input type="checkbox" id="local_depth2_101000"><label for="local_depth2_101000">서울전체</label>
+        <input type="checkbox" id="local_depth2_101010"><label for="local_depth2_101010">강남구</label>
+        <input type="checkbox" id="local_depth2_101370"><label for="local_depth2_101370">영등포구</label>
+        <button class="BtnType SizeM btn_save">저장</button>
+      </div>
+      <span class="talent_filter_tit">직무<button>추가</button></span>
+    </div>
+  `;
+}
+
+test('findFilterAddButton: 섹션 라벨로 시작하는 타이틀 안의 추가 버튼을 찾는다', () => {
+  const dom = new JSDOM(regionFixtureHtml());
+  const btn = findFilterAddButton(dom.window.document, '지역');
+  assert.equal(btn.textContent.trim(), '추가');
+  // "직무" 섹션의 추가 버튼이 아니라 "지역" 섹션 것이어야 한다
+  assert.equal(btn.closest('.talent_filter_tit').textContent.includes('지역'), true);
+});
+
+test('findFilterAddButton: 없으면 null', () => {
+  const dom = new JSDOM('<span class="talent_filter_tit">직무<button>추가</button></span>');
+  assert.equal(findFilterAddButton(dom.window.document, '지역'), null);
+});
+
+test('findRegionPanel: 근무희망지역/거주지역 탭이 있는 패널을 찾는다', () => {
+  const dom = new JSDOM(regionFixtureHtml());
+  const panel = findRegionPanel(dom.window.document);
+  assert.equal(panel.className, 'filter_layer_depth');
+});
+
+test('findRegionPanel: 팝업이 안 열려있으면 null', () => {
+  const dom = new JSDOM('<div>지역 추가</div>');
+  assert.equal(findRegionPanel(dom.window.document), null);
+});
+
+test('findRegionTabButton: 탭 텍스트로 버튼을 찾는다', () => {
+  const dom = new JSDOM(regionFixtureHtml());
+  const btn = findRegionTabButton(dom.window.document, '거주지역');
+  assert.equal(btn.tagName, 'BUTTON');
+});
+
+test('findRegionListButton: 시/도 이름으로 filter_depth1 버튼을 찾는다', () => {
+  const dom = new JSDOM(regionFixtureHtml());
+  const btn = findRegionListButton(dom.window.document, '경기');
+  assert.equal(btn.className, 'filter_depth1');
+});
+
+test('findDistrictCheckboxLabel: 구/군 이름으로 label을 찾는다(팝업 범위 안에서만)', () => {
+  const dom = new JSDOM(regionFixtureHtml());
+  const label = findDistrictCheckboxLabel(dom.window.document, '영등포구');
+  assert.equal(label.getAttribute('for'), 'local_depth2_101370');
+});
+
+test('findDistrictCheckboxLabel: 없으면 null', () => {
+  const dom = new JSDOM(regionFixtureHtml());
+  assert.equal(findDistrictCheckboxLabel(dom.window.document, '마포구'), null);
+});
+
+test('findRegionSaveButton: 저장 버튼을 찾는다', () => {
+  const dom = new JSDOM(regionFixtureHtml());
+  const btn = findRegionSaveButton(dom.window.document);
+  assert.equal(btn.className, 'BtnType SizeM btn_save');
 });

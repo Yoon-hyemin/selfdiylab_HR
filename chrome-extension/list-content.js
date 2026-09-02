@@ -242,5 +242,85 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // 지역(구/군) 필터는 팝업 안에 있어서 학력보다 단계가 많다 -- "지역
+  // 추가" 클릭(OPEN_REGION_PANEL) → 시/도 하나 선택(SELECT_REGION_LIST_
+  // ITEM) → 그 시/도의 구/군 체크박스 중 원하는 것 체크
+  // (CHECK_DISTRICT_CHECKBOXES) → (다른 시/도로 반복) → 저장
+  // (SAVE_REGION_PANEL). 여러 시/도를 오가야 하므로 popup.js가 이
+  // 네 메시지를 순서대로 여러 번 호출하며 오케스트레이션한다 -- 이
+  // 파일은 매번 "지금 보이는 것"만 처리하고 반복/지연은 모른다(다른
+  // 팝업/버튼 자동화와 같은 원칙). 2026-09-02 실사용 확인(로그인해서
+  // 팝업을 직접 열어 구조를 읽음, 체크박스는 안 눌러봄) 기준 선택자를
+  // 썼지만 실제 체크 이후 검색에 반영되는지는 아직 검증 전이다.
+  if (message.type === 'OPEN_REGION_PANEL') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true });
+        return;
+      }
+      const { findFilterAddButton, findRegionPanel } = await getLib();
+      if (findRegionPanel(document)) { sendResponse({ ok: true, blocked: false }); return; } // 이미 열려있으면 그대로 둔다
+      const addBtn = findFilterAddButton(document, '지역');
+      if (!addBtn) { sendResponse({ ok: false, blocked: false }); return; }
+      addBtn.click();
+      sendResponse({ ok: true, blocked: false });
+    })();
+    return true;
+  }
+
+  if (message.type === 'SELECT_REGION_LIST_ITEM') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true });
+        return;
+      }
+      const { findRegionListButton } = await getLib();
+      const btn = findRegionListButton(document, message.regionName);
+      if (!btn) { sendResponse({ ok: false, blocked: false }); return; }
+      btn.click();
+      sendResponse({ ok: true, blocked: false });
+    })();
+    return true;
+  }
+
+  if (message.type === 'CHECK_DISTRICT_CHECKBOXES') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true, matchedNames: [] });
+        return;
+      }
+      const { findDistrictCheckboxLabel } = await getLib();
+      const matchedNames = [];
+      for (const districtName of message.districts) {
+        const label = findDistrictCheckboxLabel(document, districtName);
+        if (!label) continue; // 지금 보이는 시/도에는 없는 구/군 -- 다른 시/도일 수 있으니 계속 진행
+        const input = document.getElementById(label.getAttribute('for'));
+        if (input && !input.checked) label.click();
+        matchedNames.push(districtName);
+      }
+      sendResponse({ ok: true, blocked: false, matchedNames });
+    })();
+    return true;
+  }
+
+  if (message.type === 'SAVE_REGION_PANEL') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true });
+        return;
+      }
+      const { findRegionSaveButton } = await getLib();
+      const saveBtn = findRegionSaveButton(document);
+      if (!saveBtn) { sendResponse({ ok: false, blocked: false }); return; }
+      saveBtn.click();
+      sendResponse({ ok: true, blocked: false });
+    })();
+    return true;
+  }
+
   return false;
 });

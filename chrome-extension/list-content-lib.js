@@ -192,3 +192,58 @@ export function setNativeSelectValue(selectEl, value) {
 export function findEducationCheckboxLabel(doc, level) {
   return Array.from(doc.querySelectorAll('label')).find(el => el.textContent.trim() === level) || null;
 }
+
+// 지역(구/군) 필터는 학력과 달리 팝업 안에 있다 -- "지역 추가" 클릭 →
+// 근무희망지역/거주지역 탭 → 시/도 목록(왼쪽) → 그 시/도의 구/군
+// 체크박스(오른쪽) → 저장. 2026-09-02 실사용 확인(실제 로그인 세션에서
+// 팝업을 열어 직접 읽어봄, 클릭은 안 하고 구조만 확인) 기준 선택자:
+//
+// "지역 추가" 버튼은 여러 필터 섹션이 전부 "추가" 버튼을 쓰고 같은
+// class(.talent_filter_tit)를 공유해서, 그 안의 텍스트가 "지역"으로
+// 시작하는 것만 골라 스코프를 좁힌다(findFilterAddButton은 재사용
+// 가능하도록 sectionLabel을 인자로 받는다 -- 지금은 지역에만 쓰지만
+// 나중에 다른 "추가" 팝업 섹션이 필요해지면 그대로 쓸 수 있다).
+export function findFilterAddButton(doc, sectionLabel) {
+  const titleEl = Array.from(doc.querySelectorAll('.talent_filter_tit')).find(el => el.textContent.trim().startsWith(sectionLabel));
+  return titleEl ? titleEl.querySelector('button') : null;
+}
+
+// 지역 팝업 패널 자체. 근무희망지역/거주지역 탭 텍스트가 둘 다 있는
+// .filter_layer_depth로 식별한다(팝업이 열려있지 않으면 null).
+export function findRegionPanel(doc) {
+  return Array.from(doc.querySelectorAll('.filter_layer_depth')).find(el =>
+    el.textContent.includes('근무희망지역') && el.textContent.includes('거주지역')
+  ) || null;
+}
+
+// 팝업 안 "근무희망지역"/"거주지역" 탭 버튼.
+export function findRegionTabButton(doc, tabLabel) {
+  const panel = findRegionPanel(doc);
+  if (!panel) return null;
+  return Array.from(panel.querySelectorAll('button')).find(el => el.textContent.trim() === tabLabel) || null;
+}
+
+// 팝업 왼쪽의 시/도 목록 버튼(예: "서울", "경기"). class가
+// `filter_depth1`이고 선택되면 "on" class가 추가된다.
+export function findRegionListButton(doc, regionName) {
+  const panel = findRegionPanel(doc);
+  if (!panel) return null;
+  return Array.from(panel.querySelectorAll('.filter_depth1')).find(el => el.textContent.trim() === regionName) || null;
+}
+
+// 지금 선택된 시/도의 구/군 체크박스를 텍스트로 찾는다(학력과 같은
+// label+checkbox 패턴, id는 `local_depth2_<코드>` 형식). 팝업 범위로
+// 좁혀서 찾는다 -- 페이지의 다른 곳에 같은 이름의 label이 있어도
+// (구 이름이 흔치는 않지만) 엉뚱한 걸 건드리지 않기 위해서다.
+export function findDistrictCheckboxLabel(doc, districtName) {
+  const panel = findRegionPanel(doc);
+  if (!panel) return null;
+  return Array.from(panel.querySelectorAll('label')).find(el => el.textContent.trim() === districtName) || null;
+}
+
+// 팝업의 "저장" 버튼(class: BtnType SizeM btn_save).
+export function findRegionSaveButton(doc) {
+  const panel = findRegionPanel(doc);
+  if (!panel) return null;
+  return Array.from(panel.querySelectorAll('button')).find(el => el.textContent.trim() === '저장') || null;
+}

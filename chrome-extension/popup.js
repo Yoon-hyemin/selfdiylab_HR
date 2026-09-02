@@ -186,6 +186,53 @@ async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
   }
 }
 
+// 한국 시/도 17개(전국/해외 지역은 "구/군" 개념 자체가 없어서 뺐다).
+// 2026-09-02 실사용 확인(팝업을 직접 열어 읽어봄) 기준 목록 -- 순서는
+// 사람인 화면에 보이는 순서 그대로.
+const TS_REGION_LIST = [
+  '서울', '경기', '대구', '대전', '부산', '울산', '인천', '강원',
+  '경남', '경북', '전남광주', '전북', '충북', '충남', '제주', '세종특별자치시'
+];
+
+// 지역(구/군) 조건을 사람인 "지역 추가" 팝업에 적용한다. 원하는 구/군이
+// 정확히 어느 시/도 소속인지 이 확장은 모르므로(사람인의 지역 분류를
+// 따로 들고 있지 않음), 시/도를 하나씩 순회하며 그때그때 보이는 구/군
+// 체크박스에서 이름이 일치하는 것만 체크한다 -- 이미 다 찾았으면
+// (remaining이 비면) 남은 시/도는 건너뛴다. 같은 이름의 구/군이 여러
+// 시/도에 있으면(예: "중구") 전부 체크될 수 있다는 걸 알아둘 것 --
+// 이번 범위에서는 그 모호성을 따로 해소하지 않는다.
+//
+// 학력/정렬/최신순 필터와 마찬가지로 실패해도(사람인 화면 구조가
+// 바뀐 경우) 전체 가져오기를 막지 않는다. 시/도를 최대 16번 오가야
+// 해서 다른 어떤 자동화보다 사람인과 상호작용이 많다 -- 안전장치로
+// 매 시/도 전환 사이에 randomPageDelayMs()(2.5~4.5초)를 둔다.
+async function applyLocationDistricts(tabId, districts) {
+  if (!districts.length) return { ok: true, skipped: true };
+
+  const openResult = await chrome.tabs.sendMessage(tabId, { type: 'OPEN_REGION_PANEL' }).catch(() => null);
+  if (!openResult || openResult.blocked) return { ok: false, blocked: !!(openResult && openResult.blocked), skipped: false };
+  if (!openResult.ok) return { ok: false, blocked: false, skipped: false };
+  await wait(randomPageDelayMs());
+
+  const remaining = new Set(districts);
+  for (const region of TS_REGION_LIST) {
+    if (!remaining.size) break;
+    const selectResult = await chrome.tabs.sendMessage(tabId, { type: 'SELECT_REGION_LIST_ITEM', regionName: region }).catch(() => null);
+    if (!selectResult || !selectResult.ok) continue; // 이 시/도 버튼을 못 찾아도 나머지는 계속 시도
+    await wait(randomPageDelayMs());
+
+    const checkResult = await chrome.tabs.sendMessage(tabId, {
+      type: 'CHECK_DISTRICT_CHECKBOXES', districts: Array.from(remaining)
+    }).catch(() => null);
+    (checkResult && checkResult.matchedNames || []).forEach(d => remaining.delete(d));
+  }
+
+  const saveResult = await chrome.tabs.sendMessage(tabId, { type: 'SAVE_REGION_PANEL' }).catch(() => null);
+  if (!saveResult || !saveResult.ok) return { ok: false, blocked: false, skipped: false, matchedCount: districts.length - remaining.size, notFound: Array.from(remaining) };
+
+  return { ok: true, blocked: false, skipped: false, matchedCount: districts.length - remaining.size, notFound: Array.from(remaining) };
+}
+
 importBtn.addEventListener('click', async () => {
   const token = await loadSavedToken();
   const projectId = projectSelect.value;
@@ -256,6 +303,16 @@ importBtn.addEventListener('click', async () => {
           type: 'APPLY_EDUCATION_LEVELS', levels: educationLevels
         }).catch(() => null);
         if (eduResult && eduResult.appliedCount) await wait(randomPageDelayMs());
+      }
+
+      // 지역(구/군) 조건도 같은 이유로 적용한다. 시/도를 여러 번
+      // 오가야 해서 다른 필터보다 시간이 걸린다(applyLocationDistricts
+      // 주석 참고) -- importStatus에 진행 상황을 보여준다.
+      const locationDistricts = (selectedProject && selectedProject.locationDistricts) || [];
+      if (locationDistricts.length) {
+        importStatus.textContent = '지역 조건 적용 중... (시/도를 여러 번 확인해서 시간이 좀 걸려요)';
+        await applyLocationDistricts(searchTab.id, locationDistricts).catch(() => null);
+        await wait(randomPageDelayMs());
       }
     }
 
