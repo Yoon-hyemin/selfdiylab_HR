@@ -194,6 +194,24 @@ const TS_REGION_LIST = [
   '경남', '경북', '전남광주', '전북', '충북', '충남', '제주', '세종특별자치시'
 ];
 
+// 시/도 하나를 선택하고, 지금 남은 구/군 중 그 시/도에서 찾을 수 있는
+// 것만 체크한 뒤, 새로 찾은 이름들을 돌려준다(remaining Set은 호출부가
+// 갱신한다 -- 이 함수는 그 세트를 직접 건드리지 않는다).
+async function selectRegionAndCheckDistricts(tabId, region, remainingDistricts) {
+  const selectResult = await chrome.tabs.sendMessage(tabId, { type: 'SELECT_REGION_LIST_ITEM', regionName: region }).catch(() => null);
+  if (!selectResult || !selectResult.ok) return []; // 이 시/도 버튼을 못 찾아도 나머지는 계속 시도
+  // 시/도를 바꾸면 오른쪽 구/군 체크박스 목록이 다시 그려진다 -- 그
+  // 렌더링이 끝나기 전에 확인하면 화면에 아직 없는 항목을 놓칠 수
+  // 있어서(실사용 확인 중 5개 중 2개를 놓친 사례 발견, 정확한 원인은
+  // 못 밝혔지만 타이밍이 유력한 후보), 다른 어떤 대기보다 넉넉하게 둔다.
+  await wait(randomPageDelayMs() + 1000);
+
+  const checkResult = await chrome.tabs.sendMessage(tabId, {
+    type: 'CHECK_DISTRICT_CHECKBOXES', districts: Array.from(remainingDistricts)
+  }).catch(() => null);
+  return (checkResult && checkResult.matchedNames) || [];
+}
+
 // 지역(구/군) 조건을 사람인 "지역 추가" 팝업에 적용한다. 원하는 구/군이
 // 정확히 어느 시/도 소속인지 이 확장은 모르므로(사람인의 지역 분류를
 // 따로 들고 있지 않음), 시/도를 하나씩 순회하며 그때그때 보이는 구/군
@@ -202,10 +220,18 @@ const TS_REGION_LIST = [
 // 시/도에 있으면(예: "중구") 전부 체크될 수 있다는 걸 알아둘 것 --
 // 이번 범위에서는 그 모호성을 따로 해소하지 않는다.
 //
+// 전체를 두 바퀴 돈다(REGION_SWEEP_PASSES) -- 첫 바퀴에서 실사용
+// 확인 중 5개 중 2개를 놓치는 사례가 있었고(타이밍 문제로 추정,
+// 정확한 원인은 못 밝힘), 놓친 구/군만 다시 전체를 훑으면 그런
+// 일시적인 누락을 만회할 수 있다. 두 번째 바퀴에서도 안 잡히면
+// notFound로 보고한다.
+//
 // 학력/정렬/최신순 필터와 마찬가지로 실패해도(사람인 화면 구조가
-// 바뀐 경우) 전체 가져오기를 막지 않는다. 시/도를 최대 16번 오가야
-// 해서 다른 어떤 자동화보다 사람인과 상호작용이 많다 -- 안전장치로
-// 매 시/도 전환 사이에 randomPageDelayMs()(2.5~4.5초)를 둔다.
+// 바뀐 경우) 전체 가져오기를 막지 않는다. 시/도를 최대 32번(2바퀴 ×
+// 16개) 오가야 해서 다른 어떤 자동화보다 사람인과 상호작용이 많다 --
+// 안전장치로 매 시/도 전환 사이에 넉넉한 지연을 둔다.
+const REGION_SWEEP_PASSES = 2;
+
 async function applyLocationDistricts(tabId, districts) {
   if (!districts.length) return { ok: true, skipped: true };
 
@@ -215,16 +241,12 @@ async function applyLocationDistricts(tabId, districts) {
   await wait(randomPageDelayMs());
 
   const remaining = new Set(districts);
-  for (const region of TS_REGION_LIST) {
-    if (!remaining.size) break;
-    const selectResult = await chrome.tabs.sendMessage(tabId, { type: 'SELECT_REGION_LIST_ITEM', regionName: region }).catch(() => null);
-    if (!selectResult || !selectResult.ok) continue; // 이 시/도 버튼을 못 찾아도 나머지는 계속 시도
-    await wait(randomPageDelayMs());
-
-    const checkResult = await chrome.tabs.sendMessage(tabId, {
-      type: 'CHECK_DISTRICT_CHECKBOXES', districts: Array.from(remaining)
-    }).catch(() => null);
-    (checkResult && checkResult.matchedNames || []).forEach(d => remaining.delete(d));
+  for (let pass = 0; pass < REGION_SWEEP_PASSES && remaining.size; pass += 1) {
+    for (const region of TS_REGION_LIST) {
+      if (!remaining.size) break;
+      const matched = await selectRegionAndCheckDistricts(tabId, region, remaining);
+      matched.forEach(d => remaining.delete(d));
+    }
   }
 
   const saveResult = await chrome.tabs.sendMessage(tabId, { type: 'SAVE_REGION_PANEL' }).catch(() => null);
@@ -246,6 +268,7 @@ importBtn.addEventListener('click', async () => {
   let totalSkipped = 0;
   let pageCount = 0;
   let stopReason = null;
+  let locationNote = null;
 
   try {
     const selectedProject = cachedApprovedProjects.find(p => p.id === projectId);
@@ -311,7 +334,10 @@ importBtn.addEventListener('click', async () => {
       const locationDistricts = (selectedProject && selectedProject.locationDistricts) || [];
       if (locationDistricts.length) {
         importStatus.textContent = '지역 조건 적용 중... (시/도를 여러 번 확인해서 시간이 좀 걸려요)';
-        await applyLocationDistricts(searchTab.id, locationDistricts).catch(() => null);
+        const locationResult = await applyLocationDistricts(searchTab.id, locationDistricts).catch(() => null);
+        if (locationResult && locationResult.notFound && locationResult.notFound.length) {
+          locationNote = `지역 조건 중 ${locationResult.notFound.join(', ')}은(는) 적용 못 했어요 - 사람인에서 직접 추가해주세요`;
+        }
         await wait(randomPageDelayMs());
       }
     }
@@ -377,13 +403,14 @@ importBtn.addEventListener('click', async () => {
     }
 
     if (totalImported === 0 && totalSkipped === 0) {
-      importStatus.textContent = stopReason || '가져올 후보를 찾지 못했어요';
+      importStatus.textContent = [stopReason || '가져올 후보를 찾지 못했어요', locationNote].filter(Boolean).join(' / ');
     } else {
       let summary = pageCount > 1
         ? `${pageCount}페이지에 걸쳐 ${totalImported}명 가져왔어요`
         : `${totalImported}명 가져왔어요`;
       if (totalSkipped) summary += ` (${totalSkipped}명은 조건에 안 맞아 제외)`;
       if (stopReason) summary += ` — ${stopReason}`;
+      if (locationNote) summary += ` / ${locationNote}`;
       importStatus.textContent = summary;
     }
   } catch (err) {
