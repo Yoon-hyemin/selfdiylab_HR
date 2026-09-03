@@ -167,6 +167,17 @@ async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
   await chrome.tabs.sendMessage(tabId, { type: 'CLEAR_SEARCH_TERMS' }).catch(() => null);
   await wait(CHIP_COMMIT_DELAY_MS);
 
+  // 2026-09-02 실사용 확인 중 발견한 두 번째 버그: 칩 하나를 Enter로
+  // 커밋할 때마다 그 즉시 검색이 다시 실행된다(라이브 확인, popup.js의
+  // "정렬/최신순" 관련 기존 주석과 같은 발견) -- 즉 마지막 검색버튼
+  // 클릭 시점에는 이미 마지막 키워드까지 다 반영된 뒤라, 그 시점을
+  // "이전" 기준으로 잡으면(예전 코드) 검색버튼 클릭 자체는 아무것도
+  // 안 바꾸므로 "결과가 안 바뀌었다"고 잘못 판단해서 멀쩡한 검색을
+  // 실패로 처리하는 사고가 났다. 그래서 "이전" 기준은 첫 키워드를
+  // 채우기 전(비우기 직후)의 화면으로 잡아야 한다.
+  const beforeAnyFillResult = await chrome.tabs.sendMessage(tabId, { type: 'PARSE_CURRENT_LIST' }).catch(() => null);
+  const firstCandidateIdBefore = (beforeAnyFillResult && beforeAnyFillResult.candidates && beforeAnyFillResult.candidates[0] && beforeAnyFillResult.candidates[0].sourceUrl) || null;
+
   await chrome.debugger.attach({ tabId }, '1.3');
   try {
     const boxes = [['or', orTerms], ['and', andTerms], ['not', notTerms]];
@@ -183,7 +194,7 @@ async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
     const clickResult = await chrome.tabs.sendMessage(tabId, { type: 'CLICK_SEARCH_BUTTON' });
     if (!clickResult || clickResult.blocked) return { ok: false, blocked: true, skipped: false };
     if (!clickResult.ok) return { ok: false, blocked: false, skipped: false };
-    return { ok: true, blocked: false, skipped: false, firstCandidateIdBefore: clickResult.firstCandidateIdBefore };
+    return { ok: true, blocked: false, skipped: false, firstCandidateIdBefore };
   } finally {
     // 디버깅 배너(크롬이 표시하는 "자동화 소프트웨어가 제어 중" 안내줄)를
     // 최소한만 띄우려고, 칩 커밋이 끝나는 즉시(페이지 넘기기 전에)
