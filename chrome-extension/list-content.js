@@ -161,12 +161,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, blocked: false });
         return;
       }
-      // 칩 입력창은 이전 칩들과 별개인 "지금 타이핑 중" 버퍼 하나만
-      // 노출한다 -- 이전 칩(예: 이미 커밋된 다른 키워드)은 이 input의
-      // value에 안 보이므로 그대로 두고, 지금 커밋할 키워드 하나만
-      // 채운다. 커밋(Enter)은 popup.js가 이어서 보낸다.
+      // 2026-09-03 재설계: 실사용 확인 중 발견 -- 이 값을 네이티브
+      // setter+keyup/change로 직접 채우면 화면(DOM value)에는 정상
+      // 표시되지만, 이 칩 컴포넌트가 React 계열 controlled input이라
+      // 실제 상태는 'input' 이벤트로만 갱신된다(keyup/change로는 안
+      // 갱신됨). 그래서 그 뒤 아무리 진짜 Enter를 보내도 컴포넌트는
+      // "지금까지 입력된 게 없다"고 보고 칩을 안 만든다 -- 화면엔
+      // 글자가 보이는데 커밋만 안 되는 증상이 정확히 이거였다(라이브
+      // 진단으로 확인: 사람처럼 실제 타이핑 후 Enter는 칩을 만들지만,
+      // 이 방식은 안 만듦). 그래서 여기서는 이제 값을 채우지 않고
+      // 포커스를 주면서 남아있던 이전 타이핑 버퍼만 비운다 -- 실제
+      // 텍스트 입력은 popup.js가 chrome.debugger의 Input.insertText로
+      // (진짜 타이핑과 동일한 신뢰 경로) 보낸다.
       input.focus();
-      setNativeInputValue(input, message.term);
+      setNativeInputValue(input, '');
       sendResponse({ ok: true, blocked: false });
     })();
     return true;

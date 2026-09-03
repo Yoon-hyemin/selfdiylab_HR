@@ -121,8 +121,34 @@ function buildSearchTerms(keywords) {
 // 이 함수가 아니라 호출 직전 FILL_SEARCH_TERM이 이미 맞춰둔
 // input에 그대로 적용된다(키보드 이벤트는 좌표가 아니라 지금
 // 포커스된 요소를 대상으로 하므로).
+// 2026-09-03 추가: 키워드 글자 자체를 "진짜" 입력으로 넣는다.
+// FILL_SEARCH_TERM(콘텐츠 스크립트)이 네이티브 setter로 값을 채우던
+// 이전 방식은 화면엔 정상 표시되지만, 사람인 검색창이 React 계열
+// controlled input이라 실제 내부 상태는 'input' 이벤트로만 갱신된다는
+// 게 라이브 진단으로 드러났다 -- keyup/change만으로는 내부 상태가
+// 안 바뀌어서, 그 뒤 아무리 진짜 Enter를 보내도 "입력된 게 없다"고
+// 판단해 칩이 안 만들어졌다(콘솔엔 매 단계 성공으로 찍히는데 실제
+// DOM엔 커밋된 칩이 하나도 없던 증상의 원인). CDP의 Input.insertText는
+// 실제 사용자가 타이핑한 것과 동일한 신뢰 경로로 텍스트를 삽입해서
+// (한글 조합 입력도 이 방식이 표준) 이 문제를 피한다 -- 사람처럼 한
+// 글자씩 실제 typing으로 넣었을 때는 Enter로 칩이 정상 생성되는 것을
+// 별도 라이브 테스트로 먼저 확인한 뒤 이 함수를 추가했다.
+async function dispatchTrustedText(tabId, text) {
+  await chrome.debugger.sendCommand({ tabId }, 'Input.insertText', { text });
+}
+
 async function dispatchTrustedEnter(tabId) {
-  const params = { type: 'rawKeyDown', windowsVirtualKeyCode: 13, code: 'Enter', key: 'Enter' };
+  // 2026-09-02: 모든 단계가 "성공"으로 찍히는데도 실제로는 칩이 안
+  // 생기는 문제 진단 중 발견 -- CDP 표준 라이브러리(Puppeteer)가 실제로
+  // 쓰는 Enter 페이로드를 그대로 맞췄다. 이전엔 type:'rawKeyDown'에
+  // text 필드가 없어서 크롬이 "이 키가 문자를 만들어내는 키"라고 인식
+  // 못했을 가능성이 있다 -- text/unmodifiedText가 있으면 type을
+  // 'keyDown'으로 보내야 크롬이 그에 맞는 후속 처리(문자 입력 이벤트
+  // 생성 등)까지 같이 해준다.
+  const params = {
+    type: 'keyDown', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+    code: 'Enter', key: 'Enter', text: '\r', unmodifiedText: '\r'
+  };
   await chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', params);
   await chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', { ...params, type: 'keyUp' });
 }
@@ -164,7 +190,7 @@ async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
   // 새 키워드가 그냥 더 쌓인다(CLEAR_SEARCH_TERMS 주석 참고). 이 버튼을
   // 못 찾아도(사람인 화면 구조가 바뀐 경우) 전체를 막지는 않는다 --
   // 못 지워도 채우기 자체는 여전히 시도해볼 가치가 있어서다.
-  await chrome.tabs.sendMessage(tabId, { type: 'CLEAR_SEARCH_TERMS' }).catch(() => null);
+  await chrome.tabs.sendMessage(tabId, { type: 'CLEAR_SEARCH_TERMS' }).catch(err => { console.log('[TS] CLEAR_SEARCH_TERMS 예외', err.message); return null; });
   await wait(CHIP_COMMIT_DELAY_MS);
 
   // 2026-09-02 실사용 확인 중 발견한 두 번째 버그: 칩 하나를 Enter로
@@ -178,7 +204,12 @@ async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
   const beforeAnyFillResult = await chrome.tabs.sendMessage(tabId, { type: 'PARSE_CURRENT_LIST' }).catch(() => null);
   const firstCandidateIdBefore = (beforeAnyFillResult && beforeAnyFillResult.candidates && beforeAnyFillResult.candidates[0] && beforeAnyFillResult.candidates[0].sourceUrl) || null;
 
-  await chrome.debugger.attach({ tabId }, '1.3');
+  try {
+    await chrome.debugger.attach({ tabId }, '1.3');
+  } catch (err) {
+    console.log('[TS] chrome.debugger.attach 실패', err.message);
+    return { ok: false, blocked: false, skipped: false, missing: ['DEBUGGER_ATTACH_FAILED: ' + err.message] };
+  }
   try {
     const boxes = [['or', orTerms], ['and', andTerms], ['not', notTerms]];
     for (const [box, terms] of boxes) {
@@ -186,7 +217,12 @@ async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
         const fillResult = await chrome.tabs.sendMessage(tabId, { type: 'FILL_SEARCH_TERM', box, term });
         if (!fillResult || fillResult.blocked) return { ok: false, blocked: true, skipped: false };
         if (!fillResult.ok) return { ok: false, blocked: false, skipped: false, missing: [box.toUpperCase()] };
-        await dispatchTrustedEnter(tabId);
+        try {
+          await dispatchTrustedText(tabId, term);
+          await dispatchTrustedEnter(tabId);
+        } catch (err) {
+          console.log('[TS] 텍스트/Enter 입력 예외', box, term, err.message);
+        }
         await wait(CHIP_COMMIT_DELAY_MS);
       }
     }
@@ -303,8 +339,10 @@ importBtn.addEventListener('click', async () => {
       const freshData = await freshRes.json();
       if (freshRes.ok) {
         cachedApprovedProjects = freshData.projects.filter(p => p.status === 'approved');
+      } else {
+        console.log('[TS] 프로젝트 목록 갱신 실패', freshRes.status);
       }
-    } catch (err) { /* 갱신 실패하면 기존 캐시로 계속 진행 -- 완전히 막지 않음 */ }
+    } catch (err) { console.log('[TS] 프로젝트 목록 갱신 중 예외', err.message); }
     selectedProject = cachedApprovedProjects.find(p => p.id === projectId);
     const { andTerms, orTerms, notTerms } = buildSearchTerms(selectedProject && selectedProject.keywords);
 
