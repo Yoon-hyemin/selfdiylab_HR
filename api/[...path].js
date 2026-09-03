@@ -70,6 +70,7 @@ import talentSearchProjectsIdApprove from '../handlers/talent-search-projects/[i
 import talentSearchProjectsIdCandidates from '../handlers/talent-search-projects/[id]/candidates.js';
 import talentSearchProjectsIdCandidateId from '../handlers/talent-search-projects/[id]/candidates/[candidateId].js';
 import talentSearchProjectsIdListCandidates from '../handlers/talent-search-projects/[id]/list-candidates.js';
+import talentSearchProjectsIdListCandidateId from '../handlers/talent-search-projects/[id]/list-candidates/[candidateId].js';
 import talentSearchJobTemplatesIndex from '../handlers/talent-search-job-templates/index.js';
 import auditLogIndex from '../handlers/audit-log/index.js';
 import revenueIndex from '../handlers/revenue/index.js';
@@ -128,6 +129,7 @@ const ROUTES = [
   { pattern: ['talent-search-projects', ':id', 'candidates'], handler: talentSearchProjectsIdCandidates },
   { pattern: ['talent-search-projects', ':id', 'candidates', ':candidateId'], handler: talentSearchProjectsIdCandidateId },
   { pattern: ['talent-search-projects', ':id', 'list-candidates'], handler: talentSearchProjectsIdListCandidates },
+  { pattern: ['talent-search-projects', ':id', 'list-candidates', ':candidateId'], handler: talentSearchProjectsIdListCandidateId },
   { pattern: ['talent-search-job-templates'], handler: talentSearchJobTemplatesIndex },
   { pattern: ['audit-log'], handler: auditLogIndex },
   { pattern: ['revenue'], handler: revenueIndex },

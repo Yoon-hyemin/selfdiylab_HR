@@ -37,7 +37,9 @@ function candidate_out(row) {
     badges: row.badges,
     lastUpdatedLabel: row.last_updated_label,
     sourceUrl: row.source_url,
-    importedAt: row.created_at
+    importedAt: row.created_at,
+    internalReviewStatus: row.internal_review_status,
+    internalReviewNote: row.internal_review_note
   };
 }
 
