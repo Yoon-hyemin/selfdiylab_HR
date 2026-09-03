@@ -247,3 +247,19 @@ export function findRegionSaveButton(doc) {
   if (!panel) return null;
   return Array.from(panel.querySelectorAll('button')).find(el => el.textContent.trim() === '저장') || null;
 }
+
+// OR/AND/NOT 검색어(칩)만 지우는 "초기화" 버튼을 찾는다. 2026-09-02
+// 실사용 확인 중 발견한 버그: 검색창은 이전에 커밋된 키워드를 새
+// 프로젝트를 실행해도 자동으로 안 지우고 계속 쌓아간다(예: 예전
+// 프로젝트의 "영상PD"가 남은 채로 새 프로젝트의 "커머스"가 그 위에
+// 얹힘) -- 그래서 채우기 전에 반드시 이 버튼으로 먼저 비워야 한다.
+// 이 페이지에 "초기화" 버튼이 여러 개 있다(사이드바 필터 전체 초기화,
+// 개별 필터 초기화 등) -- 그중 검색창 바로 위 "검색 조건 불러오기/
+// 저장"과 같은 줄에 있는 것(부모 class가 `btn_search_history_wrap`)만
+// 정확히 OR/AND/NOT 세 칸만 지우고 지역/학력 등 사이드바 필터는 안
+// 건드리는 것까지 라이브로 확인했다.
+export function findKeywordResetButton(doc) {
+  return Array.from(doc.querySelectorAll('button')).find(el =>
+    el.textContent.trim() === '초기화' && el.parentElement && el.parentElement.className === 'btn_search_history_wrap'
+  ) || null;
+}

@@ -122,6 +122,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // 2026-09-02 추가: 실사용 확인 중 발견한 버그 수정 -- 이 검색창은
+  // 이전에 커밋된 키워드 칩을 새로 값을 채운다고 자동으로 지워주지
+  // 않는다. 그래서 프로젝트를 바꿔가며 여러 번 실행하면 예전 키워드
+  // 위에 새 키워드가 계속 쌓인다(실사용 확인: "영상PD"가 남은 채로
+  // "커머스"가 얹힘). FILL_SEARCH_TERM으로 값을 채우기 전에 반드시
+  // 한 번 이 메시지로 비워야 한다. "초기화" 버튼이 페이지에 여러 개
+  // 있어서(사이드바 필터 전체 초기화 등) findKeywordResetButton으로
+  // OR/AND/NOT 세 칸만 지우는 것만 정확히 골라 쓴다 -- 지역/학력 등
+  // 사이드바 필터는 안 건드리는 것까지 라이브로 확인했다.
+  if (message.type === 'CLEAR_SEARCH_TERMS') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true });
+        return;
+      }
+      const { findKeywordResetButton } = await getLib();
+      const resetBtn = findKeywordResetButton(document);
+      if (!resetBtn) { sendResponse({ ok: false, blocked: false }); return; }
+      resetBtn.click();
+      sendResponse({ ok: true, blocked: false });
+    })();
+    return true;
+  }
+
   if (message.type === 'FILL_SEARCH_TERM') {
     (async () => {
       const { isBlockedPage } = await getBlockedCheck();

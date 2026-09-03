@@ -159,6 +159,14 @@ async function fillAndSearch(tabId, andTerms, orTerms, notTerms) {
   if (!checkResult || checkResult.blocked) return { ok: false, blocked: true, skipped: false };
   if (!checkResult.ok) return { ok: false, blocked: false, skipped: false, missing: checkResult.missing };
 
+  // 2026-09-02 실사용 확인 중 발견한 버그 수정: 새 값을 채우기 전에 반드시
+  // 먼저 비운다 -- 안 그러면 예전 프로젝트에서 커밋된 키워드 칩 위에
+  // 새 키워드가 그냥 더 쌓인다(CLEAR_SEARCH_TERMS 주석 참고). 이 버튼을
+  // 못 찾아도(사람인 화면 구조가 바뀐 경우) 전체를 막지는 않는다 --
+  // 못 지워도 채우기 자체는 여전히 시도해볼 가치가 있어서다.
+  await chrome.tabs.sendMessage(tabId, { type: 'CLEAR_SEARCH_TERMS' }).catch(() => null);
+  await wait(CHIP_COMMIT_DELAY_MS);
+
   await chrome.debugger.attach({ tabId }, '1.3');
   try {
     const boxes = [['or', orTerms], ['and', andTerms], ['not', notTerms]];

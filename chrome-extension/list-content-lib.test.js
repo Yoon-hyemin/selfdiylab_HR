@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue, findEducationCheckboxLabel, findFilterAddButton, findRegionPanel, findRegionTabButton, findRegionListButton, findDistrictCheckboxLabel, findRegionSaveButton } from './list-content-lib.js';
+import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue, findEducationCheckboxLabel, findFilterAddButton, findRegionPanel, findRegionTabButton, findRegionListButton, findDistrictCheckboxLabel, findRegionSaveButton, findKeywordResetButton } from './list-content-lib.js';
 
 function cardFromHtml(html) {
   const dom = new JSDOM(`<!DOCTYPE html><div id="root">${html}</div>`);
@@ -398,4 +398,30 @@ test('findRegionSaveButton: 저장 버튼을 찾는다', () => {
   const dom = new JSDOM(regionFixtureHtml());
   const btn = findRegionSaveButton(dom.window.document);
   assert.equal(btn.className, 'BtnType SizeM btn_save');
+});
+
+// 2026-09-02 실사용 확인: 이 화면엔 "초기화" 버튼이 여러 개 있다(사이드바
+// 필터 전체 초기화, 개별 필터 초기화 등) -- 검색창 위쪽의 것(부모 class
+// btn_search_history_wrap)만 OR/AND/NOT을 지우고 지역/학력 등 사이드바
+// 필터는 안 건드리는 것까지 라이브로 확인했다.
+test('findKeywordResetButton: btn_search_history_wrap 안의 초기화 버튼만 찾는다', () => {
+  const dom = new JSDOM(`
+    <div>
+      <div class="filter_top"><button class="btn_reset_filter">초기화</button></div>
+      <div class="btn_search_history_wrap">
+        <button>검색 조건 불러오기</button>
+        <button>검색 조건 저장</button>
+        <button class="btn_reset">초기화</button>
+      </div>
+      <div class="btn_reset_area"><button class="btn_reset">초기화</button></div>
+    </div>
+  `);
+  const btn = findKeywordResetButton(dom.window.document);
+  assert.equal(btn.className, 'btn_reset');
+  assert.equal(btn.parentElement.className, 'btn_search_history_wrap');
+});
+
+test('findKeywordResetButton: 없으면 null', () => {
+  const dom = new JSDOM('<div class="filter_top"><button class="btn_reset_filter">초기화</button></div>');
+  assert.equal(findKeywordResetButton(dom.window.document), null);
 });
