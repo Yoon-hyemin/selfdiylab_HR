@@ -2,9 +2,10 @@
  * handlers/talent-search-projects/index.js
  *
  * GET  -> 200 { projects: [{ id, title, roleTitle, seniorityLevel,
- *              employmentType, headcount, location, targetRecommendCount,
- *              dailyRecommendCap, platforms, status, policyVersionId,
- *              keywords, locationDistricts, educationLevels, createdAt }] } (최신순 전체)
+ *              experienceMinYears, experienceMaxYears, employmentType, headcount,
+ *              location, targetRecommendCount, dailyRecommendCap, platforms,
+ *              status, policyVersionId, keywords, locationDistricts,
+ *              educationLevels, createdAt }] } (최신순 전체)
  * POST { title, roleTitle, seniorityLevel?, experienceMinYears?, experienceMaxYears?,
  *        employmentType, headcount, location?, workConditions?, naturalLanguageBrief?,
  *        keywords?: {include,or,exact,exclude,preferred}, locationDistricts?: string[],
@@ -30,6 +31,13 @@
  * 빠져 있어서 승인된 프로젝트를 하나도 못 찾아 "누적 추천"이 항상 0으로
  * 나오는 버그가 있었다(수동 검증 중 발견). 이미 존재하는 컬럼(sql/018)을
  * 목록에도 내려주는 것뿐이라 스키마 변경이나 새 엔드포인트는 아니다.
+ *
+ * 2026-09-03 버그 수정: experience_min_years/experience_max_years도
+ * 같은 이유로 이 목록 응답에 빠져 있었다 -- 크롬 확장의 "목표 인원
+ * 채우기"가 프로젝트 조건을 읽어올 때 이 목록 엔드포인트를 쓰는데,
+ * 값 자체가 응답에 없어서 화면(1단계 조건 요약)엔 경력 범위가 보여도
+ * 확장은 그 값을 아예 받을 수 없어 사람인 검색에 전혀 반영되지
+ * 않았다(실사용에서 "경력 설정란은 있지만 반영이 안 된다"로 발견됨).
  */
 import { sql } from '../_lib/db.js';
 import { requireTalentSearchAccess, requireTalentSearchAccessOrToken } from '../_lib/accountAuth.js';
@@ -41,6 +49,8 @@ function project_summary_out(row) {
     title: row.title,
     roleTitle: row.role_title,
     seniorityLevel: row.seniority_level,
+    experienceMinYears: row.experience_min_years === null ? null : Number(row.experience_min_years),
+    experienceMaxYears: row.experience_max_years === null ? null : Number(row.experience_max_years),
     employmentType: row.employment_type,
     headcount: row.headcount,
     location: row.location,
@@ -69,9 +79,10 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const rows = await sql`
-        SELECT id, title, role_title, seniority_level, employment_type, headcount,
-               location, target_recommend_count, daily_recommend_cap, platforms,
-               status, policy_version_id, keywords, location_districts, education_levels, created_at
+        SELECT id, title, role_title, seniority_level, experience_min_years, experience_max_years,
+               employment_type, headcount, location, target_recommend_count, daily_recommend_cap,
+               platforms, status, policy_version_id, keywords, location_districts, education_levels,
+               created_at
         FROM talent_search_projects
         ORDER BY created_at DESC`;
       return res.status(200).json({ projects: rows.map(project_summary_out) });

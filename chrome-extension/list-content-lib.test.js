@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue, findEducationCheckboxLabel, findFilterAddButton, findRegionPanel, findRegionTabButton, findRegionListButton, findDistrictCheckboxLabel, findRegionSaveButton, findKeywordResetButton } from './list-content-lib.js';
+import { parseCandidateCard, findNextPageButton, setNativeInputValue, findSearchInputs, findSearchButton, findSortButton, findUpdateFreshnessSelect, setNativeSelectValue, findCareerRangeSelects, careerMinOptionValue, careerMaxOptionValue, findEducationCheckboxLabel, findFilterAddButton, findRegionPanel, findRegionTabButton, findRegionListButton, findDistrictCheckboxLabel, findRegionSaveButton, findKeywordResetButton } from './list-content-lib.js';
 
 function cardFromHtml(html) {
   const dom = new JSDOM(`<!DOCTYPE html><div id="root">${html}</div>`);
@@ -308,6 +308,54 @@ test('setNativeSelectValue: 값을 설정하고 change 이벤트를 발생시킨
   setNativeSelectValue(sel, '6month');
   assert.equal(sel.value, '6month');
   assert.equal(changeValue, '6month');
+});
+
+// 2026-09-03 실사용 확인(로그인해서 실제 "경력" 필터를 직접 열어봄)한
+// 실제 DOM 구조 -- #career_min/#career_max는 사람인 화면 원본 그대로
+// id가 고정돼 있다.
+test('findCareerRangeSelects: id로 최소/최대 select를 찾는다', () => {
+  const dom = new JSDOM(`
+    <select id="career_min"><option value="">선택</option><option value="0">신입</option></select>
+    <select id="career_max"><option value="">선택</option><option value="0">신입</option></select>
+  `);
+  const { min, max } = findCareerRangeSelects(dom.window.document);
+  assert.equal(min.id, 'career_min');
+  assert.equal(max.id, 'career_max');
+});
+
+test('findCareerRangeSelects: 없으면 null', () => {
+  const dom = new JSDOM('<div></div>');
+  const { min, max } = findCareerRangeSelects(dom.window.document);
+  assert.equal(min, null);
+  assert.equal(max, null);
+});
+
+test('careerMinOptionValue: 소수는 내림한다(하한을 부당하게 못 높이려고)', () => {
+  assert.equal(careerMinOptionValue(2.9), '2');
+});
+
+test('careerMinOptionValue: null/undefined는 null(필터를 안 건다는 뜻)', () => {
+  assert.equal(careerMinOptionValue(null), null);
+  assert.equal(careerMinOptionValue(undefined), null);
+});
+
+test('careerMinOptionValue: 0 이상 20 이하로 clamp한다', () => {
+  assert.equal(careerMinOptionValue(-1), '0');
+  assert.equal(careerMinOptionValue(25), '20');
+});
+
+test('careerMaxOptionValue: 소수는 올림한다(상한을 부당하게 못 낮추려고)', () => {
+  assert.equal(careerMaxOptionValue(4.1), '5');
+});
+
+test('careerMaxOptionValue: 20년 이상이면 상한을 아예 안 건다(null)', () => {
+  assert.equal(careerMaxOptionValue(20), null);
+  assert.equal(careerMaxOptionValue(30), null);
+});
+
+test('careerMaxOptionValue: null/undefined는 null', () => {
+  assert.equal(careerMaxOptionValue(null), null);
+  assert.equal(careerMaxOptionValue(undefined), null);
 });
 
 test('findEducationCheckboxLabel: 텍스트가 정확히 일치하는 label을 찾는다', () => {

@@ -180,6 +180,40 @@ export function setNativeSelectValue(selectEl, value) {
   selectEl.dispatchEvent(new win.Event('change', { bubbles: true }));
 }
 
+// 경력 필터 두 칸(#career_min "N년 이상", #career_max "N년 이하", 둘 다
+// 0~20 정수값 + "신입"(0)/"선택"(빈값))을 찾는다. 2026-09-03 실사용
+// 확인 -- id가 고정돼 있어서(사람인 화면에서 잘 안 바뀌는 안정적인
+// 값) 학력/지역처럼 텍스트로 찾을 필요가 없었다. 근속연수(#continuous_year)
+// ·휴식기간(#rest_year)도 같은 "경력" 필터 묶음 안에 있지만 이번
+// 자동화 대상이 아니라 여기서는 안 건드린다.
+export function findCareerRangeSelects(doc) {
+  return { min: doc.getElementById('career_min'), max: doc.getElementById('career_max') };
+}
+
+// 프로젝트의 경력 하한(년, 소수 가능 -- DB numeric 컬럼)을 #career_min의
+// 정수 옵션 값으로 바꾼다. 내림(Math.floor)하는 이유: "이상" 필터라서
+// 하한을 실제보다 높여 반올림하면(예: 2.5년 → 3년 이상) 2.5~2.9년
+// 경력자를 부당하게 걸러내게 된다 -- 관대하게 반올림하는 쪽을 택했다.
+export function careerMinOptionValue(years) {
+  if (years === null || years === undefined || Number.isNaN(Number(years))) return null;
+  return String(Math.max(0, Math.min(20, Math.floor(Number(years)))));
+}
+
+// 프로젝트의 경력 상한을 #career_max의 정수 옵션 값으로 바꾼다.
+// 올림(Math.ceil)하는 이유는 대칭적 -- "이하" 필터라서 상한을 실제보다
+// 낮춰 반올림하면(예: 4.5년 → 4년 이하) 4~4.5년 경력자를 부당하게
+// 걸러낸다. 20년 이상을 요구하는 프로젝트는 상한을 아예 안 건다 --
+// 선택지가 "20년 이하"까지밖에 없어서 그대로 걸면 실제 의도(예: 25년
+// 이하)보다 훨씬 좁게 걸리는 게, 아예 안 거는 것보다 더 나쁜
+// 결과라서다(이 프로젝트의 "확실하지 않으면 성급히 걸러내지 말라"는
+// 원칙 -- talentSearchListFilter.js의 판단불가 통과 원칙과 동일).
+export function careerMaxOptionValue(years) {
+  if (years === null || years === undefined || Number.isNaN(Number(years))) return null;
+  const n = Number(years);
+  if (n >= 20) return null;
+  return String(Math.max(0, Math.min(20, Math.ceil(n))));
+}
+
 // 학력 필터 체크박스(고정 5개 -- handlers/_lib/talentSearchProjectValidate.js의
 // TALENT_SEARCH_EDUCATION_LEVELS와 동일)를 찾는다. 2026-09-02 실사용
 // 확인 -- 팝업 없이 사이드바에 바로 <label>(텍스트가 학력명과 정확히

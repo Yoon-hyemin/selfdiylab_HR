@@ -275,6 +275,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // 2026-09-03 추가: 경력 하한/상한(#career_min/#career_max, 둘 다
+  // 단순 <select>)을 채운다. 학력/지역과 달리 "체크박스를 찾아서
+  // 누른다"가 아니라 "이미 있는 select 값을 바꾼다"라서 학력/지역보다
+  // 훨씬 단순하다 -- 정렬/최신순 필터(APPLY_DEFAULT_LIST_FILTERS)와
+  // 같은 setNativeSelectValue 패턴을 그대로 쓴다. 값 계산(내림/올림,
+  // 20년 초과 처리)은 순수 함수(careerMinOptionValue/careerMaxOptionValue,
+  // list-content-lib.js)로 분리해서 node --test로 검증한다.
+  if (message.type === 'APPLY_CAREER_RANGE') {
+    (async () => {
+      const { isBlockedPage } = await getBlockedCheck();
+      if (isBlockedPage(location.href, document.title)) {
+        sendResponse({ ok: false, blocked: true, appliedCount: 0 });
+        return;
+      }
+      const { findCareerRangeSelects, setNativeSelectValue, careerMinOptionValue, careerMaxOptionValue } = await getLib();
+      const { min, max } = findCareerRangeSelects(document);
+      const minVal = careerMinOptionValue(message.minYears);
+      const maxVal = careerMaxOptionValue(message.maxYears);
+      let appliedCount = 0;
+      if (min && minVal !== null) { setNativeSelectValue(min, minVal); appliedCount += 1; }
+      if (max && maxVal !== null) { setNativeSelectValue(max, maxVal); appliedCount += 1; }
+      sendResponse({ ok: true, blocked: false, appliedCount });
+    })();
+    return true;
+  }
+
   // 지역(구/군) 필터는 팝업 안에 있어서 학력보다 단계가 많다 -- "지역
   // 추가" 클릭(OPEN_REGION_PANEL) → 시/도 하나 선택(SELECT_REGION_LIST_
   // ITEM) → 그 시/도의 구/군 체크박스 중 원하는 것 체크

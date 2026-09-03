@@ -3643,6 +3643,15 @@ const TS_STAGE_BADGE_CLASS = { 1: 'badge grey', 2: 'badge grey', 3: 'badge blue'
 //것으로 본다(설계문서의 "다른 플랫폼 확장 대비" 절 참고). "검색을
 // 실행했다"는 사실 자체는 서버가 기록하지 않으므로, 그 결과(후보
 // 유입)로 간접 판단한다.
+// 2026-09-03 수정: 예전엔 "추천 인원이 목표치를 채워야" 4단계(적합/
+// 부적합 확인)가 열렸는데, 실사용 피드백으로 이게 잘못된 전제였다는
+// 게 드러났다 -- 목표 인원 채우기 전에도 지금까지 모인 후보를 검토
+// (내부검토/메모 표시, 이력서 확인)하는 게 자연스러운 흐름이고, 후보
+// 풀이 작으면 목표치에 영원히 못 미칠 수도 있다(예: 목표 50명인데
+// 실제로 5명뿐인 직군). 그래서 이제 후보가 하나라도 수집됐고 채점
+// 기준이 있으면 곧바로 4단계로 본다 -- "목표 달성"은 3단계 진행률
+// 표시(추천 N명/목표 M명)로만 계속 보여주고, 4단계 활성화 조건에서는
+// 뺐다.
 function computeTalentSearchProjectStage(project, listCandidates, policy){
   if(project.status !== 'approved') return { stage: 1, recommendedCount: 0 };
   if(!listCandidates.length) return { stage: 2, recommendedCount: 0 };
@@ -3652,8 +3661,7 @@ function computeTalentSearchProjectStage(project, listCandidates, policy){
   listCandidates.forEach(c => {
     if(scoreListCandidateJobFit(c, project.keywords, policy).verdict === '추천') recommendedCount++;
   });
-  const stage = recommendedCount >= project.targetRecommendCount ? 4 : 3;
-  return { stage, recommendedCount };
+  return { stage: 4, recommendedCount };
 }
 
 async function computeTalentSearchProjectStages(projects){

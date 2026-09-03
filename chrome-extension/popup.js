@@ -422,6 +422,19 @@ importBtn.addEventListener('click', async () => {
           if (eduResult && eduResult.appliedCount) await wait(randomPageDelayMs());
         }
 
+        // 2026-09-03 추가: 경력 하한/상한도 같은 이유로 적용한다 --
+        // 프로젝트에 화면(1단계 조건 요약)엔 경력 범위가 나오는데
+        // 실제 사람인 검색에는 전혀 반영이 안 된다는 실사용 피드백으로
+        // 발견됨. 원인은 두 가지가 겹쳐 있었다: (1) 이 값 자체를
+        // 목록 API가 안 내려주고 있었음(서버 쪽 버그, 별도 수정), (2)
+        // 애초에 이 필터를 채우는 코드 자체가 없었음(이번에 처음 추가).
+        const careerResult = await chrome.tabs.sendMessage(searchTab.id, {
+          type: 'APPLY_CAREER_RANGE',
+          minYears: selectedProject ? selectedProject.experienceMinYears : null,
+          maxYears: selectedProject ? selectedProject.experienceMaxYears : null
+        }).catch(() => null);
+        if (careerResult && careerResult.appliedCount) await wait(randomPageDelayMs());
+
         // 지역(구/군) 조건도 같은 이유로 적용한다. 시/도를 여러 번
         // 오가야 해서 다른 필터보다 시간이 걸린다(applyLocationDistricts
         // 주석 참고) -- importStatus에 진행 상황을 보여준다.
