@@ -319,8 +319,16 @@ importBtn.addEventListener('click', async () => {
   importBtn.disabled = true;
 
   const seenUrls = new Set();
+  // 2026-09-03 추가: 같은 조건으로 여러 번(1차 조회, 2차 조회...) 실행할
+  // 때 어느 페이지에서 저장한 후보든 "이번 클릭 한 번"을 같은 회차로
+  // 묶어 HR 사이트에서 구분해 볼 수 있게, 클릭마다 새 식별자를 하나
+  // 발급해 이번 세션의 모든 페이지 POST에 동일하게 실어 보낸다. 실제
+  // 중복 방지(같은 사람이 두 번 저장되는 것 자체를 막는 것)는 이 값과
+  // 무관하게 서버가 sourceUrl 유니크 제약으로 항상 보장한다.
+  const batchKey = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let totalImported = 0;
   let totalSkipped = 0;
+  let totalDuplicates = 0;
   let pageCount = 0;
   let stopReason = null;
   let locationNote = null;
@@ -457,7 +465,7 @@ importBtn.addEventListener('click', async () => {
         const res = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects/${projectId}/list-candidates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ platform: '사람인', candidates: newCandidates })
+          body: JSON.stringify({ platform: '사람인', batchKey, candidates: newCandidates })
         });
         const data = await res.json();
         if (!res.ok) {
@@ -467,6 +475,7 @@ importBtn.addEventListener('click', async () => {
 
         totalImported += data.imported;
         totalSkipped += data.skipped || 0;
+        totalDuplicates += data.duplicates || 0;
 
         if (totalImported >= target) break;
 
@@ -489,21 +498,20 @@ importBtn.addEventListener('click', async () => {
       }
     }
 
-    if (totalImported === 0 && totalSkipped === 0) {
+    if (totalImported === 0 && totalSkipped === 0 && totalDuplicates === 0) {
       importStatus.textContent = [stopReason || '가져올 후보를 찾지 못했어요', locationNote].filter(Boolean).join(' / ');
     } else {
       let summary = pageCount > 1
         ? `${pageCount}페이지에 걸쳐 ${totalImported}명 가져왔어요`
         : `${totalImported}명 가져왔어요`;
       if (totalSkipped) summary += ` (${totalSkipped}명은 조건에 안 맞아 제외)`;
+      if (totalDuplicates) summary += ` (${totalDuplicates}명은 이미 가져온 사람이라 제외)`;
       if (stopReason) summary += ` — ${stopReason}`;
       if (locationNote) summary += ` / ${locationNote}`;
       importStatus.textContent = summary;
     }
   } catch (err) {
-    // 예외가 나기 전까지 이미 몇 페이지·몇 명을 저장했는지 보여준다 --
-    // 서버에 중복 제거가 없어서, 이 정보 없이 사용자가 무심코 다시
-    // 누르면 이미 저장된 후보가 또 저장될 수 있다.
+    // 예외가 나기 전까지 이미 몇 페이지·몇 명을 저장했는지 보여준다.
     const progress = totalImported > 0 || pageCount > 1
       ? ` (그때까지 ${pageCount}페이지에서 ${totalImported}명 저장됨)`
       : '';

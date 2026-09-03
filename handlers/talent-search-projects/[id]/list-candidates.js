@@ -1,8 +1,8 @@
 /**
- * POST { platform, candidates: [{maskedName,gender?,age?,careerSummary?,
- *        recentPositions?,education?,tags?,badges?,lastUpdatedLabel?,
- *        sourceUrl}] } -> 201 { imported: N, skipped: M, skippedReasons: {
- *        resumeStale, careerOutOfRange } }
+ * POST { platform, batchKey?, candidates: [{maskedName,gender?,age?,
+ *        careerSummary?,recentPositions?,education?,tags?,badges?,
+ *        lastUpdatedLabel?,sourceUrl}] } -> 201 { imported: N, skipped: M,
+ *        duplicates: D, skippedReasons: { resumeStale, careerOutOfRange } }
  *   크롬 확장 전용(requireExtensionToken). 사람인 검색리스트 화면에서
  *   "가져오기"를 누르면 호출된다. 채점을 하지 않으므로 원본 필드
  *   그대로 저장만 한다(이 프로젝트의 "서버는 원본만" 원칙) -- 단,
@@ -13,6 +13,18 @@
  *   (policy_version_id)을 쓴다 -- 나중에 정책이 바뀌어도 이미 지난
  *   가져오기의 판정 근거가 흔들리지 않게 하기 위해서다(1D-2가 채점
  *   기준을 승인 시점에 고정하는 것과 같은 이유).
+ *
+ *   2026-09-03 추가: 같은 조건으로 여러 번 "가져오기"를 실행하면(1차
+ *   조회, 2차 조회...) 같은 사람이 계속 다시 저장돼 인원이 섞이는
+ *   문제가 실사용에서 발견됐다(development 브랜치에서 91개 그룹 중복
+ *   확인). sourceUrl(사람인 이력서 URL)이 실제 사람을 가리키는 유일한
+ *   값이라는 점을 이용해 (project_id, source_url) DB 유니크 제약으로
+ *   막는다(sql/025) -- INSERT에 ON CONFLICT DO NOTHING을 걸어서 중복은
+ *   조용히 건너뛰고 개수만 센다. batchKey는 "몇 번째 조회인지" 화면에
+ *   구분해서 보여주기 위한 값(크롬 확장이 "목표 인원 채우기" 클릭
+ *   시점에 한 번 발급해 그 세션의 모든 페이지 POST에 동일하게 실어
+ *   보낸다) -- 저장 안 해도 되는 부가정보라 없어도 저장 자체는 막지
+ *   않는다.
  *
  * GET -> 200 { candidates: [...] }  (최신순)
  *   HR 사이트 "검색 진행" 화면 전용(requireTalentSearchAccess).
@@ -39,7 +51,8 @@ function candidate_out(row) {
     sourceUrl: row.source_url,
     importedAt: row.created_at,
     internalReviewStatus: row.internal_review_status,
-    internalReviewNote: row.internal_review_note
+    internalReviewNote: row.internal_review_note,
+    batchKey: row.batch_key
   };
 }
 
@@ -99,23 +112,28 @@ export default async function handler(req, res) {
         }
       }
 
+      let importedCount = 0;
       if (kept.length) {
         const statements = kept.map(c => sql`
           INSERT INTO talent_search_list_candidates (
             project_id, platform, masked_name, gender, age, career_summary,
             recent_positions, education, tags, badges, last_updated_label,
-            source_url, imported_by_account_id
+            source_url, imported_by_account_id, batch_key
           ) VALUES (
             ${projectId}, ${body.platform}, ${c.maskedName}, ${c.gender || null}, ${c.age ?? null},
             ${c.careerSummary || null}, ${JSON.stringify(c.recentPositions || [])}::jsonb,
             ${c.education || null}, ${JSON.stringify(c.tags || [])}::jsonb,
             ${JSON.stringify(c.badges || [])}::jsonb, ${c.lastUpdatedLabel || null},
-            ${c.sourceUrl}, ${account.id}
-          )`);
-        await sql.transaction(statements);
+            ${c.sourceUrl}, ${account.id}, ${body.batchKey || null}
+          )
+          ON CONFLICT (project_id, source_url) DO NOTHING
+          RETURNING id`);
+        const results = await sql.transaction(statements);
+        importedCount = results.reduce((sum, rows) => sum + rows.length, 0);
       }
+      const duplicates = kept.length - importedCount;
 
-      return res.status(201).json({ imported: kept.length, skipped, skippedReasons });
+      return res.status(201).json({ imported: importedCount, skipped, duplicates, skippedReasons });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ error: '후보 리스트를 저장하지 못했어요' });

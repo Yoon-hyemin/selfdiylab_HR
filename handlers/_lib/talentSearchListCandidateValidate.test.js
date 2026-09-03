@@ -58,3 +58,19 @@ test('age/recentPositions/tags/badges는 선택값 -- 없어도 통과', () => {
   const minimal = { maskedName: '김OO', sourceUrl: 'https://x.com/1' };
   assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [minimal] }), null);
 });
+
+test('batchKey는 선택값 -- 없어도 통과', () => {
+  assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [validCandidate] }), null);
+});
+
+test('batchKey가 빈 문자열이면 거부', () => {
+  assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [validCandidate], batchKey: '' }), '조회 회차 식별자가 올바르지 않아요');
+});
+
+test('batchKey가 문자열이 아니면 거부', () => {
+  assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [validCandidate], batchKey: 123 }), '조회 회차 식별자가 올바르지 않아요');
+});
+
+test('batchKey가 있으면 통과', () => {
+  assert.equal(validateListCandidateBatch({ platform: '사람인', candidates: [validCandidate], batchKey: 'batch-uuid-1' }), null);
+});

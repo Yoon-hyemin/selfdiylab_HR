@@ -13,6 +13,11 @@ export function validateListCandidateBatch(body) {
   if (body.candidates.length > 200) {
     return '한 번에 너무 많은 후보를 가져올 수 없어요';
   }
+  if (body.batchKey !== undefined && body.batchKey !== null) {
+    if (typeof body.batchKey !== 'string' || !body.batchKey.trim() || body.batchKey.length > 100) {
+      return '조회 회차 식별자가 올바르지 않아요';
+    }
+  }
   for (const c of body.candidates) {
     if (!c || typeof c.maskedName !== 'string' || !c.maskedName.trim()) {
       return '후보 이름이 올바르지 않아요';
