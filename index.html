@@ -85,6 +85,19 @@
   .badge.red{background:var(--red-light);color:var(--red);}
   .badge.grey{background:var(--bg);color:var(--sub);}
 
+  .ts-review-select{font-family:inherit;font-size:12.5px;font-weight:700;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);padding:6px 8px;}
+  .ts-review-select.proceed{border-color:var(--primary);color:var(--primary-dark);background:var(--primary-light);}
+  .ts-review-select.reject{border-color:var(--red);color:var(--red);background:var(--red-light);}
+  .ts-review-note{font-family:inherit;font-size:12.5px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);padding:6px 8px;width:150px;}
+  .ts-evidence-cell{position:relative;cursor:help;display:inline-block;border-bottom:1px dotted var(--sub);}
+  .ts-evidence-tip{
+    display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:20;
+    background:var(--text);color:#fff;border-radius:9px;padding:9px 11px;
+    font-size:11.5px;line-height:1.7;white-space:nowrap;box-shadow:0 10px 22px rgba(0,0,0,.18);
+  }
+  .ts-evidence-tip .miss{color:#B9BBCB;}
+  .ts-evidence-cell:hover .ts-evidence-tip{display:block;}
+
   .bar{height:7px;background:var(--bg);border-radius:5px;overflow:hidden;width:100%;}
   .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#5FDBA0);}
 
@@ -4013,18 +4026,21 @@ function tsListParseUpdatedMs(label){
 }
 
 // 근거 칸에 마우스를 올리면 이 프로젝트 키워드 중 뭐가 매칭됐는지
-// 보여준다(브라우저 기본 title 툴팁 -- 별도 UI 없이 가장 간단하게).
-function tsListEvidenceTitle(r){
+// 보여준다. 브라우저 기본 title 툴팁은 회색 OS 스타일이라 눈에 잘 안
+// 띈다는 피드백을 받아, 앱 팔레트를 쓰는 커스텀 툴팁(.ts-evidence-tip)
+// 으로 바꿨다.
+function tsListEvidenceTipHtml(r){
   if(!r.totalCount) return '이 프로젝트에 등록된 키워드가 없어요';
-  const matched = r.matchedKeywords.map(k => `✓ ${k}`);
-  const unmatched = r.unmatchedKeywords.map(k => `✗ ${k}`);
-  return [...matched, ...unmatched].join('\n');
+  const matched = r.matchedKeywords.map(k => `✓ ${escapeHtml(k)}`).join('<br>');
+  const unmatched = r.unmatchedKeywords.length
+    ? `<div class="miss">${r.unmatchedKeywords.map(k => `✗ ${escapeHtml(k)}`).join(' · ')}</div>` : '';
+  return `${matched}${unmatched}`;
 }
 
 function tsListCandidateRowHtml(c, r, batchLabel){
   const tags = (c.tags||[]).join(', ');
   const importedLabel = c.importedAt ? new Date(c.importedAt).toLocaleDateString('ko-KR') : '-';
-  const evidenceCell = r ? `<td title="${escapeHtml(tsListEvidenceTitle(r))}" style="cursor:help;">${escapeHtml(r.evidenceLevel)} (${r.matchedCount}/${r.totalCount})</td>` : '';
+  const evidenceCell = r ? `<td><span class="ts-evidence-cell">${escapeHtml(r.evidenceLevel)} (${r.matchedCount}/${r.totalCount})<span class="ts-evidence-tip">${tsListEvidenceTipHtml(r)}</span></span></td>` : '';
   const scoreCells = r ? `${evidenceCell}<td>${r.jobFitScore}</td><td><span class="${verdictBadgeClass(r.verdict)}">${escapeHtml(r.verdict)}</span></td>` : '';
   const reviewStatus = c.internalReviewStatus || '';
   // 자동판정(추천/확인필요)과 별개로 HR이 직접 뒤집을 수 있는 칸 --
@@ -4033,13 +4049,13 @@ function tsListCandidateRowHtml(c, r, batchLabel){
   // 두 옵션을 다 보여준다. select change/메모 blur 둘 다 즉시 저장한다.
   const reviewCells = `
     <td>
-      <select id="ts-review-status-${c.id}" onchange="saveTsListInternalReview('${c.id}')" style="font-size:12.5px;">
+      <select id="ts-review-status-${c.id}" class="ts-review-select ${escapeHtml(reviewStatus)}" onchange="saveTsListInternalReview('${c.id}')">
         <option value="" ${reviewStatus===''?'selected':''}>검토 전</option>
         <option value="proceed" ${reviewStatus==='proceed'?'selected':''}>진행</option>
         <option value="reject" ${reviewStatus==='reject'?'selected':''}>탈락</option>
       </select>
     </td>
-    <td><input id="ts-review-note-${c.id}" type="text" value="${escapeHtml(c.internalReviewNote||'')}" placeholder="메모" onchange="saveTsListInternalReview('${c.id}')" style="font-size:12.5px;width:140px;"></td>
+    <td><input id="ts-review-note-${c.id}" class="ts-review-note" type="text" value="${escapeHtml(c.internalReviewNote||'')}" placeholder="메모" onchange="saveTsListInternalReview('${c.id}')"></td>
   `;
   return `
     <tr>
@@ -4063,6 +4079,7 @@ async function saveTsListInternalReview(candidateId){
   const noteEl = document.getElementById(`ts-review-note-${candidateId}`);
   const internalReviewStatus = statusEl.value || null;
   const internalReviewNote = noteEl.value;
+  statusEl.className = `ts-review-select ${internalReviewStatus || ''}`; // 저장 성공 전이라도 고른 값 색을 바로 반영
   try{
     await apiPatch(`/talent-search-projects/${tsListProjectId}/list-candidates/${candidateId}`, { internalReviewStatus, internalReviewNote });
     const c = tsListCandidatesCache.find(x => x.id === candidateId);
