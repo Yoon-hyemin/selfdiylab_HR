@@ -290,7 +290,22 @@ importBtn.addEventListener('click', async () => {
   let locationNote = null;
 
   try {
-    const selectedProject = cachedApprovedProjects.find(p => p.id === projectId);
+    // 2026-09-02 실사용 확인 중 발견한 버그 수정: cachedApprovedProjects는
+    // 팝업을 처음 열었을 때 딱 한 번만 불러온 스냅샷이라, 그 뒤 HR
+    // 사이트에서 조건을 수정해도(팝업을 다시 열지 않으면) 예전 값을
+    // 계속 쓰고 있었다. 실제로 조건을 바꾼 뒤에도 옛 키워드로 검색되는
+    // 사고로 이어졌다 -- 그래서 버튼을 누르는 시점에 항상 최신 값을
+    // 다시 가져온다. 목록 전체를 다시 불러오는 건 비효율적이지만
+    // 이 프로젝트 규모(수십 개)에서는 무시할 수 있는 비용이다.
+    let selectedProject;
+    try {
+      const freshRes = await fetch(`${HR_SITE_ORIGIN}/api/talent-search-projects`, { headers: { Authorization: `Bearer ${token}` } });
+      const freshData = await freshRes.json();
+      if (freshRes.ok) {
+        cachedApprovedProjects = freshData.projects.filter(p => p.status === 'approved');
+      }
+    } catch (err) { /* 갱신 실패하면 기존 캐시로 계속 진행 -- 완전히 막지 않음 */ }
+    selectedProject = cachedApprovedProjects.find(p => p.id === projectId);
     const { andTerms, orTerms, notTerms } = buildSearchTerms(selectedProject && selectedProject.keywords);
 
     importStatus.textContent = '검색 조건 채우는 중...';
