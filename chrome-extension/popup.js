@@ -1,5 +1,5 @@
 // chrome-extension/popup.js
-const HR_SITE_ORIGIN = 'http://localhost:3000'; // 로컬 개발용. 배포 시 별도로 바꿔야 함(이번 계획 범위 밖).
+const HR_SITE_ORIGIN = 'https://selfdiylab-hr.vercel.app'; // 2026-09-02: 실사용을 위해 배포된 프로덕션 주소로 변경.
 
 const tokenInput = document.getElementById('tokenInput');
 const tokenSaveBtn = document.getElementById('tokenSaveBtn');
