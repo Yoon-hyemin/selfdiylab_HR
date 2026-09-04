@@ -52,7 +52,10 @@ function candidate_out(row) {
     importedAt: row.created_at,
     internalReviewStatus: row.internal_review_status,
     internalReviewNote: row.internal_review_note,
-    batchKey: row.batch_key
+    batchKey: row.batch_key,
+    aiVerdict: row.ai_verdict,
+    aiReasoning: row.ai_reasoning,
+    aiEvaluatedAt: row.ai_evaluated_at
   };
 }
 
