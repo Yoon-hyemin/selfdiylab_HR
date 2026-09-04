@@ -4055,9 +4055,11 @@ function tsListCandidateRowHtml(c, r, batchLabel){
   // 그릴 때마다 자동으로 부르지 않는다(실제 API 호출이라 비용/속도
   // 문제, 무료 등급 분당 호출 제한도 있음) -- 사람이 버튼을 눌러야만
   // 그 후보 한 명에 대해 호출하고, 결과는 저장해서 재호출 없이 계속
-  // 보여준다.
+  // 보여준다. 판단 근거는 표 칸(hover 툴팁)에 욱여넣으니 이미 열이
+  // 14개라 너무 답답하다는 실사용 피드백을 받아, 배지를 누르면 모달로
+  // 크게 보여주는 방식으로 바꿨다.
   const aiCell = c.aiVerdict
-    ? `<td><span class="ts-evidence-cell"><span class="${verdictBadgeClass(c.aiVerdict)}">${escapeHtml(c.aiVerdict)}</span><span class="ts-evidence-tip" style="white-space:normal;max-width:260px;">${escapeHtml(c.aiReasoning||'')}</span></span> <button class="btn ghost sm" style="padding:2px 7px;font-size:11px;" onclick="runTsListAiEvaluate('${c.id}')">다시</button></td>`
+    ? `<td><span class="${verdictBadgeClass(c.aiVerdict)}" style="cursor:pointer;" onclick="openTsListAiResult('${c.id}')">${escapeHtml(c.aiVerdict)}</span></td>`
     : `<td><button class="btn ghost sm" onclick="runTsListAiEvaluate('${c.id}')" id="ts-ai-btn-${c.id}">AI로 판단</button></td>`;
   const reviewStatus = c.internalReviewStatus || '';
   // 자동판정(추천/확인필요)과 별개로 HR이 직접 뒤집을 수 있는 칸 --
@@ -4090,6 +4092,22 @@ function tsListCandidateRowHtml(c, r, batchLabel){
       ${reviewCells}
     </tr>
   `;
+}
+
+function openTsListAiResult(candidateId){
+  const c = tsListCandidatesCache.find(x => x.id === candidateId);
+  if(!c || !c.aiVerdict) return;
+  const evaluatedLabel = c.aiEvaluatedAt ? new Date(c.aiEvaluatedAt).toLocaleString('ko-KR') : '-';
+  showModal(`
+    <h3>${escapeHtml(c.maskedName)} · AI 판단</h3>
+    <div class="modal-sub">${evaluatedLabel} 판단</div>
+    <div class="field"><label>판정</label><span class="${verdictBadgeClass(c.aiVerdict)}">${escapeHtml(c.aiVerdict)}</span></div>
+    <div class="field"><label>근거</label><div style="font-size:13.5px;line-height:1.6;">${escapeHtml(c.aiReasoning||'')}</div></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">닫기</button>
+      <button class="btn primary" onclick="closeModal();runTsListAiEvaluate('${candidateId}')">다시 판단</button>
+    </div>
+  `);
 }
 
 async function runTsListAiEvaluate(candidateId){
