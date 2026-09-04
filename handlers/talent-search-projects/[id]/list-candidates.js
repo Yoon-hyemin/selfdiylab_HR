@@ -1,8 +1,8 @@
 /**
  * POST { platform, batchKey?, candidates: [{maskedName,gender?,age?,
  *        careerSummary?,recentPositions?,education?,tags?,badges?,
- *        lastUpdatedLabel?,sourceUrl}] } -> 201 { imported: N, skipped: M,
- *        duplicates: D, skippedReasons: { resumeStale, careerOutOfRange } }
+ *        lastUpdatedLabel?,lastSalaryLabel?,sourceUrl}] } -> 201 { imported: N,
+ *        skipped: M, duplicates: D, skippedReasons: { resumeStale, careerOutOfRange } }
  *   크롬 확장 전용(requireExtensionToken). 사람인 검색리스트 화면에서
  *   "가져오기"를 누르면 호출된다. 채점을 하지 않으므로 원본 필드
  *   그대로 저장만 한다(이 프로젝트의 "서버는 원본만" 원칙) -- 단,
@@ -48,6 +48,7 @@ function candidate_out(row) {
     tags: row.tags,
     badges: row.badges,
     lastUpdatedLabel: row.last_updated_label,
+    lastSalaryLabel: row.last_salary_label,
     sourceUrl: row.source_url,
     importedAt: row.created_at,
     internalReviewStatus: row.internal_review_status,
@@ -121,12 +122,13 @@ export default async function handler(req, res) {
           INSERT INTO talent_search_list_candidates (
             project_id, platform, masked_name, gender, age, career_summary,
             recent_positions, education, tags, badges, last_updated_label,
-            source_url, imported_by_account_id, batch_key
+            last_salary_label, source_url, imported_by_account_id, batch_key
           ) VALUES (
             ${projectId}, ${body.platform}, ${c.maskedName}, ${c.gender || null}, ${c.age ?? null},
             ${c.careerSummary || null}, ${JSON.stringify(c.recentPositions || [])}::jsonb,
             ${c.education || null}, ${JSON.stringify(c.tags || [])}::jsonb,
             ${JSON.stringify(c.badges || [])}::jsonb, ${c.lastUpdatedLabel || null},
+            ${c.lastSalaryLabel || null},
             ${c.sourceUrl}, ${account.id}, ${body.batchKey || null}
           )
           ON CONFLICT (project_id, source_url) DO NOTHING

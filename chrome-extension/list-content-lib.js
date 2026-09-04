@@ -45,6 +45,13 @@ export function parseCandidateCard(cardElement) {
       .map(li => (li.querySelector('.TipTxt') || {}).textContent?.trim() || '')
       .filter(Boolean),
     lastUpdatedLabel: text('.talent_list_data p') || null,
+    // 2026-09-04 실사용 확인: "직전연봉"(마지막 회사에서 받은 연봉)은
+    // 후보가 선택적으로 공개하는 정보라 카드 20개 중 11개꼴로만 있고,
+    // 있을 땐 가장 최근 경력의 .year_data 텍스트 안에("2년, 직전연봉
+    // 5,000 만원") 같이 들어있다 -- 별도 칸이 없어서 카드 전체 텍스트
+    // 에서 정규식으로 뽑는다. "희망연봉"(이번 자리에 얼마를 원하는지)
+    // 은 이 리스트 화면 자체에 아예 없는 정보라 뽑을 수 없다.
+    lastSalaryLabel: (/직전연봉\s*[\d,]+\s*만원/.exec(cardElement.textContent) || [])[0] || null,
     sourceUrl: residx ? `https://hiring.saramin.co.kr/applicant-view/position/resume/${residx}` : null
   };
 }

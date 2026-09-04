@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     if (!project) return res.status(404).json({ error: '검색 프로젝트를 찾을 수 없어요' });
 
     const [candidate] = await sql`
-      SELECT tags, career_summary, education, recent_positions
+      SELECT tags, career_summary, education, recent_positions, last_salary_label
       FROM talent_search_list_candidates WHERE id = ${candidateId} AND project_id = ${id}`;
     if (!candidate) return res.status(404).json({ error: '후보를 찾을 수 없어요' });
 
@@ -51,7 +51,8 @@ export default async function handler(req, res) {
       tags: candidate.tags,
       careerSummary: candidate.career_summary,
       education: candidate.education,
-      recentPositions: candidate.recent_positions
+      recentPositions: candidate.recent_positions,
+      lastSalaryLabel: candidate.last_salary_label
     };
 
     let result;

@@ -66,7 +66,29 @@ test('parseCandidateCard: 필드가 다 있는 카드를 정확히 파싱한다'
   assert.deepEqual(result.tags, ['영상편집', '유튜브']);
   assert.deepEqual(result.badges, ['적극 구직 중인 후보자 입니다.']);
   assert.equal(result.lastUpdatedLabel, '26-06-10 업데이트');
+  assert.equal(result.lastSalaryLabel, null);
   assert.equal(result.sourceUrl, 'https://hiring.saramin.co.kr/applicant-view/position/resume/37021717');
+});
+
+// 2026-09-04 실사용 확인: "직전연봉"은 후보가 선택적으로 공개하는
+// 정보라 별도 칸이 없고, 가장 최근 경력의 .year_data 텍스트 안에
+// 같이 들어있다("2년, 직전연봉 5,000 만원").
+test('parseCandidateCard: 직전연봉이 있으면 뽑아낸다', () => {
+  const card = cardFromHtml(`
+    <div class="talent_list_item">
+      <div class="career_item">
+        <ul class="career_list">
+          <li><span class="year_data">(2년, 직전연봉 5,000 만원)</span></li>
+        </ul>
+      </div>
+    </div>
+  `);
+  assert.equal(parseCandidateCard(card).lastSalaryLabel, '직전연봉 5,000 만원');
+});
+
+test('parseCandidateCard: 직전연봉이 없으면 null', () => {
+  const card = cardFromHtml('<div class="talent_list_item"><span class="year_data">(11개월)</span></div>');
+  assert.equal(parseCandidateCard(card).lastSalaryLabel, null);
 });
 
 test('parseCandidateCard: 필드가 없으면 null/빈 배열로 채운다(추측하지 않음)', () => {
@@ -79,6 +101,7 @@ test('parseCandidateCard: 필드가 없으면 null/빈 배열로 채운다(추�
   assert.deepEqual(result.tags, []);
   assert.deepEqual(result.badges, []);
   assert.equal(result.sourceUrl, null);
+  assert.equal(result.lastSalaryLabel, null);
 });
 
 test('parseCandidateCard: gender_age 텍스트에서 성별과 나이를 각각 뽑아낸다', () => {
