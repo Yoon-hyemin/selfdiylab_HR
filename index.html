@@ -4060,7 +4060,7 @@ function tsListCandidateRowHtml(c, r, batchLabel){
   // 크게 보여주는 방식으로 바꿨다.
   const aiCell = c.aiVerdict
     ? `<td><span class="${verdictBadgeClass(c.aiVerdict)}" style="cursor:pointer;" onclick="openTsListAiResult('${c.id}')">${escapeHtml(c.aiVerdict)}</span></td>`
-    : `<td><button class="btn ghost sm" onclick="runTsListAiEvaluate('${c.id}')" id="ts-ai-btn-${c.id}">AI로 판단</button></td>`;
+    : `<td><button class="btn ghost sm" onclick="runTsListAiEvaluate('${c.id}')" id="ts-ai-btn-${c.id}">AI의견</button></td>`;
   const reviewStatus = c.internalReviewStatus || '';
   // 자동판정(추천/확인필요)과 별개로 HR이 직접 뒤집을 수 있는 칸 --
   // "추천"이 나왔어도 실제로는 탈락시키거나, "확인 필요"여도 실제로는
@@ -4119,7 +4119,7 @@ async function runTsListAiEvaluate(candidateId){
     if(c){ c.aiVerdict = result.aiVerdict; c.aiReasoning = result.aiReasoning; c.aiEvaluatedAt = result.aiEvaluatedAt; }
     renderTsListCandidatesTable();
   }catch(err){
-    if(btn){ btn.disabled = false; btn.textContent = 'AI로 판단'; }
+    if(btn){ btn.disabled = false; btn.textContent = 'AI의견'; }
     alert('AI 판단을 받아오지 못했어요: ' + err.message);
   }
 }
