@@ -41,6 +41,14 @@ export function validateTalentSearchProjectInput(body) {
         return '키워드 형식이 올바르지 않아요';
       }
     }
+    // 2026-09-29 추가: 필수/우대 칩별 "비슷한 말" -- { "<칩 라벨>": ["비슷한 말", ...] }.
+    // 사람인 검색창엔 OR 칸이 하나뿐이라 첫 번째 묶음만 keywords.or로
+    // 검색에 쓰이고, 나머지는 여기에만 저장돼 채점·AI 판단에 쓴다.
+    const syn = body.keywords.synonyms;
+    if (syn !== undefined) {
+      if (!syn || typeof syn !== 'object' || Array.isArray(syn)) return '비슷한 말 형식이 올바르지 않아요';
+      if (!Object.values(syn).every(isStringArray)) return '비슷한 말 형식이 올바르지 않아요';
+    }
   }
 
   if (body.locationDistricts !== undefined && !isStringArray(body.locationDistricts)) {

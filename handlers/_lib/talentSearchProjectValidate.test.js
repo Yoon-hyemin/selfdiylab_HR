@@ -80,3 +80,16 @@ test('validateJobTemplateInput: name이 없으면 에러', () => {
 test('validateJobTemplateInput: criteria가 배열이면 에러', () => {
   assert.ok(validateJobTemplateInput({ name: '템플릿', criteria: [] }));
 });
+
+test('validateTalentSearchProjectInput: keywords.synonyms가 라벨→문자열배열 객체면 통과', () => {
+  assert.equal(validateTalentSearchProjectInput({ ...VALID, keywords: { ...VALID.keywords, synonyms: { 편집: ['영상편집', '편집자'], 촬영: [] } } }), null);
+});
+
+test('validateTalentSearchProjectInput: keywords.synonyms가 배열이면 에러', () => {
+  assert.ok(validateTalentSearchProjectInput({ ...VALID, keywords: { ...VALID.keywords, synonyms: ['편집'] } }));
+});
+
+test('validateTalentSearchProjectInput: keywords.synonyms 값이 문자열 배열이 아니면 에러', () => {
+  assert.ok(validateTalentSearchProjectInput({ ...VALID, keywords: { ...VALID.keywords, synonyms: { 편집: '영상편집' } } }));
+  assert.ok(validateTalentSearchProjectInput({ ...VALID, keywords: { ...VALID.keywords, synonyms: { 편집: [1] } } }));
+});

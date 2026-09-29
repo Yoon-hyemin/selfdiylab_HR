@@ -21,7 +21,7 @@
  */
 import { sql } from '../../../../_lib/db.js';
 import { requireTalentSearchAccess } from '../../../../_lib/accountAuth.js';
-import { evaluateCandidateFit } from '../../../../_lib/geminiClient.js';
+import { evaluateCandidateFit, describeGeminiError } from '../../../../_lib/geminiClient.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -59,8 +59,10 @@ export default async function handler(req, res) {
     try {
       result = await evaluateCandidateFit(candidateForCall, projectForCall);
     } catch (err) {
-      console.error('Gemini 평가 실패', err);
-      return res.status(502).json({ error: 'AI 판단을 받아오지 못했어요 - 잠시 후 다시 시도해주세요' });
+      console.error('Gemini 평가 실패', err && err.status, err);
+      // 2026-09-29: 원인별 문장을 돌려준다(키 없음/한도 초과/모델 없음/혼잡)
+      // -- 전엔 한 문장으로 뭉뚱그려져 화면만 봐선 원인을 알 수 없었다.
+      return res.status(502).json({ error: describeGeminiError(err) });
     }
 
     const [row] = await sql`

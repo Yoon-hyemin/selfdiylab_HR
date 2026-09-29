@@ -8,7 +8,8 @@
  *              educationLevels, createdAt }] } (최신순 전체)
  * POST { title, roleTitle, seniorityLevel?, experienceMinYears?, experienceMaxYears?,
  *        employmentType, headcount, location?, workConditions?, naturalLanguageBrief?,
- *        keywords?: {include,or,exact,exclude,preferred}, locationDistricts?: string[],
+ *        keywords?: {include,or,exact,exclude,preferred,synonyms?:{[label]:string[]}},
+ *        locationDistricts?: string[],
  *        educationLevels?: string[], targetRecommendCount,
  *        platforms: string[], clarificationNotes?: [{question,answer}] }
  *   -> 201 { id }
@@ -102,7 +103,10 @@ export default async function handler(req, res) {
       or: body.keywords?.or || [],
       exact: body.keywords?.exact || [],
       exclude: body.keywords?.exclude || [],
-      preferred: body.keywords?.preferred || []
+      preferred: body.keywords?.preferred || [],
+      // 2026-09-29: 칩별 "비슷한 말". 전엔 위 5개 키만 다시 조립해서
+      // 그 외 키는 조용히 버려졌다 -- synonyms도 명시적으로 통과시킨다.
+      synonyms: body.keywords?.synonyms || {}
     };
 
     try {

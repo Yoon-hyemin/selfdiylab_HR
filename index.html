@@ -226,6 +226,46 @@
     .insight-grid5{grid-template-columns:1fr!important;}
     .okr-company-row{flex-direction:column;align-items:stretch!important;gap:12px!important;}
   }
+  /* 새 인재검색 — 문장 → 조건 칩 (2026-09-29). 칩 색은 시안 확정값. */
+  .tsb-hl{padding:1px 3px;border-radius:4px;font-weight:600;}
+  .tsb-hl-region{background:#efe7fd;color:#5b2fb8;}
+  .tsb-hl-exp{background:#fdf4d6;color:#7a5a00;}
+  .tsb-hl-role{background:#eef0f4;color:#3c3f52;}
+  .tsb-hl-must{background:#e7f6ee;color:#0b5e34;}
+  .tsb-hl-nice{background:#eaf1fd;color:#1a4aa8;}
+  .tsb-hl-avoid{background:#fdeee7;color:#8f3413;}
+  .tsb-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 5px 5px 11px;border-radius:999px;font-size:12.5px;font-weight:700;cursor:pointer;user-select:none;margin:0 6px 6px 0;border:1.5px solid transparent;}
+  .tsb-chip.must{background:#e7f6ee;color:#0b5e34;}
+  .tsb-chip.nice{background:#eaf1fd;color:#1a4aa8;}
+  .tsb-chip.avoid{background:#fdeee7;color:#8f3413;}
+  .tsb-chip.dragging{opacity:.35;}
+  .tsb-chip.open{border-color:currentColor;}
+  .tsb-chip[draggable="true"]{cursor:grab;}
+  .tsb-chip .x{border:none;background:transparent;color:inherit;font-size:15px;line-height:1;cursor:pointer;padding:0 5px;opacity:.65;}
+  .tsb-chip .syn-count{font-size:11px;opacity:.7;font-weight:600;}
+  .tsb-chip-badge{font-size:10.5px;font-weight:700;background:rgba(255,255,255,.75);border-radius:999px;padding:1px 7px;}
+  .tsb-box{border:2px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px;transition:border-color .1s,background .1s;}
+  .tsb-box.drop-ready{border-style:dashed;border-color:#b9bdd0;}
+  .tsb-box.drop-over{border-style:solid;border-color:var(--primary);background:var(--primary-light);}
+  .tsb-drop-hint{display:none;font-size:12px;font-weight:700;color:var(--sub);margin-left:6px;}
+  .tsb-box.drop-ready .tsb-drop-hint.ready{display:inline;}
+  .tsb-box.drop-over .tsb-drop-hint.ready{display:none;}
+  .tsb-box.drop-over .tsb-drop-hint.over{display:inline;color:var(--primary-dark);}
+  .tsb-add{display:flex;gap:6px;margin-top:4px;}
+  .tsb-add input,.tsb-add select{flex:1;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:13px;font-family:inherit;}
+  .tsb-add select{flex:0 0 auto;}
+  .tsb-syn{border:1px dashed var(--border);background:var(--bg);border-radius:10px;padding:10px 12px;margin-top:8px;}
+  .tsb-seg{display:flex;flex-wrap:wrap;gap:6px;}
+  .tsb-seg button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--text);}
+  .tsb-seg button.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .tsb-spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:tsb-spin .8s linear infinite;display:inline-block;}
+  @keyframes tsb-spin{to{transform:rotate(360deg);}}
+  .tsb-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start;}
+  @media (max-width:900px){.tsb-layout{grid-template-columns:1fr;}}
+  .tsb-preview{position:sticky;top:16px;}
+  .tsb-term{display:inline-block;background:var(--bg);border-radius:6px;padding:2px 7px;margin:2px 4px 2px 0;font-size:12px;font-weight:600;}
+  .tsb-label{font-size:12.5px;font-weight:700;color:var(--sub);margin-bottom:6px;}
+  .tsb-error{color:var(--red);background:var(--red-light);border-radius:10px;padding:10px 12px;font-size:12.5px;margin:10px 0;}
 </style>
 </head>
 <body>
@@ -3718,14 +3758,14 @@ async function computeTalentSearchDashboardCounts(projects){
 async function renderTalentSearchDashboard(){
   const el = document.getElementById('talentsearch-projects');
   if(!el) return;
-  el.innerHTML = `<button class="btn primary sm" style="margin-bottom:14px;" onclick="openNewTalentSearchForm()">+ 새 인재검색</button><div style="color:var(--sub);font-size:13px;">불러오는 중...</div>`;
+  el.innerHTML = `<button class="btn primary sm" style="margin-bottom:14px;" onclick="openTalentSearchBriefFlow()">+ 새 인재검색</button><div style="color:var(--sub);font-size:13px;">불러오는 중...</div>`;
 
   let projects;
   try{
     const res = await apiGet('/talent-search-projects');
     projects = res.projects;
   }catch(err){
-    el.innerHTML = `<button class="btn primary sm" style="margin-bottom:14px;" onclick="openNewTalentSearchForm()">+ 새 인재검색</button><div class="section">${escapeHtml(err.message)}</div>`;
+    el.innerHTML = `<button class="btn primary sm" style="margin-bottom:14px;" onclick="openTalentSearchBriefFlow()">+ 새 인재검색</button><div class="section">${escapeHtml(err.message)}</div>`;
     return;
   }
 
@@ -3746,7 +3786,7 @@ async function renderTalentSearchDashboard(){
     </div>
   ` : `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--sub);">아직 만든 검색 프로젝트가 없어요 — 위 "+ 새 인재검색"으로 시작해보세요.</div>`;
 
-  el.innerHTML = `<button class="btn primary sm" style="margin-bottom:14px;" onclick="openNewTalentSearchForm()">+ 새 인재검색</button>${listHtml}`;
+  el.innerHTML = `<button class="btn primary sm" style="margin-bottom:14px;" onclick="openTalentSearchBriefFlow()">+ 새 인재검색</button>${listHtml}`;
 }
 
 const TS_WORK_CONDITION_LABELS = {
@@ -4120,7 +4160,17 @@ async function runTsListAiEvaluate(candidateId){
     renderTsListCandidatesTable();
   }catch(err){
     if(btn){ btn.disabled = false; btn.textContent = 'AI의견'; }
-    alert('AI 판단을 받아오지 못했어요: ' + err.message);
+    // alert() 대신 화면 안 모달로 보여준다 -- native 다이얼로그는 브라우저
+    // 자동화 검증을 멈춰 세운다(HANDOFF.md 참고). 서버가 원인별 문장
+    // (한도 초과/키 문제/혼잡 등)을 돌려주므로 그대로 보여준다.
+    showModal(`
+      <h3>AI 의견을 받아오지 못했어요</h3>
+      <div style="font-size:13px;color:var(--red);margin:10px 0;">${escapeHtml(err.message)}</div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">닫기</button>
+        <button class="btn primary" onclick="closeModal();runTsListAiEvaluate('${candidateId}')">다시 시도</button>
+      </div>
+    `);
   }
 }
 
@@ -4581,6 +4631,725 @@ async function saveNewTalentSearchProject(clarificationNotes){
   alert('검색 프로젝트가 만들어졌어요. 방금 만든 프로젝트는 대시보드 카드에서 바로 확인할 수 있어요. 카드를 열어 \'이 조건으로 검색\' 버튼을 누르면 지금 채점 기준으로 고정돼요.'
     + (templateSaveFailed ? ' 다만 직무 템플릿 저장에는 실패했어요.' : ''));
   switchTalentSearchTab('dashboard');
+}
+
+/* ---------- 새 인재검색 — 문장 → 조건 칩 (2026-09-29) ----------
+ * 기존 13칸 폼(renderNewTalentSearchForm)은 필수/OR/정확일치/제외/우대라는
+ * 검색엔진 문법을 사용자가 직접 나눠 넣어야 해서 어렵다는 피드백으로,
+ * "문장 한 줄 → AI가 조건으로 정리(parse-brief) → 칩 확인·수정 → 저장"
+ * 흐름을 새로 만들었다. 저장은 기존 POST /api/talent-search-projects를
+ * 그대로 쓰고 DB 스키마·크롬 확장은 안 바꿨다(keywords jsonb에
+ * synonyms 키만 추가). 기존 13칸 폼은 지우지 않고 확인 화면의 "기존
+ * 방식으로 입력" 링크로 남겨뒀다 -- 1차 배포 후 실사용 피드백 보고
+ * 제거 여부를 정한다.
+ *
+ * 화면 상태는 tsb 하나에 모은다: step('input'|'parsing'|'review'),
+ * brief(입력 문장), spans(AI가 읽은 원문 구간), form(칩·지역·경력 등).
+ */
+
+// handlers/_lib/talentSearchRegions.js의 TALENT_SEARCH_REGIONS와 같은 값
+// (정적 SPA라 import 불가 -- 하나 고치면 다른 쪽도 고칠 것).
+const TS_REGIONS = {
+  '서울': ['강남구', '강동구', '강북구', '강서구', '관악구', '광진구', '구로구', '금천구', '노원구', '도봉구', '동대문구', '동작구', '마포구', '서대문구', '서초구', '성동구', '성북구', '송파구', '양천구', '영등포구', '용산구', '은평구', '종로구', '중구', '중랑구'],
+  '경기': ['가평군', '고양시', '과천시', '광명시', '광주시', '구리시', '군포시', '김포시', '남양주시', '동두천시', '부천시', '성남시', '수원시', '시흥시', '안산시', '안성시', '안양시', '양주시', '양평군', '여주시', '연천군', '오산시', '용인시', '의왕시', '의정부시', '이천시', '파주시', '평택시', '포천시', '하남시', '화성시'],
+  '대구': ['군위군', '남구', '달서구', '달성군', '동구', '북구', '서구', '수성구', '중구'],
+  '대전': ['대덕구', '동구', '서구', '유성구', '중구'],
+  '부산': ['강서구', '금정구', '기장군', '남구', '동구', '동래구', '부산진구', '북구', '사상구', '사하구', '서구', '수영구', '연제구', '영도구', '중구', '해운대구'],
+  '울산': ['남구', '동구', '북구', '울주군', '중구'],
+  '인천': ['강화군', '계양구', '남동구', '동구', '미추홀구', '부평구', '서구', '연수구', '옹진군', '중구'],
+  '강원': ['강릉시', '고성군', '동해시', '삼척시', '속초시', '양구군', '양양군', '영월군', '원주시', '인제군', '정선군', '철원군', '춘천시', '태백시', '평창군', '홍천군', '화천군', '횡성군'],
+  '경남': ['거제시', '거창군', '고성군', '김해시', '남해군', '밀양시', '사천시', '산청군', '양산시', '의령군', '진주시', '창녕군', '창원시', '통영시', '하동군', '함안군', '함양군', '합천군'],
+  '경북': ['경산시', '경주시', '고령군', '구미시', '김천시', '문경시', '봉화군', '상주시', '성주군', '안동시', '영덕군', '영양군', '영주시', '영천시', '예천군', '울릉군', '울진군', '의성군', '청도군', '청송군', '칠곡군', '포항시'],
+  '전남광주': ['광산구', '남구', '동구', '북구', '서구', '강진군', '고흥군', '곡성군', '광양시', '구례군', '나주시', '담양군', '목포시', '무안군', '보성군', '순천시', '신안군', '여수시', '영광군', '영암군', '완도군', '장성군', '장흥군', '진도군', '함평군', '해남군', '화순군'],
+  '전북': ['고창군', '군산시', '김제시', '남원시', '무주군', '부안군', '순창군', '완주군', '익산시', '임실군', '장수군', '전주시', '정읍시', '진안군'],
+  '충북': ['괴산군', '단양군', '보은군', '영동군', '옥천군', '음성군', '제천시', '증평군', '진천군', '청주시', '충주시'],
+  '충남': ['계룡시', '공주시', '금산군', '논산시', '당진시', '보령시', '부여군', '서산시', '서천군', '아산시', '예산군', '천안시', '청양군', '태안군', '홍성군'],
+  '제주': ['서귀포시', '제주시'],
+  '세종특별자치시': []
+};
+// 기존 폼의 추가질문(computeClarificationQuestions)과 같은 문구 -- "이력
+// 검토 때 확인" 칩을 이 질문의 답으로 저장해서, 예전 프로젝트의 답변도
+// 복제할 때 같은 칩으로 읽힌다.
+const TS_BRIEF_AVOID_QUESTION = '반드시 피해야 할 경력유형이나 업무환경이 있나요?';
+const TS_EXPERIENCE_OPTIONS = [
+  { label:'무관', value:null }, { label:'신입', value:0 }, { label:'1년 이상', value:1 },
+  { label:'3년 이상', value:3 }, { label:'5년 이상', value:5 }, { label:'10년 이상', value:10 }
+];
+const TS_BRIEF_STEPS = ['지역', '경력', '꼭 있어야 해요', '있으면 좋아요', '있으면 안 돼요'];
+const TS_SPAN_CLASS = { '지역':'region', '경력':'exp', '직무':'role', '필수':'must', '우대':'nice', '제외':'avoid' };
+const TS_CHIP_COLS = {
+  must: { title:'꼭 있어야 해요', desc:'검색에 사용하고, 비슷한 말은 자동으로 같이 찾아요' },
+  nice: { title:'있으면 좋아요', desc:'검색에는 안 쓰고 점수만 더해요' },
+  avoid:{ title:'있으면 안 돼요', desc:'단어는 검색에서 빼고, 조건은 이력 검토 때 걸러요' }
+};
+// AI가 비슷한 말을 비워 보냈거나 칩을 직접 추가했을 때 채워주는 시작값.
+const TS_DEFAULT_SYNONYMS = {
+  '편집':['영상편집','편집자'], '촬영':['영상촬영','카메라'], 'After Effects':['에펙','AE'],
+  '프리미어':['Premiere Pro'], '커머스':['이커머스','쇼핑몰'], '쇼츠':['숏폼','릴스']
+};
+
+let tsb = null;
+let tsbParseToken = 0;
+let tsbStepTimer = null;
+
+function tsbEmptyForm(){
+  return { title:'', titleEdited:false, roleTitle:'', expMin:null, expMax:null, region:'', districts:[],
+           education:[], target:30, exactText:'', must:[], nice:[], avoid:[] };
+}
+
+function tsbDefaultSynonyms(label){ return [...(TS_DEFAULT_SYNONYMS[label] || [])]; }
+
+function tsbAutoTitle(f){
+  const now = new Date();
+  const ym = now.getFullYear() + '.' + String(now.getMonth()+1).padStart(2,'0');
+  const rest = [f.region, f.roleTitle].filter(Boolean).join(' ');
+  return ym + ' ' + (rest || '인재검색');
+}
+
+function tsbAllLabels(f){ return new Set([...f.must, ...f.nice, ...f.avoid].map(c=>c.label)); }
+
+async function openTalentSearchBriefFlow(){
+  clearInterval(tsbStepTimer);
+  tsb = { step:'input', brief:'', parsedBrief:'', error:'', spans:[], form:tsbEmptyForm(), openSyn:null,
+          detailsOpen:false, dragging:null, projects:null, pending:{ must:'', nice:'', avoid:'' }, avoidKind:'keyword', synPending:'' };
+  renderTsb();
+  try{
+    const { projects } = await apiGet('/talent-search-projects');
+    if(tsb) tsb.projects = projects;
+  }catch(err){
+    if(tsb) tsb.projects = [];
+  }
+  renderTsbCloneList();
+}
+
+function renderTsb(){
+  const el = document.getElementById('talentsearch-projects');
+  if(!el || !tsb) return;
+  if(tsb.step === 'input') el.innerHTML = tsbInputHtml();
+  else if(tsb.step === 'parsing') el.innerHTML = tsbParsingHtml();
+  else el.innerHTML = tsbReviewHtml();
+  if(tsb.step === 'input') renderTsbCloneList();
+  if(tsb.step === 'review') renderTsbPreview();
+}
+
+/* ① 문장 입력 */
+function tsbInputHtml(){
+  return `
+  <div id="tsb-root">
+    <button class="btn ghost sm" style="margin-bottom:14px;" onclick="switchTalentSearchTab('dashboard')">← 목록으로</button>
+    <div class="section">
+      <div style="font-size:17px;font-weight:800;margin-bottom:4px;">어떤 사람을 찾고 있나요?</div>
+      <div style="font-size:12.5px;color:var(--sub);margin-bottom:12px;">문장으로 편하게 적어주세요. AI가 지역·경력·꼭 있어야 할 것·우대·제외 조건으로 정리해드려요.</div>
+      <div class="field" style="margin-bottom:10px;">
+        <textarea id="tsb-brief" rows="5" style="min-height:120px;" oninput="tsb.brief=this.value; document.getElementById('tsb-parse-btn').disabled=!this.value.trim();"
+          placeholder="예: 대구(수성구·달서구·북구)에서 일할 경력 1년 이상 영상PD. 촬영과 편집은 꼭 할 줄 알아야 하고, AI 영상툴이나 After Effects, 커머스 경험이 있으면 우대. 최근 6개월 이상 경력 공백은 제외.">${escapeHtml(tsb.brief)}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn primary" id="tsb-parse-btn" onclick="startTsbParse()" ${tsb.brief.trim() ? '' : 'disabled'}>조건 만들기</button>
+        <button class="btn" onclick="tsbManual()">직접 입력할게요</button>
+      </div>
+    </div>
+    <div class="section">
+      <div style="font-size:14px;font-weight:800;margin-bottom:10px;">또는 지난 검색을 복제해서 시작</div>
+      <div id="tsb-clone-list"></div>
+    </div>
+  </div>`;
+}
+
+function renderTsbCloneList(){
+  const box = document.getElementById('tsb-clone-list');
+  if(!box || !tsb) return;
+  if(tsb.projects === null){ box.innerHTML = `<div style="font-size:12.5px;color:var(--sub);">불러오는 중...</div>`; return; }
+  if(!tsb.projects.length){ box.innerHTML = `<div style="font-size:12.5px;color:var(--sub);">아직 만든 검색이 없어요</div>`; return; }
+  box.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">${tsb.projects.map(p=>
+    `<button class="btn sm" onclick="tsbCloneFrom('${escapeHtml(p.id)}')">${escapeHtml(p.title)}</button>`).join('')}</div>`;
+}
+
+function tsbManual(){
+  clearInterval(tsbStepTimer);
+  tsbParseToken++;
+  tsb.form = tsbEmptyForm();
+  tsb.form.title = tsbAutoTitle(tsb.form);
+  tsb.parsedBrief = tsb.brief.trim();
+  tsb.spans = [];
+  tsb.error = '';
+  tsb.openSyn = null;
+  tsb.step = 'review';
+  renderTsb();
+}
+
+async function tsbCloneFrom(id){
+  let p;
+  try{ p = await apiGet('/talent-search-projects/'+id); }
+  catch(err){
+    const box = document.getElementById('tsb-clone-list');
+    if(box) box.insertAdjacentHTML('beforeend', `<div class="tsb-error">${escapeHtml(err.message)}</div>`);
+    return;
+  }
+  if(!tsb) return;
+  tsb.form = tsbFormFromProject(p);
+  tsb.brief = p.naturalLanguageBrief || '';
+  tsb.parsedBrief = tsb.brief;
+  tsb.spans = [];
+  tsb.openSyn = null;
+  tsb.step = 'review';
+  renderTsb();
+}
+
+// 저장된 프로젝트 → 확인 화면 상태(복제용). tsbBuildPayload의 역변환:
+// keywords.or는 "첫 번째 필수 칩 + 그 비슷한 말"로 저장했으므로 첫
+// 원소를 라벨, 나머지를 비슷한 말로 하는 필수 칩 1개로 되돌린다.
+function tsbFormFromProject(p){
+  const kw = p.keywords || {};
+  const syn = kw.synonyms || {};
+  const f = tsbEmptyForm();
+  const used = new Set();
+  const push = (arr, chip) => { if(!chip.label || used.has(chip.label)) return; used.add(chip.label); arr.push(chip); };
+  if((kw.or||[]).length) push(f.must, { label:kw.or[0], synonyms:kw.or.slice(1) });
+  (kw.include||[]).forEach(l => push(f.must, { label:l, synonyms:[...(syn[l]||[])] }));
+  (kw.preferred||[]).forEach(l => push(f.nice, { label:l, synonyms:[...(syn[l]||[])] }));
+  (kw.exclude||[]).forEach(l => push(f.avoid, { label:l, kind:'keyword', synonyms:[] }));
+  (p.clarificationNotes||[])
+    .filter(n => n.question === TS_BRIEF_AVOID_QUESTION && String(n.answer||'').trim())
+    .forEach(n => push(f.avoid, { label:n.answer.trim(), kind:'condition', synonyms:[] }));
+  f.districts = [...(p.locationDistricts||[])];
+  f.region = tsbInferRegion(f.districts);
+  f.expMin = p.experienceMinYears ?? null;
+  f.expMax = p.experienceMaxYears ?? null;
+  f.education = (p.educationLevels||[]).filter(lv => TS_EDUCATION_LEVELS.includes(lv));
+  f.target = p.targetRecommendCount || 30;
+  f.exactText = (kw.exact||[]).join(', ');
+  f.roleTitle = p.roleTitle || '';
+  f.title = p.title + ' (복사본)';
+  f.titleEdited = true;
+  return f;
+}
+
+// 저장된 구 이름만으로 시/도를 추정한다(DB엔 시/도를 따로 안 저장함).
+// "중구"처럼 여러 시/도에 있는 이름이 섞이면 가장 많이 겹치는 곳을 고른다.
+function tsbInferRegion(districts){
+  if(!districts.length) return '';
+  const all = districts.find(d => d.endsWith('전체') && TS_REGIONS[d.slice(0,-2)]);
+  if(all) return all.slice(0,-2);
+  let best = '', bestCount = 0;
+  Object.entries(TS_REGIONS).forEach(([region, list]) => {
+    const n = districts.filter(d => list.includes(d)).length;
+    if(n > bestCount){ best = region; bestCount = n; }
+  });
+  return best;
+}
+
+/* ② 정리 중 */
+async function startTsbParse(){
+  const brief = tsb.brief.trim();
+  if(!brief) return;
+  tsb.step = 'parsing';
+  tsb.error = '';
+  tsb.parseStep = 0;
+  const token = ++tsbParseToken;
+  renderTsb();
+  clearInterval(tsbStepTimer);
+  // 실제 AI 응답은 한 번에 오므로 단계 표시는 기다리는 동안의 연출이다
+  // -- 마지막 단계에서 멈춰 응답을 기다린다.
+  tsbStepTimer = setInterval(() => {
+    if(!tsb || tsb.step !== 'parsing' || token !== tsbParseToken || tsb.error){ clearInterval(tsbStepTimer); return; }
+    if(tsb.parseStep < TS_BRIEF_STEPS.length - 1){ tsb.parseStep++; renderTsb(); }
+  }, 1100);
+  try{
+    const parsed = await apiPost('/talent-search-projects/parse-brief', { brief });
+    // 기다리는 사이 사용자가 목록으로 나갔거나 "직접 입력"으로 넘어갔으면 무시.
+    if(!tsb || token !== tsbParseToken || !document.getElementById('tsb-root')) return;
+    clearInterval(tsbStepTimer);
+    tsb.form = tsbFormFromParsed(parsed);
+    tsb.spans = parsed.spans || [];
+    tsb.parsedBrief = brief;
+    tsb.openSyn = null;
+    tsb.step = 'review';
+    renderTsb();
+  }catch(err){
+    if(!tsb || token !== tsbParseToken || !document.getElementById('tsb-root')) return;
+    clearInterval(tsbStepTimer);
+    tsb.error = err.message;
+    renderTsb();
+  }
+}
+
+function tsbFormFromParsed(p){
+  const f = tsbEmptyForm();
+  f.roleTitle = p.roleTitle || '';
+  f.region = p.region || '';
+  f.districts = p.region ? ((p.districts||[]).length ? [...p.districts] : [p.region+'전체']) : [];
+  f.expMin = p.experienceMinYears ?? null;
+  f.expMax = p.experienceMaxYears ?? null;
+  f.education = (p.educationLevels||[]).filter(lv => TS_EDUCATION_LEVELS.includes(lv));
+  const chip = c => ({ label:c.label, synonyms:(c.synonyms||[]).length ? [...c.synonyms] : tsbDefaultSynonyms(c.label) });
+  f.must = (p.must||[]).map(chip);
+  f.nice = (p.nice||[]).map(chip);
+  f.avoid = [
+    ...(p.avoidKeywords||[]).map(l => ({ label:l, kind:'keyword', synonyms:[] })),
+    ...(p.avoidConditions||[]).map(l => ({ label:l, kind:'condition', synonyms:[] }))
+  ];
+  f.exactText = (p.exact||[]).join(', ');
+  f.title = tsbAutoTitle(f);
+  return f;
+}
+
+function tsbParsingHtml(){
+  const steps = TS_BRIEF_STEPS.map((name, i) => {
+    let icon, state;
+    if(tsb.error){ icon = '·'; state = '<span style="color:var(--sub);">멈춤</span>'; }
+    else if(i < tsb.parseStep){ icon = '<span style="color:var(--primary);font-weight:800;">✓</span>'; state = '<span style="color:var(--sub);">확인했어요</span>'; }
+    else if(i === tsb.parseStep){ icon = '<span class="tsb-spinner"></span>'; state = '<span style="color:var(--primary-dark);font-weight:700;">읽는 중...</span>'; }
+    else { icon = '<span style="color:#c4c6d4;">○</span>'; state = '<span style="color:#b0b3c4;">대기 중</span>'; }
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+      <span style="width:18px;text-align:center;">${icon}</span><span style="font-weight:700;width:120px;">${name}</span>${state}</div>`;
+  }).join('');
+  const errorHtml = tsb.error ? `
+    <div class="tsb-error">${escapeHtml(tsb.error)}</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn primary" onclick="startTsbParse()">다시 시도</button>
+      <button class="btn" onclick="tsbManual()">직접 입력할게요</button>
+      <button class="btn ghost" onclick="tsbBackToInput()">← 문장 고치기</button>
+    </div>` : '';
+  return `
+  <div id="tsb-root">
+    <button class="btn ghost sm" style="margin-bottom:14px;" onclick="tsbBackToInput()">← 문장 다시 쓰기</button>
+    <div class="section">
+      <div class="tsb-label">입력한 문장</div>
+      <div style="font-size:14px;line-height:1.7;margin-bottom:18px;white-space:pre-wrap;">${escapeHtml(tsb.brief.trim())}</div>
+      <div style="font-size:15px;font-weight:800;margin-bottom:8px;">${tsb.error ? '조건을 정리하지 못했어요' : '문장을 검색 조건으로 정리하고 있어요'}</div>
+      ${steps}
+      ${errorHtml}
+    </div>
+  </div>`;
+}
+
+function tsbBackToInput(){
+  clearInterval(tsbStepTimer);
+  tsbParseToken++;
+  tsb.step = 'input';
+  tsb.error = '';
+  renderTsb();
+}
+
+/* ③ 조건 확인 */
+function tsbHighlightHtml(brief, spans){
+  const ranges = [];
+  (spans||[]).forEach(s => {
+    let from = 0;
+    while(true){
+      const i = brief.indexOf(s.text, from);
+      if(i < 0) break;
+      const end = i + s.text.length;
+      if(!ranges.some(r => r.start < end && i < r.end)){ ranges.push({ start:i, end, type:s.type }); break; }
+      from = i + 1;
+    }
+  });
+  ranges.sort((a,b) => a.start - b.start);
+  let out = '', pos = 0;
+  ranges.forEach(r => {
+    out += escapeHtml(brief.slice(pos, r.start));
+    out += `<mark class="tsb-hl tsb-hl-${TS_SPAN_CLASS[r.type]}" title="${escapeHtml(r.type)}">${escapeHtml(brief.slice(r.start, r.end))}</mark>`;
+    pos = r.end;
+  });
+  return out + escapeHtml(brief.slice(pos));
+}
+
+function tsbBriefSectionHtml(){
+  if(!tsb.parsedBrief){
+    return `<div style="margin-bottom:14px;"><button class="btn ghost sm" style="padding-left:0;" onclick="tsbBackToInput()">← 문장으로 정리하기</button></div>`;
+  }
+  const legend = Object.entries(TS_SPAN_CLASS).map(([type, cls]) => `<mark class="tsb-hl tsb-hl-${cls}" style="font-size:11.5px;">${type}</mark>`).join(' ');
+  return `
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:14px;font-weight:800;">${tsb.spans.length ? '문장에서 이렇게 읽었어요' : '입력한 문장'}</div>
+        <button class="btn ghost sm" onclick="tsbBackToInput()">← 문장 다시 쓰기</button>
+      </div>
+      <div style="font-size:14px;line-height:1.9;white-space:pre-wrap;">${tsbHighlightHtml(tsb.parsedBrief, tsb.spans)}</div>
+      ${tsb.spans.length ? `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">${legend}</div>` : ''}
+    </div>`;
+}
+
+function tsbChipHtml(col, c, i){
+  const isCond = col === 'avoid' && c.kind === 'condition';
+  const open = tsb.openSyn && tsb.openSyn.col === col && tsb.openSyn.idx === i;
+  const badge = col === 'avoid' ? `<span class="tsb-chip-badge">${isCond ? '이력 검토 때 확인' : '검색에서 제외'}</span>` : '';
+  const synCount = !isCond && c.synonyms.length ? `<span class="syn-count">+${c.synonyms.length}</span>` : '';
+  const drag = isCond ? 'draggable="false"' : `draggable="true" ondragstart="tsbDragStart(event,'${col}',${i})" ondragend="tsbDragEnd()"`;
+  return `<span class="tsb-chip ${col}${open ? ' open' : ''}" data-col="${col}" data-idx="${i}" ${drag} onclick="tsbToggleSyn('${col}',${i})">`
+    + `${escapeHtml(c.label)}${synCount}${badge}<button class="x" title="삭제" onclick="event.stopPropagation(); tsbRemoveChip('${col}',${i})">×</button></span>`;
+}
+
+function tsbSynPanelHtml(col){
+  const o = tsb.openSyn;
+  if(!o || o.col !== col) return '';
+  const c = tsb.form[col][o.idx];
+  if(!c) return '';
+  const moveBtns = ['must','nice','avoid'].filter(k => k !== col)
+    .map(k => `<button class="btn sm" onclick="tsbMoveChip('${col}',${o.idx},'${k}')">${TS_CHIP_COLS[k].title}</button>`).join(' ');
+  if(col === 'avoid' && c.kind === 'condition'){
+    return `<div class="tsb-syn"><div style="font-size:12.5px;color:var(--sub);">"${escapeHtml(c.label)}"은 검색 단어가 아니라 이력을 봐야 판단하는 조건이라 비슷한 말을 붙이지 않아요.</div>
+      <div style="margin-top:8px;text-align:right;"><button class="btn sm" onclick="tsbToggleSyn('avoid',${o.idx})">닫기</button></div></div>`;
+  }
+  return `<div class="tsb-syn">
+    <div class="tsb-label">"${escapeHtml(c.label)}"의 비슷한 말 ${col === 'avoid' ? '(같이 검색에서 빼요)' : '(같이 찾아요)'}</div>
+    <div>${c.synonyms.map((s, j) => `<span class="tsb-chip ${col}" style="cursor:default;">${escapeHtml(s)}<button class="x" title="삭제" onclick="tsbRemoveSynonym(${j})">×</button></span>`).join('') || '<span style="font-size:12px;color:var(--sub);">아직 없어요</span>'}</div>
+    <div class="tsb-add">
+      <input id="tsb-syn-in" placeholder="비슷한 말 입력 후 Enter (쉼표로 여러 개)" value="${escapeHtml(tsb.synPending)}" oninput="tsb.synPending=this.value" onkeydown="tsbKey(event, tsbAddSynonyms)">
+      <button class="btn sm" onclick="tsbAddSynonyms()">추가</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--sub);">다른 칸으로 옮기기: ${moveBtns}</span>
+      <button class="btn primary sm" onclick="tsbToggleSyn('${col}',${o.idx})">완료</button>
+    </div>
+  </div>`;
+}
+
+function tsbChipBoxHtml(col){
+  const meta = TS_CHIP_COLS[col];
+  const chips = tsb.form[col];
+  const avoidKind = col === 'avoid' ? `
+      <select id="tsb-avoid-kind" onchange="tsb.avoidKind=this.value">
+        <option value="keyword" ${tsb.avoidKind==='keyword'?'selected':''}>단어(검색에서 제외)</option>
+        <option value="condition" ${tsb.avoidKind==='condition'?'selected':''}>조건(이력 검토 때 확인)</option>
+      </select>` : '';
+  return `
+  <div class="tsb-box" data-col="${col}" ondragover="tsbDragOver(event,'${col}')" ondragleave="tsbDragLeave(event)" ondrop="tsbDrop(event,'${col}')">
+    <div style="margin-bottom:8px;"><span class="tsb-chip ${col}" style="cursor:default;padding:3px 10px;margin:0;">${meta.title}</span>
+      <span style="font-size:12px;color:var(--sub);margin-left:6px;">${meta.desc}</span>
+      <span class="tsb-drop-hint ready">· 여기로 옮기기</span><span class="tsb-drop-hint over">· 여기에 놓으면 옮겨져요</span></div>
+    <div>${chips.map((c, i) => tsbChipHtml(col, c, i)).join('') || '<div style="font-size:12px;color:#b0b3c4;margin-bottom:6px;">비어 있어요</div>'}</div>
+    <div class="tsb-add">
+      <input id="tsb-in-${col}" placeholder="입력 후 Enter (쉼표로 여러 개)" value="${escapeHtml(tsb.pending[col])}" oninput="tsb.pending['${col}']=this.value" onkeydown="tsbKey(event, ()=>tsbAddChips('${col}'))">
+      ${avoidKind}
+      <button class="btn sm" onclick="tsbAddChips('${col}')">추가</button>
+    </div>
+    ${tsbSynPanelHtml(col)}
+  </div>`;
+}
+
+function tsbRegionHtml(){
+  const f = tsb.form;
+  const options = Object.keys(TS_REGIONS).map(r => `<option value="${escapeHtml(r)}" ${f.region===r?'selected':''}>${escapeHtml(r)}</option>`).join('');
+  let buttons = '';
+  if(f.region){
+    const all = f.region + '전체';
+    const list = TS_REGIONS[f.region] || [];
+    const extras = f.districts.filter(d => d !== all && !list.includes(d));
+    buttons = `<div class="tsb-seg" style="margin-top:8px;">
+      <button class="${f.districts.includes(all)?'on':''}" onclick="tsbToggleDistrict('${escapeHtml(all)}')">전체</button>
+      ${[...list, ...extras].map(d => `<button class="${f.districts.includes(d)?'on':''}" onclick="tsbToggleDistrict('${escapeHtml(d)}')">${escapeHtml(d)}</button>`).join('')}
+    </div>`;
+  }
+  return `<div style="margin-bottom:16px;"><div class="tsb-label">지역</div>
+    <div class="field" style="margin-bottom:0;max-width:240px;"><select onchange="tsbSetRegion(this.value)"><option value="">지역 무관</option>${options}</select></div>
+    ${buttons}</div>`;
+}
+
+function tsbExperienceHtml(){
+  const f = tsb.form;
+  const opts = [...TS_EXPERIENCE_OPTIONS];
+  if(f.expMin !== null && !opts.some(o => o.value === f.expMin)) opts.push({ label:f.expMin+'년 이상', value:f.expMin });
+  return `<div style="margin-bottom:16px;"><div class="tsb-label">경력</div><div class="tsb-seg">
+    ${opts.map(o => `<button class="${f.expMin === o.value ? 'on' : ''}" onclick="tsbSetExp(${o.value === null ? 'null' : o.value})">${o.label}</button>`).join('')}
+  </div></div>`;
+}
+
+function tsbDetailsHtml(){
+  const f = tsb.form;
+  if(!tsb.detailsOpen){
+    return `<button class="btn ghost sm" style="padding-left:0;" onclick="tsb.detailsOpen=true; renderTsb();">상세 조건 ▾</button>`;
+  }
+  return `
+    <button class="btn ghost sm" style="padding-left:0;" onclick="tsb.detailsOpen=false; renderTsb();">상세 조건 ▴</button>
+    <div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:6px;">
+      <div class="tsb-label">학력</div>
+      <div class="tsb-seg" style="margin-bottom:14px;">
+        <button class="${f.education.length ? '' : 'on'}" onclick="tsbToggleEdu('')">무관</button>
+        ${TS_EDUCATION_LEVELS.map(lv => `<button class="${f.education.includes(lv)?'on':''}" onclick="tsbToggleEdu('${escapeHtml(lv)}')">${escapeHtml(lv)}</button>`).join('')}
+      </div>
+      <div class="form-row">
+        <div class="field"><label>최대 경력(년, 비우면 제한 없음)</label><input id="tsb-expmax" type="number" min="0" value="${f.expMax ?? ''}" oninput="tsb.form.expMax=this.value===''?null:Number(this.value); renderTsbPreview();"></div>
+        <div class="field"><label>추천 목표 인원</label><input id="tsb-target" type="number" min="1" value="${escapeHtml(String(f.target))}" oninput="tsb.form.target=this.value; renderTsbPreview();"></div>
+      </div>
+      <div class="field" style="margin-bottom:0;"><label>정확히 이 단어로만 찾기 (쉼표로 구분, 대부분 비워 둬요)</label><input id="tsb-exact" value="${escapeHtml(f.exactText)}" oninput="tsb.form.exactText=this.value; renderTsbPreview();"></div>
+    </div>`;
+}
+
+function tsbReviewHtml(){
+  const f = tsb.form;
+  return `
+  <div id="tsb-root">
+    <button class="btn ghost sm" style="margin-bottom:14px;" onclick="switchTalentSearchTab('dashboard')">← 목록으로</button>
+    <div class="tsb-layout">
+      <div>
+        ${tsbBriefSectionHtml()}
+        <div class="section">
+          <div class="field"><label>검색 이름</label><input id="tsb-title" value="${escapeHtml(f.title)}" oninput="tsb.form.title=this.value; tsb.form.titleEdited=true;"></div>
+          ${tsbExperienceHtml()}
+          ${tsbRegionHtml()}
+          <div style="font-size:12.5px;color:var(--sub);margin-bottom:10px;">칩을 끌어서 다른 칸에 놓으면 옮겨져요. 칩을 누르면 비슷한 말을 고칠 수 있고, ×는 삭제예요.</div>
+          ${tsbChipBoxHtml('must')}
+          ${tsbChipBoxHtml('nice')}
+          ${tsbChipBoxHtml('avoid')}
+          ${tsbDetailsHtml()}
+          <div id="tsb-error"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;">
+            <button class="btn ghost sm" style="padding-left:0;" onclick="openNewTalentSearchForm()">기존 방식으로 입력</button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn" onclick="switchTalentSearchTab('dashboard')">취소</button>
+              <button class="btn primary" id="tsb-save-btn" onclick="tsbSave()">검색기준 만들기</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="section tsb-preview" id="tsb-preview"></div>
+    </div>
+  </div>`;
+}
+
+// 확인 화면 → 저장 payload. 사람인 검색창엔 OR 칸이 하나뿐이고 확장
+// (chrome-extension/popup.js의 buildSearchTerms)은 keywords.or 전체를 그
+// 한 칸에 넣는다 -- 그래서 "필수 칩마다 비슷한 말 묶음"을 그대로 표현할
+// 수 없다. 비슷한 말이 있는 첫 번째 필수 칩만 [라벨, ...비슷한 말]로 OR에
+// 보내고, 나머지 필수 칩은 라벨만 include(AND)로 보낸다. 모든 칩의 비슷한
+// 말은 keywords.synonyms에도 저장해서 채점·AI 판단에 쓸 수 있게 둔다.
+function tsbBuildPayload(){
+  const f = tsb.form;
+  const orChip = f.must.find(c => c.synonyms.length) || null;
+  const synonyms = {};
+  [...f.must, ...f.nice].forEach(c => { if(c.synonyms.length) synonyms[c.label] = [...c.synonyms]; });
+  const exclude = [];
+  f.avoid.filter(c => c.kind !== 'condition').forEach(c => [c.label, ...c.synonyms].forEach(w => { if(!exclude.includes(w)) exclude.push(w); }));
+  return {
+    title: f.title.trim(),
+    roleTitle: f.roleTitle || undefined,
+    naturalLanguageBrief: tsb.parsedBrief || undefined,
+    experienceMinYears: f.expMin,
+    experienceMaxYears: f.expMax,
+    keywords: {
+      include: f.must.filter(c => c !== orChip).map(c => c.label),
+      or: orChip ? [orChip.label, ...orChip.synonyms] : [],
+      exact: splitKeywords(f.exactText),
+      exclude,
+      preferred: f.nice.map(c => c.label),
+      synonyms
+    },
+    locationDistricts: f.region ? [...f.districts] : [],
+    educationLevels: [...f.education],
+    targetRecommendCount: Number(f.target),
+    platforms: ['사람인'],
+    clarificationNotes: f.avoid.filter(c => c.kind === 'condition').map(c => ({ question: TS_BRIEF_AVOID_QUESTION, answer: c.label }))
+  };
+}
+
+function tsbTermsHtml(terms){
+  return terms.length ? terms.map(t => `<span class="tsb-term">${escapeHtml(t)}</span>`).join('') : '<span style="font-size:12px;color:#b0b3c4;">비어 있음</span>';
+}
+
+function renderTsbPreview(){
+  const box = document.getElementById('tsb-preview');
+  if(!box || !tsb) return;
+  const f = tsb.form;
+  const p = tsbBuildPayload();
+  // 확장의 buildSearchTerms와 같은 규칙 -- 여기 보이는 그대로 사람인 칸에 들어간다.
+  const andTerms = [...p.keywords.include, ...p.keywords.exact.map(k => `"${k}"`)];
+  const orTerms = p.keywords.or;
+  const notTerms = p.keywords.exclude;
+  const expText = f.expMin === null ? '무관' : (f.expMin === 0 ? '신입' : f.expMin + '년 이상') + (f.expMax !== null ? ` ~ ${f.expMax}년 이하` : '');
+  const regionText = !f.region ? '무관' : f.region + ' ' + (f.districts.includes(f.region+'전체') ? '전체' : f.districts.join('·'));
+  const labels = arr => arr.length ? arr.map(c => escapeHtml(c.label)).join(', ') : '<span style="color:#b0b3c4;">없음</span>';
+  const avoidText = f.avoid.length
+    ? f.avoid.map(c => escapeHtml(c.label) + (c.kind === 'condition' ? ' <span style="color:var(--sub);">(이력 검토)</span>' : '')).join(', ')
+    : '<span style="color:#b0b3c4;">없음</span>';
+  const synGroups = f.must.filter(c => c.synonyms.length);
+  const row = (k, v) => `<div style="display:flex;gap:8px;font-size:12.5px;padding:4px 0;"><span style="width:44px;flex:0 0 44px;color:var(--sub);font-weight:700;">${k}</span><span>${v}</span></div>`;
+  box.innerHTML = `
+    <div style="font-size:14px;font-weight:800;margin-bottom:8px;">이렇게 찾아요</div>
+    ${row('지역', escapeHtml(regionText))}
+    ${row('경력', escapeHtml(expText))}
+    ${row('필수', labels(f.must))}
+    ${row('우대', labels(f.nice))}
+    ${row('제외', avoidText)}
+    ${row('학력', f.education.length ? escapeHtml(f.education.join(', ')) : '무관')}
+    ${row('목표', escapeHtml(String(f.target || '-')) + '명')}
+    <div style="border-top:1px solid var(--border);margin:12px 0;"></div>
+    <div style="font-size:14px;font-weight:800;margin-bottom:8px;">사람인 검색어</div>
+    <div style="font-size:12px;color:var(--sub);font-weight:700;margin-top:6px;">OR 칸 (이 중 하나 이상)</div><div>${tsbTermsHtml(orTerms)}</div>
+    <div style="font-size:12px;color:var(--sub);font-weight:700;margin-top:8px;">AND 칸 (모두 포함)</div><div>${tsbTermsHtml(andTerms)}</div>
+    <div style="font-size:12px;color:var(--sub);font-weight:700;margin-top:8px;">NOT 칸 (제외)</div><div>${tsbTermsHtml(notTerms)}</div>
+    <div style="font-size:11.5px;color:var(--sub);margin-top:12px;line-height:1.6;">있으면 좋아요는 검색어에 넣지 않고 점수에만 더해요.
+      ${synGroups.length > 1 ? `<br>비슷한 말 묶음은 사람인 검색에 하나만 쓸 수 있어요 — "${escapeHtml(synGroups[0].label)}"의 비슷한 말만 검색에 쓰고, 나머지는 점수 계산에만 써요.` : ''}</div>`;
+}
+
+/* 칩 조작 */
+function tsbKey(e, fn){
+  // 한글 조합 중 Enter는 무시한다(조합 확정용 Enter라서 칩이 두 번 생김).
+  if(e.isComposing || e.keyCode === 229) return;
+  if(e.key === 'Enter'){ e.preventDefault(); fn(); }
+}
+
+function tsbAddChips(col){
+  const input = document.getElementById('tsb-in-'+col);
+  const words = splitKeywords(input ? input.value : tsb.pending[col]);
+  const used = tsbAllLabels(tsb.form);
+  words.forEach(w => {
+    if(used.has(w)) return;
+    used.add(w);
+    if(col === 'avoid') tsb.form.avoid.push({ label:w, kind:tsb.avoidKind, synonyms:[] });
+    else tsb.form[col].push({ label:w, synonyms:tsbDefaultSynonyms(w) });
+  });
+  tsb.pending[col] = '';
+  renderTsb();
+  document.getElementById('tsb-in-'+col)?.focus();
+}
+
+function tsbRemoveChip(col, i){
+  tsb.form[col].splice(i, 1);
+  tsb.openSyn = null;
+  renderTsb();
+}
+
+function tsbToggleSyn(col, i){
+  const o = tsb.openSyn;
+  tsb.openSyn = (o && o.col === col && o.idx === i) ? null : { col, idx:i };
+  tsb.synPending = '';
+  renderTsb();
+  if(tsb.openSyn) document.getElementById('tsb-syn-in')?.focus();
+}
+
+function tsbAddSynonyms(){
+  const o = tsb.openSyn;
+  const c = o && tsb.form[o.col][o.idx];
+  if(!c) return;
+  const input = document.getElementById('tsb-syn-in');
+  splitKeywords(input ? input.value : tsb.synPending).forEach(w => { if(w !== c.label && !c.synonyms.includes(w)) c.synonyms.push(w); });
+  tsb.synPending = '';
+  renderTsb();
+  document.getElementById('tsb-syn-in')?.focus();
+}
+
+function tsbRemoveSynonym(j){
+  const o = tsb.openSyn;
+  const c = o && tsb.form[o.col][o.idx];
+  if(!c) return;
+  c.synonyms.splice(j, 1);
+  renderTsb();
+}
+
+function tsbMoveChip(fromCol, idx, toCol){
+  if(fromCol === toCol) return;
+  const c = tsb.form[fromCol][idx];
+  if(!c || (fromCol === 'avoid' && c.kind === 'condition')) return;
+  tsb.form[fromCol].splice(idx, 1);
+  tsb.form[toCol].push(toCol === 'avoid'
+    ? { label:c.label, kind:'keyword', synonyms:[...c.synonyms] }
+    : { label:c.label, synonyms:[...c.synonyms] });
+  tsb.openSyn = null;
+  renderTsb();
+}
+
+// 드래그 중에는 다시 그리면(innerHTML 교체) 브라우저가 드래그를 취소하므로,
+// 끌기 표시(흐림·점선·진한 테두리)는 class만 직접 바꾸고 놓은 뒤에 다시 그린다.
+function tsbDragStart(e, col, idx){
+  tsb.dragging = { col, idx };
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', tsb.form[col][idx].label);
+  const chip = e.currentTarget;
+  setTimeout(() => {
+    chip.classList.add('dragging');
+    document.querySelectorAll('#tsb-root .tsb-box').forEach(b => { if(b.dataset.col !== col) b.classList.add('drop-ready'); });
+  }, 0);
+}
+
+function tsbDragOver(e, col){
+  if(!tsb.dragging || tsb.dragging.col === col) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drop-over');
+}
+
+function tsbDragLeave(e){
+  if(e.currentTarget.contains(e.relatedTarget)) return;
+  e.currentTarget.classList.remove('drop-over');
+}
+
+function tsbDrop(e, col){
+  const d = tsb.dragging;
+  if(!d || d.col === col) return;
+  e.preventDefault();
+  tsb.dragging = null;
+  tsbMoveChip(d.col, d.idx, col);
+}
+
+function tsbDragEnd(){
+  if(!tsb) return;
+  tsb.dragging = null;
+  document.querySelectorAll('#tsb-root .tsb-box').forEach(b => b.classList.remove('drop-ready', 'drop-over'));
+  document.querySelectorAll('#tsb-root .tsb-chip.dragging').forEach(c => c.classList.remove('dragging'));
+}
+
+/* 지역·경력·학력 */
+function tsbRefreshAutoTitle(){
+  if(!tsb.form.titleEdited) tsb.form.title = tsbAutoTitle(tsb.form);
+}
+
+function tsbSetRegion(region){
+  tsb.form.region = region;
+  tsb.form.districts = region ? [region + '전체'] : [];
+  tsbRefreshAutoTitle();
+  renderTsb();
+}
+
+// "전체"는 단독 선택이다. 구를 하나라도 고르면 전체가 풀리고, 구를 모두
+// 끄면 다시 전체로 돌아간다(지역을 골랐는데 아무 구도 없는 애매한 상태 방지).
+function tsbToggleDistrict(name){
+  const f = tsb.form;
+  const all = f.region + '전체';
+  if(name === all){ f.districts = [all]; }
+  else {
+    const rest = f.districts.filter(d => d !== all);
+    f.districts = rest.includes(name) ? rest.filter(d => d !== name) : [...rest, name];
+    if(!f.districts.length) f.districts = [all];
+  }
+  renderTsb();
+}
+
+function tsbSetExp(v){
+  tsb.form.expMin = v;
+  renderTsb();
+}
+
+function tsbToggleEdu(lv){
+  const f = tsb.form;
+  if(!lv) f.education = [];
+  else f.education = f.education.includes(lv) ? f.education.filter(x => x !== lv) : TS_EDUCATION_LEVELS.filter(x => x === lv || f.education.includes(x));
+  renderTsb();
+}
+
+/* 저장 */
+function tsbShowError(msg){
+  const box = document.getElementById('tsb-error');
+  if(box) box.innerHTML = `<div class="tsb-error">${escapeHtml(msg)}</div>`;
+}
+
+async function tsbSave(){
+  const f = tsb.form;
+  const payload = tsbBuildPayload();
+  if(!payload.title) return tsbShowError('검색 이름을 입력해주세요');
+  if(!Number.isInteger(payload.targetRecommendCount) || payload.targetRecommendCount < 1) return tsbShowError('추천 목표 인원은 1명 이상의 정수로 입력해주세요 (상세 조건)');
+  if(f.expMin !== null && f.expMax !== null && f.expMax < f.expMin) return tsbShowError('최대 경력이 최소 경력보다 작아요 (상세 조건)');
+  const btn = document.getElementById('tsb-save-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '만드는 중...'; }
+  let res;
+  try{ res = await apiPost('/talent-search-projects', payload); }
+  catch(err){
+    if(btn){ btn.disabled = false; btn.textContent = '검색기준 만들기'; }
+    return tsbShowError(err.message);
+  }
+  tsb = null;
+  await openTalentSearchProjectFlow(res.id);
 }
 
 /* ---------- RECRUIT RENDER ---------- */
