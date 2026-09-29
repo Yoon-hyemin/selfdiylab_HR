@@ -46,7 +46,39 @@ function getBlockedCheck() {
 // 확인 완료(로그인해서 실제 인재풀 검색결과 화면의 DOM을 직접 확인함).
 const CANDIDATE_CARD_SELECTOR = '.talent_list_item';
 
+// 2026-09-29: 수집이 팝업 없이(HR 사이트 버튼으로) 시작될 수 있게 되면서,
+// 진행 상황을 볼 곳이 필요해 사람인 화면 오른쪽 위에 작은 안내줄을 띄운다.
+// background.js가 보내는 IMPORT_STATUS를 받아 글자만 바꾼다(화면의 다른
+// 요소는 건드리지 않음). 끝나면 닫기(×) 버튼이 생긴다.
+function showImportBanner(text, done, projectTitle) {
+  let box = document.getElementById('ts-import-banner');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'ts-import-banner';
+    box.style.cssText = 'position:fixed;top:12px;right:12px;z-index:2147483647;max-width:360px;background:#fff;border:2px solid #12B76A;border-radius:12px;padding:10px 14px;font-size:13px;line-height:1.5;color:#191A23;box-shadow:0 6px 24px rgba(0,0,0,.15);font-family:sans-serif;';
+    document.body.appendChild(box);
+  }
+  box.replaceChildren();
+  const title = document.createElement('div');
+  title.style.cssText = 'font-weight:700;color:#0D9457;margin-bottom:4px;';
+  title.textContent = (done ? 'HR 수집 끝' : 'HR 수집 중') + (projectTitle ? ` · ${projectTitle}` : '');
+  const body = document.createElement('div');
+  body.textContent = text;
+  box.append(title, body);
+  if (done) {
+    const close = document.createElement('button');
+    close.textContent = '닫기';
+    close.style.cssText = 'margin-top:8px;border:1px solid #ddd;background:#fff;border-radius:8px;padding:3px 10px;cursor:pointer;';
+    close.addEventListener('click', () => box.remove());
+    box.append(close);
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'IMPORT_STATUS') {
+    showImportBanner(message.text, message.done, message.projectTitle);
+    return false;
+  }
   if (message.type === 'PARSE_CURRENT_LIST') {
     (async () => {
       const { isBlockedPage } = await getBlockedCheck();

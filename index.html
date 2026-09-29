@@ -3884,10 +3884,13 @@ async function openTalentSearchProjectFlow(id){
   const step2Rows = (p.platforms || []).map(pl => {
     const supported = TS_PLATFORMS_ENABLED.includes(pl);
     if(!supported) return `<div style="font-size:13px;color:var(--sub);margin-bottom:4px;">${escapeHtml(pl)}: 아직 지원 안 함</div>`;
-    return step2Done
-      ? `<div style="font-size:13px;margin-bottom:4px;">${escapeHtml(pl)}: 가져온 후보 있음 ✓</div>`
-      : `<div style="font-size:13px;margin-bottom:4px;">${escapeHtml(pl)}: 크롬 확장에서 "목표 인원 채우기"를 눌러주세요 — <a href="javascript:void(0)" onclick="switchTalentSearchTab('connect')" style="color:var(--primary);text-decoration:underline;">연결 코드 확인</a></div>`;
+    return `<div style="font-size:13px;margin-bottom:8px;">${escapeHtml(pl)}: ${step2Done ? '가져온 후보 있음 ✓' : '아직 가져온 후보 없음'}</div>
+      <button class="btn primary sm" onclick="startSaraminCollect()">${step2Done ? '사람인에서 다시 수집' : '사람인에서 수집 시작'} (목표 ${escapeHtml(String(p.targetRecommendCount))}명)</button>
+      <div style="font-size:12px;color:var(--sub);margin-top:6px;">누르면 사람인 인재풀 화면이 새 탭으로 열리고, 크롬 확장이 검색·수집을 알아서 진행해요(사람인 화면 오른쪽 위에 진행 상황이 떠요). 로그인 화면이 뜨면 로그인만 해주세요.
+        <a href="javascript:void(0)" onclick="switchTalentSearchTab('connect')" style="color:var(--primary);text-decoration:underline;">연결 코드 확인</a></div>
+      <div id="ts-collect-msg"></div>`;
   }).join('');
+  tsFlowProject = p;
 
   // 블록 3: 수집 중 (진행률만 요약) — recommendedCount는 위에서 이미 계산해둔 값을 재사용한다(같은 계산을 두 번 안 함)
   const progressPct = p.targetRecommendCount ? Math.min(100, Math.round(recommendedCount / p.targetRecommendCount * 100)) : 0;
@@ -3924,6 +3927,49 @@ async function openTalentSearchProjectFlow(id){
     </div>
   `;
   loadTalentSearchListCandidates(id, project, policy);
+}
+
+/* ---------- [사람인에서 수집 시작] (2026-09-29) ----------
+ * 크롬 확장의 hr-bridge.js(이 사이트에 주입됨)에 window.postMessage로
+ * "이 프로젝트로 수집 시작"을 보낸다. 확장이 사람인 인재풀 탭을 새로 열고
+ * 그 탭에서 "목표 인원 채우기"와 같은 수집을 팝업 없이 진행한다. 확장이
+ * 없거나 예전 버전이면(hr-bridge.js가 없어 data-ts-extension 표시가 없음)
+ * 설치 안내를 화면 안에 보여준다(alert 금지 -- 브라우저 자동화 검증을
+ * 멈춰 세움). 프로젝트 제목을 onclick 문자열에 넣지 않고 tsFlowProject로
+ * 넘기는 건 자유 입력 텍스트를 JS 문자열에 보간하지 않기 위해서다.
+ */
+let tsFlowProject = null;
+
+function tsCollectMsg(html){
+  const box = document.getElementById('ts-collect-msg');
+  if(box) box.innerHTML = html;
+}
+
+function startSaraminCollect(){
+  const p = tsFlowProject;
+  if(!p) return;
+  if(document.documentElement.dataset.tsExtension !== '1'){
+    tsCollectMsg(`<div class="tsb-error">크롬 확장이 없거나 예전 버전이에요. 최신 확장을 설치(또는 chrome://extensions에서 새로고침)한 뒤 이 페이지를 새로고침해주세요.</div>`);
+    return;
+  }
+  const requestId = Math.random().toString(36).slice(2);
+  let answered = false;
+  const onReply = event => {
+    const d = event.data;
+    if(event.source !== window || !d || d.source !== 'ts-extension' || d.type !== 'TS_START_RESULT' || d.requestId !== requestId) return;
+    answered = true;
+    window.removeEventListener('message', onReply);
+    tsCollectMsg(d.ok
+      ? `<div style="font-size:12.5px;color:var(--primary-dark);background:var(--primary-light);border-radius:10px;padding:10px 12px;margin-top:10px;">사람인 탭을 열었어요 — 그 탭 오른쪽 위에 진행 상황이 떠요. 끝나면 이 화면에서 <a href="javascript:void(0)" onclick="openTalentSearchProjectFlow('${escapeHtml(p.id)}')" style="color:var(--primary-dark);text-decoration:underline;font-weight:700;">새로고침</a>을 누르면 가져온 후보가 보여요.</div>`
+      : `<div class="tsb-error">${escapeHtml(d.error || '수집을 시작하지 못했어요')}</div>`);
+  };
+  window.addEventListener('message', onReply);
+  window.postMessage({ source:'hr-page', type:'TS_START_SARAMIN', requestId, projectId:p.id, projectTitle:p.title, target:p.targetRecommendCount }, location.origin);
+  setTimeout(() => {
+    if(answered) return;
+    window.removeEventListener('message', onReply);
+    tsCollectMsg(`<div class="tsb-error">크롬 확장이 응답하지 않아요. chrome://extensions에서 확장을 새로고침한 뒤 이 페이지도 새로고침해주세요.</div>`);
+  }, 8000);
 }
 
 async function openVirtualCandidatePreview(projectId){
@@ -5348,6 +5394,12 @@ async function tsbSave(){
     if(btn){ btn.disabled = false; btn.textContent = '검색기준 만들기'; }
     return tsbShowError(err.message);
   }
+  // 2026-09-29: 만들면서 바로 승인까지 한다 -- 이 확인 화면에서 조건을
+  // 이미 눈으로 보고 누르는 거라, 프로젝트 화면에서 "이 조건으로 검색"을
+  // 한 번 더 누르게 하는 건 중복이라는 피드백. 승인이 실패해도(드문 경우)
+  // 프로젝트는 이미 만들어졌으니 그 화면으로 가고, 거기 승인 버튼이 남는다.
+  try{ await apiPatch('/talent-search-projects/'+res.id+'/approve', {}); }
+  catch(err){ console.warn('자동 승인 실패 -- 프로젝트 화면에서 직접 승인할 수 있어요', err); }
   tsb = null;
   await openTalentSearchProjectFlow(res.id);
 }
