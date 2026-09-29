@@ -7,9 +7,10 @@
 //   - 페이지가 window.postMessage({source:'hr-page', type:'TS_START_SARAMIN', ...})를
 //     보내면 background.js에 START_FROM_HR로 넘기고, 결과를
 //     {source:'ts-extension', type:'TS_START_RESULT'}로 돌려준다.
+//   - 요청에는 HR 사이트가 로그인 세션으로 막 받은 12시간짜리 임시 통행증이
+//     같이 실려 오고, 확장은 이걸로 HR API를 부른다(연결 코드 붙여넣기 불필요).
 // 같은 창·같은 오리진에서 온 메시지만 받는다(다른 사이트가 iframe 등으로
-// 수집을 대신 시작시키지 못하게). 수집 자체의 인증은 여전히 확장에
-// 저장된 연결 코드로 한다.
+// 수집을 대신 시작시키지 못하게).
 
 document.documentElement.dataset.tsExtension = '1';
 
@@ -22,7 +23,9 @@ window.addEventListener('message', event => {
     type: 'START_FROM_HR',
     projectId: String(data.projectId || ''),
     projectTitle: String(data.projectTitle || ''),
-    target: Math.max(1, Number(data.target) || 30)
+    target: Math.max(1, Number(data.target) || 30),
+    token: typeof data.token === 'string' ? data.token : '',
+    tokenExpiresAt: Number(data.tokenExpiresAt) || 0
   }).then(result => reply(result || { ok: false, error: '확장에서 응답이 없어요' }))
     .catch(err => reply({ ok: false, error: `확장 오류: ${err.message} (확장을 새로고침한 뒤 이 페이지도 새로고침해주세요)` }));
 });

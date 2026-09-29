@@ -1,14 +1,9 @@
 // chrome-extension/popup.js
-import { HR_SITE_ORIGIN } from './import-runner.js';
+import { HR_SITE_ORIGIN, getActiveToken } from './import-runner.js';
 
 const tokenInput = document.getElementById('tokenInput');
 const tokenSaveBtn = document.getElementById('tokenSaveBtn');
 const tokenStatus = document.getElementById('tokenStatus');
-
-async function loadSavedToken() {
-  const { extensionToken } = await chrome.storage.local.get('extensionToken');
-  return extensionToken || null;
-}
 
 tokenSaveBtn.addEventListener('click', async () => {
   const value = tokenInput.value.trim();
@@ -29,9 +24,17 @@ const runStatus = document.getElementById('runStatus');
 
 
 async function initListImportUiIfApplicable() {
-  const token = await loadSavedToken();
-  tokenStatus.textContent = token ? '연결 코드 저장됨' : '연결 코드를 입력해주세요';
-  if (!token) return;
+  const active = await getActiveToken();
+  // 2026-09-29: 보통은 HR 사이트 버튼이 임시 통행증을 넘겨주므로 연결
+  // 코드를 따로 넣을 필요가 없다 -- 연결 코드 칸은 예비 수단으로만 남긴다.
+  if (active && active.kind === 'session') {
+    const until = new Date(active.expiresAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    tokenStatus.textContent = `HR 사이트 로그인으로 연결됨 (${until}까지)`;
+  } else {
+    tokenStatus.textContent = active ? '연결 코드 저장됨' : 'HR 사이트의 [사람인에서 수집 시작]을 한 번 누르면 자동으로 연결돼요 (연결 코드는 예비 수단)';
+  }
+  if (!active) return;
+  const token = active.token;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const isListPage = tab.url && tab.url.includes('/zf_user/memcom/talent-pool/');

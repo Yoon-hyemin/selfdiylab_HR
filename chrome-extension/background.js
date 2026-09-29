@@ -5,7 +5,7 @@
 // 처리한다 -- 서비스워커는 idle 상태에서 언제든 종료될 수 있어 장시간
 // 연산에 안 맞다.
 
-import { runListImport } from './import-runner.js';
+import { runListImport, getActiveToken } from './import-runner.js';
 
 const OFFSCREEN_URL = 'offscreen.html';
 
@@ -49,6 +49,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * 두 가지다:
  *   1) 팝업의 [목표 인원 채우기] → START_LIST_IMPORT (지금 탭에서 바로 실행)
  *   2) HR 사이트의 [사람인에서 수집 시작] → hr-bridge.js → START_FROM_HR
+ *      (이때 HR 사이트가 로그인 세션으로 받은 12시간짜리 임시 통행증도
+ *      같이 와서 sessionToken으로 저장된다 -- 연결 코드 붙여넣기 불필요)
  *      → 여기서 사람인 인재풀 탭을 새로 열고, 그 탭이 다 뜨면 실행
  *      (로그인 화면으로 넘어갔다가 로그인 후 돌아오는 경우도 탭 id로
  *      계속 기다린다 -- 대기 정보는 서비스워커가 잠들어도 남도록
@@ -68,8 +70,9 @@ async function setImportState(state) {
 
 async function startImport({ tabId, projectId, projectTitle, target }) {
   if (importRunning) return { ok: false, error: '이미 수집이 진행 중이에요 - 끝난 뒤 다시 시도해주세요' };
-  const { extensionToken } = await chrome.storage.local.get('extensionToken');
-  if (!extensionToken) return { ok: false, error: '확장에 연결 코드가 없어요 - 확장 팝업에서 연결 코드를 먼저 저장해주세요' };
+  const active = await getActiveToken();
+  if (!active) return { ok: false, error: 'HR 사이트와 연결돼 있지 않아요 - HR 사이트 프로젝트 화면의 [사람인에서 수집 시작]으로 시작해주세요' };
+  const extensionToken = active.token;
 
   importRunning = true;
   // 서비스워커는 확장 API 호출 없이 30초가 지나면 잠들 수 있다. 수집
@@ -95,8 +98,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'START_FROM_HR') {
     (async () => {
       if (importRunning) { sendResponse({ ok: false, error: '이미 수집이 진행 중이에요 - 끝난 뒤 다시 시도해주세요' }); return; }
-      const { extensionToken } = await chrome.storage.local.get('extensionToken');
-      if (!extensionToken) { sendResponse({ ok: false, error: '확장에 연결 코드가 없어요 - 확장 팝업에서 연결 코드를 먼저 저장해주세요' }); return; }
+      // HR 사이트가 로그인 세션으로 막 발급받은 임시 통행증을 저장한다 --
+      // 이 덕분에 연결 코드를 손으로 붙여넣지 않아도 된다(없으면 예전
+      // 연결 코드로 대신한다).
+      if (message.token && message.tokenExpiresAt) {
+        await chrome.storage.local.set({ sessionToken: { token: message.token, expiresAt: message.tokenExpiresAt } });
+      }
+      if (!(await getActiveToken())) { sendResponse({ ok: false, error: 'HR 사이트와 연결하지 못했어요 - HR 사이트를 새로고침한 뒤 다시 눌러주세요' }); return; }
       const tab = await chrome.tabs.create({ url: TALENT_POOL_SEARCH_URL, active: true });
       const { pendingAutoRuns = {} } = await chrome.storage.session.get('pendingAutoRuns');
       pendingAutoRuns[tab.id] = { projectId: message.projectId, projectTitle: message.projectTitle, target: message.target, createdAt: Date.now() };

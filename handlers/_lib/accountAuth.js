@@ -26,6 +26,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { sql } from './db.js';
 import { hashExtensionToken } from './extensionToken.js';
+import { isExtensionSessionToken, readExtensionSessionToken } from './extensionSessionToken.js';
 
 const COOKIE_NAME = 'hr_auth';
 const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60; // 12시간 -- 실제 비밀번호가 생긴 뒤라 예전 30일보다 짧게 잡는다.
@@ -291,7 +292,26 @@ export async function requireExtensionToken(req, res) {
     return null;
   }
 
-  const tokenHash = hashExtensionToken(match[1].trim());
+  // 2026-09-29: HR 사이트 버튼이 넘겨주는 12시간짜리 임시 통행증
+  // (extensionSessionToken.js)도 받는다. 서명·만료를 확인한 뒤, 로그인
+  // 세션과 똑같이 DB의 session_version과 비교해서 비밀번호 초기화 등이
+  // 있었으면 즉시 거부한다. 'ext.'로 시작하지 않으면 기존 연결 코드 경로.
+  const rawToken = match[1].trim();
+  if (isExtensionSessionToken(rawToken)) {
+    const parsed = readExtensionSessionToken(rawToken);
+    const account = parsed ? await loadAccountById(parsed.accountId) : null;
+    if (!account || account.account_status !== 'ACTIVE' || account.session_version !== parsed.sessionVersion) {
+      res.status(401).json({ error: 'HR 사이트 연결이 만료됐어요 - HR 사이트에서 [사람인에서 수집 시작]을 다시 눌러주세요' });
+      return null;
+    }
+    if (account.system_role !== 'ADMIN' && !account.can_use_talent_search) {
+      res.status(403).json({ error: '인재검색 권한이 없어요' });
+      return null;
+    }
+    return account;
+  }
+
+  const tokenHash = hashExtensionToken(rawToken);
   const [tokenRow] = await sql`
     SELECT account_id FROM talent_search_extension_tokens WHERE token_hash = ${tokenHash}`;
   if (!tokenRow) {

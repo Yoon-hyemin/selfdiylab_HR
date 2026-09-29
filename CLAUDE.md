@@ -433,6 +433,18 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 
 **비개발자 운영 메모**: 이제 새 인재검색을 만들면 바로 승인까지 된다. 프로젝트 화면의 **[사람인에서 수집 시작]**을 누르면 사람인 탭이 열리고 확장이 알아서 검색·수집한다 — 사람인 화면 오른쪽 위에 진행 상황이 뜨고, 끝나면 HR 화면에서 "새로고침"을 누르면 결과가 보인다. 로그인 화면이 뜨면 로그인만 해주면 이어서 진행된다. 확장 팝업에서 직접 실행하는 기존 방법도 그대로 쓸 수 있다.
 
+## 인재검색 — 연결 코드 붙여넣기 없애기: HR 로그인으로 확장 자동 연결 (2026-09-29, 3차)
+
+"연결 코드 붙여넣는 것도 귀찮고, 다른 컴퓨터에서도 또 해야 하냐"는 피드백. 기존 연결 코드는 계정당 하나(`talent_search_extension_tokens`, account_id 유니크)라 두 번째 컴퓨터에서 재발급하면 첫 컴퓨터가 끊기는 문제까지 있었다.
+
+- **임시 통행증**(`handlers/_lib/extensionSessionToken.js`): `ext.<accountId>.<sessionVersion>.<만료ms>.<HMAC>` — 로그인 쿠키와 같은 서명 방식·같은 `SESSION_SECRET`, 12시간 유효. 앞의 `ext.`로 서명 대상 자체를 달리해서 쿠키↔Bearer로 서로 바꿔 쓸 수 없게 했다. **DB에 저장하지 않는다**(마이그레이션 없음) — 그래서 여러 컴퓨터가 서로를 끊지 않는다. 순수 모듈, 테스트 있음.
+- `POST /api/talent-search-extension-token/session`(`handlers/talent-search-extension-token/session.js`, 쿠키 세션 필수 `requireTalentSearchAccess`)이 발급. `requireExtensionToken`(`accountAuth.js`)은 Bearer 값이 `ext.`로 시작하면 서명·만료 확인 후 **DB의 session_version과 비교**(비밀번호 초기화·비활성화·권한 변경 시 로그인 세션과 똑같이 즉시 무효), 아니면 기존 연결 코드 경로.
+- HR 화면 `startSaraminCollect`가 누를 때마다 통행증을 받아 `postMessage`에 같이 실어 보내고 → `hr-bridge.js` → `background.js`가 `chrome.storage.local.sessionToken`에 저장. 확장은 `import-runner.js`의 `getActiveToken()`으로 **유효한 통행증(만료 1분 전까지) 우선, 없으면 예전 연결 코드**를 쓴다. 팝업 직접 실행도 최근 12시간 안에 HR 버튼을 눌렀다면 그 통행증으로 동작.
+- 연결 코드 발급 화면·팝업의 코드 칸은 "예비 수단"으로 문구만 바꿔 남겨뒀다. 확장 버전 0.3.0(교체 필요).
+- **검증**: 실제 Chromium에 확장을 로드해 연결 코드를 **전혀 입력하지 않은 상태**에서 HR 버튼 → 통행증 전달 → 확장이 `Bearer ext....`로 목록 조회·후보 저장까지 되는 것 확인(가짜 HR/사람인 페이지). 서버의 통행증 검증은 단위테스트로만 확인 — **실서버에서 실제 로그인으로는 아직 확인 전**.
+
+**비개발자 운영 메모**: 이제 연결 코드를 붙여넣을 필요가 없다. 어느 컴퓨터든 확장만 깔려 있고 HR 사이트에 로그인한 상태에서 [사람인에서 수집 시작]을 누르면 확장이 자동으로 연결된다(12시간 유지). 비밀번호를 초기화하면 그 연결도 바로 끊긴다.
+
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 
 - 핸들러 파일 상단에 JSDoc 스타일 블록 코멘트로 "왜 이렇게 했는지"(트레이드오프, 보안 이유, 과거 버그 회피)를 남기는 게 이 코드베이스의 관례. 일반적인 "코멘트 최소화" 원칙보다 이 프로젝트의 기존 스타일을 따른다.

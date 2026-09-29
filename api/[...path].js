@@ -64,6 +64,7 @@ import talentSearchPolicyDraftApply from '../handlers/talent-search-policy/draft
 import talentSearchPolicyVersions from '../handlers/talent-search-policy/versions/index.js';
 import talentSearchPolicyVersionRestore from '../handlers/talent-search-policy/versions/[id]/restore.js';
 import talentSearchExtensionToken from '../handlers/talent-search-extension-token/index.js';
+import talentSearchExtensionTokenSession from '../handlers/talent-search-extension-token/session.js';
 import talentSearchProjectsIndex from '../handlers/talent-search-projects/index.js';
 import talentSearchProjectsParseBrief from '../handlers/talent-search-projects/parse-brief.js';
 import talentSearchProjectsId from '../handlers/talent-search-projects/[id].js';
@@ -125,6 +126,7 @@ const ROUTES = [
   { pattern: ['talent-search-policy', 'versions'], handler: talentSearchPolicyVersions },
   { pattern: ['talent-search-policy', 'versions', ':id', 'restore'], handler: talentSearchPolicyVersionRestore },
   { pattern: ['talent-search-extension-token'], handler: talentSearchExtensionToken },
+  { pattern: ['talent-search-extension-token', 'session'], handler: talentSearchExtensionTokenSession },
   { pattern: ['talent-search-projects'], handler: talentSearchProjectsIndex },
   // parse-brief는 반드시 ':id'보다 먼저 -- 아니면 'parse-brief'가 프로젝트 id로 잡힌다.
   { pattern: ['talent-search-projects', 'parse-brief'], handler: talentSearchProjectsParseBrief },

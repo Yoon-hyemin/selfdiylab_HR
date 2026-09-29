@@ -505,7 +505,7 @@
       </div>
       <div id="talentsearch-connect" style="display:none;">
         <div class="section">
-          <div class="section-head"><div><h3>실행엔진(크롬 확장) 연결</h3><div class="desc">크롬 확장이 이 HR 사이트에 후보 리스트를 저장하려면 연결 코드가 필요해요. 발급한 코드를 확장 설정에 붙여넣으면 그 다음부턴 자동으로 인증돼요.</div></div></div>
+          <div class="section-head"><div><h3>실행엔진(크롬 확장) 연결</h3><div class="desc">보통은 연결 코드가 필요 없어요 — 프로젝트 화면의 [사람인에서 수집 시작]을 누르면 로그인 정보로 확장이 자동 연결돼요(12시간 유효, 컴퓨터마다 따로 할 일 없음). 아래 연결 코드는 확장 팝업에서만 계속 실행하고 싶을 때 쓰는 예비 수단이에요. 계정당 하나라서 재발급하면 예전 코드는 끊겨요.</div></div></div>
           <div id="talentsearch-connect-status"></div>
           <button class="btn primary sm" style="margin-top:10px;" onclick="issueTalentSearchExtensionToken()">연결 코드 발급/재발급</button>
           <div id="talentsearch-connect-token" style="margin-top:10px;"></div>
@@ -3887,7 +3887,7 @@ async function openTalentSearchProjectFlow(id){
     return `<div style="font-size:13px;margin-bottom:8px;">${escapeHtml(pl)}: ${step2Done ? '가져온 후보 있음 ✓' : '아직 가져온 후보 없음'}</div>
       <button class="btn primary sm" onclick="startSaraminCollect()">${step2Done ? '사람인에서 다시 수집' : '사람인에서 수집 시작'} (목표 ${escapeHtml(String(p.targetRecommendCount))}명)</button>
       <div style="font-size:12px;color:var(--sub);margin-top:6px;">누르면 사람인 인재풀 화면이 새 탭으로 열리고, 크롬 확장이 검색·수집을 알아서 진행해요(사람인 화면 오른쪽 위에 진행 상황이 떠요). 로그인 화면이 뜨면 로그인만 해주세요.
-        <a href="javascript:void(0)" onclick="switchTalentSearchTab('connect')" style="color:var(--primary);text-decoration:underline;">연결 코드 확인</a></div>
+</div>
       <div id="ts-collect-msg"></div>`;
   }).join('');
   tsFlowProject = p;
@@ -3931,7 +3931,8 @@ async function openTalentSearchProjectFlow(id){
 
 /* ---------- [사람인에서 수집 시작] (2026-09-29) ----------
  * 크롬 확장의 hr-bridge.js(이 사이트에 주입됨)에 window.postMessage로
- * "이 프로젝트로 수집 시작"을 보낸다. 확장이 사람인 인재풀 탭을 새로 열고
+ * "이 프로젝트로 수집 시작"을 보낸다(12시간짜리 임시 통행증 포함 -- 연결
+ * 코드 붙여넣기 불필요). 확장이 사람인 인재풀 탭을 새로 열고
  * 그 탭에서 "목표 인원 채우기"와 같은 수집을 팝업 없이 진행한다. 확장이
  * 없거나 예전 버전이면(hr-bridge.js가 없어 data-ts-extension 표시가 없음)
  * 설치 안내를 화면 안에 보여준다(alert 금지 -- 브라우저 자동화 검증을
@@ -3945,13 +3946,18 @@ function tsCollectMsg(html){
   if(box) box.innerHTML = html;
 }
 
-function startSaraminCollect(){
+async function startSaraminCollect(){
   const p = tsFlowProject;
   if(!p) return;
   if(document.documentElement.dataset.tsExtension !== '1'){
     tsCollectMsg(`<div class="tsb-error">크롬 확장이 없거나 예전 버전이에요. 최신 확장을 설치(또는 chrome://extensions에서 새로고침)한 뒤 이 페이지를 새로고침해주세요.</div>`);
     return;
   }
+  // 2026-09-29: 로그인 세션으로 12시간짜리 임시 통행증을 받아 확장에 같이
+  // 넘긴다 -- 이 덕분에 컴퓨터마다 연결 코드를 붙여넣을 필요가 없다.
+  let pass;
+  try{ pass = await apiPost('/talent-search-extension-token/session', {}); }
+  catch(err){ tsCollectMsg(`<div class="tsb-error">${escapeHtml(err.message)}</div>`); return; }
   const requestId = Math.random().toString(36).slice(2);
   let answered = false;
   const onReply = event => {
@@ -3964,7 +3970,7 @@ function startSaraminCollect(){
       : `<div class="tsb-error">${escapeHtml(d.error || '수집을 시작하지 못했어요')}</div>`);
   };
   window.addEventListener('message', onReply);
-  window.postMessage({ source:'hr-page', type:'TS_START_SARAMIN', requestId, projectId:p.id, projectTitle:p.title, target:p.targetRecommendCount }, location.origin);
+  window.postMessage({ source:'hr-page', type:'TS_START_SARAMIN', requestId, projectId:p.id, projectTitle:p.title, target:p.targetRecommendCount, token:pass.token, tokenExpiresAt:pass.expiresAt }, location.origin);
   setTimeout(() => {
     if(answered) return;
     window.removeEventListener('message', onReply);

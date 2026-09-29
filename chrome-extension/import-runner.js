@@ -479,3 +479,17 @@ export async function runListImport({ tabId, projectId, target, token, onStatus 
     return report(`오류: ${err.message}${progress}`, true);
   }
 }
+
+// 2026-09-29: 확장이 HR 사이트 API에 쓸 인증값을 고른다. HR 사이트
+// [사람인에서 수집 시작] 버튼이 누를 때마다 넘겨주는 12시간짜리 임시
+// 통행증(sessionToken)이 아직 유효하면 그걸 쓰고, 없거나 만료됐으면
+// 예전 방식의 연결 코드(extensionToken, 팝업에서 직접 붙여넣은 값)를 쓴다.
+// 만료 1분 전부터는 수집 도중 끊기지 않게 만료된 것으로 본다.
+export async function getActiveToken() {
+  const { sessionToken, extensionToken } = await chrome.storage.local.get(['sessionToken', 'extensionToken']);
+  if (sessionToken && sessionToken.token && sessionToken.expiresAt - 60 * 1000 > Date.now()) {
+    return { token: sessionToken.token, kind: 'session', expiresAt: sessionToken.expiresAt };
+  }
+  if (extensionToken) return { token: extensionToken, kind: 'code' };
+  return null;
+}
