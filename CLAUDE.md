@@ -447,6 +447,10 @@ handlers/_lib/db.js (@neondatabase/serverless의 sql 태그) ── Neon Postgre
 
 **비개발자 운영 메모**: 이제 연결 코드를 붙여넣을 필요가 없다. 어느 컴퓨터든 확장만 깔려 있고 HR 사이트에 로그인한 상태에서 [사람인에서 수집 시작]을 누르면 확장이 자동으로 연결된다(12시간 유지). 비밀번호를 초기화하면 그 연결도 바로 끊긴다.
 
+## 인재검색 — 검색 프로젝트 삭제 (2026-10-02)
+
+- 프로젝트 목록 카드마다 **삭제** 버튼 → 화면 안 확인창(프로젝트 이름, 같이 지워질 가져온 후보 수, "되돌릴 수 없어요", 오류도 창 안에 표시 — native `confirm`/`alert` 없음, `index.html`의 `openDeleteTalentSearchProjectModal`/`confirmDeleteTalentSearchProject`). `DELETE /api/talent-search-projects/:id`(`handlers/talent-search-projects/[id].js`, `requireTalentSearchAccess`)가 지우기 전에 딸린 후보 수를 세어 `{deletedListCandidates, deletedVirtualCandidates}`로 돌려준다. 가져온 후보(판정·AI의견·메모 포함)와 가상 후보는 `ON DELETE CASCADE`(sql/019, sql/021)로 같이 지워진다 — 마이그레이션 없음. 다른 세션에서 작성한 diff를 그대로 적용했고, 이 세션에서 모의 API + 브라우저로 확인창·오류 표시·삭제 후 목록 갱신·카드 클릭 이벤트 비전파까지 확인. **배포 사이트에서 테스트용 프로젝트로 실제 삭제는 사용자 확인 필요**(이 환경은 배포 사이트 접속이 막혀 있음).
+
 ## 코드 컨벤션 (이 프로젝트에서 관찰됨 — 새 코드도 맞출 것)
 
 - 핸들러 파일 상단에 JSDoc 스타일 블록 코멘트로 "왜 이렇게 했는지"(트레이드오프, 보안 이유, 과거 버그 회피)를 남기는 게 이 코드베이스의 관례. 일반적인 "코멘트 최소화" 원칙보다 이 프로젝트의 기존 스타일을 따른다.

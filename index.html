@@ -3781,12 +3781,61 @@ async function renderTalentSearchDashboard(){
             <div style="font-size:15px;font-weight:800;">${escapeHtml(p.title)}</div>
             <span class="${TS_STAGE_BADGE_CLASS[s.stage]}">${s.stage}단계 · ${TS_STAGE_LABEL[s.stage]}${s.stage>=3 ? ` (${s.recommendedCount}/${p.targetRecommendCount})` : ''}</span>
           </div>
+          <div style="display:flex;justify-content:flex-end;">
+            <button class="btn ghost danger sm" onclick="event.stopPropagation(); openDeleteTalentSearchProjectModal('${p.id}')">삭제</button>
+          </div>
         </div>
       `;}).join('')}
     </div>
   ` : `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:12px;font-size:12.5px;color:var(--sub);">아직 만든 검색 프로젝트가 없어요 — 위 "+ 새 인재검색"으로 시작해보세요.</div>`;
 
+  tsDashboardProjects = projects;
   el.innerHTML = `<button class="btn primary sm" style="margin-bottom:14px;" onclick="openTalentSearchBriefFlow()">+ 새 인재검색</button>${listHtml}`;
+}
+
+// 2026-10-02: 검색 프로젝트 삭제. 카드의 "삭제"를 누르면 바로 지우지 않고
+// 확인창부터 띄운다 -- 프로젝트에 딸린 후보(가져온 실제 후보·가상 후보,
+// 판정·AI의견·메모 포함)가 같이 지워지고 되돌릴 수 없어서, 몇 명이 같이
+// 지워지는지 먼저 보여준다. 브라우저 기본 confirm()/alert() 대신 화면 안
+// 모달을 쓴다(오류도 모달 안에 표시).
+let tsDashboardProjects = [];
+async function openDeleteTalentSearchProjectModal(id){
+  const p = tsDashboardProjects.find(x => x.id === id);
+  if(!p) return;
+  showModal(`
+    <h3>검색 프로젝트를 삭제할까요?</h3>
+    <div class="modal-sub"><b>${escapeHtml(p.title)}</b></div>
+    <div class="modal-sub" id="ts-del-count">같이 지워질 후보 수를 확인하는 중...</div>
+    <div class="modal-sub">삭제하면 되돌릴 수 없어요.</div>
+    <div class="modal-sub" id="ts-del-error" style="color:var(--red);display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">취소</button>
+      <button class="btn danger" id="ts-del-confirm" onclick="confirmDeleteTalentSearchProject('${id}')">삭제</button>
+    </div>
+  `);
+  let countText = '이 프로젝트로 가져온 후보와 판정·메모도 같이 지워져요.';
+  try{
+    const { candidates } = await apiGet('/talent-search-projects/'+id+'/list-candidates');
+    countText = candidates.length
+      ? `이 프로젝트로 가져온 후보 ${candidates.length}명과 판정·AI의견·메모도 같이 지워져요.`
+      : '가져온 후보가 없는 프로젝트예요.';
+  }catch(err){ /* 수를 못 세도 삭제 자체는 막지 않는다 -- 일반 안내문으로 대체 */ }
+  const countEl = document.getElementById('ts-del-count');
+  if(countEl) countEl.textContent = countText;
+}
+async function confirmDeleteTalentSearchProject(id){
+  const btn = document.getElementById('ts-del-confirm');
+  const errEl = document.getElementById('ts-del-error');
+  if(btn){ btn.disabled = true; btn.textContent = '삭제하는 중...'; }
+  try{
+    await apiDelete('/talent-search-projects/'+id);
+  }catch(err){
+    if(errEl){ errEl.textContent = '삭제하지 못했어요: ' + err.message; errEl.style.display = 'block'; }
+    if(btn){ btn.disabled = false; btn.textContent = '삭제'; }
+    return;
+  }
+  closeModal();
+  await renderTalentSearchDashboard();
 }
 
 const TS_WORK_CONDITION_LABELS = {
